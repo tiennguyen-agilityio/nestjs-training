@@ -4,8 +4,8 @@ A pnpm + Turborepo monorepo for the Coffee Shop app: a NestJS API and a Next.js 
 also the training repo where we practise a Claude Code workflow, from a Trello card to a merged
 pull request.
 
-**Live:** [Website](https://ai-training-develop.vercel.app/) ·
-[API Swagger](https://ai-training-develop.onrender.com/api/docs)
+**Live:** [Website](https://nestjs-training-develop.vercel.app/) ·
+[API Swagger](https://nestjs-training-develop.onrender.com/api/docs)
 
 ## Repository Layout
 
@@ -29,8 +29,8 @@ pull request.
    `@repo/constants`.
 
    ```bash
-   git clone -b develop git@github.com:tiennguyen-agilityio/ai-training.git
-   cd ai-training && pnpm install
+   git clone -b develop git@github.com:tiennguyen-agilityio/nestjs-training.git
+   cd nestjs-training && pnpm install
    ```
 
 2. Create the env files and fill them in as the

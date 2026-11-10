@@ -12,7 +12,7 @@ on:
       target:
         description: >-
           preview = pull_request into develop (pushes `:pull-request-<n>` and deploys the
-          Render preview `ai-training-api-preview-pull-request-<n>`); develop = push to develop
+          Render preview `nestjs-training-api-preview-pull-request-<n>`); develop = push to develop
           (pushes `:develop` + `:<sha>`, then deploys Render develop; only `:<sha>` and no deploy
           when develop has already moved on with API changes)
         type: string

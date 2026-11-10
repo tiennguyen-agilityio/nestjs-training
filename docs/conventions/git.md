@@ -5,8 +5,8 @@ How we clone, branch, commit and push in this repo. The hooks enforce most of th
 ## Clone and set up
 
 ```bash
-git clone git@github.com:tiennguyen-agilityio/ai-training.git
-cd ai-training
+git clone git@github.com:tiennguyen-agilityio/nestjs-training.git
+cd nestjs-training
 pnpm install          # whole workspace + git hooks (husky, via the root `prepare`)
 ```
 
@@ -14,9 +14,9 @@ The git root is the pnpm workspace root; the hooks run from there.
 
 ## Branches
 
-| Branch | Purpose |
-|---|---|
-| `develop` | Integration branch. Feature PRs target this branch. |
+| Branch                             | Purpose                                                   |
+| ---------------------------------- | --------------------------------------------------------- |
+| `develop`                          | Integration branch. Feature PRs target this branch.       |
 | `<type>/<short-kebab-description>` | One branch per task, created from the integration branch. |
 
 Use the same `<type>` as the commit (see below). Examples from history:
@@ -45,11 +45,11 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 
 ## Hooks
 
-| Hook | Runs | Effect |
-|---|---|---|
-| `pre-commit` | `lint-staged` | Closest config per staged file: API `*.ts` → `eslint --fix` + `prettier --write`; web js/ts → `eslint --fix` + `prettier --write`, css/md/json → `prettier --write`; `packages/constants` and `packages/schemas` `*.ts` → `eslint --fix` + `prettier --write`, their js/json → `prettier --write`; other `packages/` and root files → `prettier --write` |
-| `commit-msg` | `commitlint` | Rejects messages that are not Conventional Commits |
-| `pre-push` | `turbo run build test --affected` | Builds and tests only the packages changed against `origin/develop` (override with `TURBO_SCM_BASE`); blocks the push on failure |
+| Hook         | Runs                              | Effect                                                                                                                                                                                                                                                                                                                                                   |
+| ------------ | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pre-commit` | `lint-staged`                     | Closest config per staged file: API `*.ts` → `eslint --fix` + `prettier --write`; web js/ts → `eslint --fix` + `prettier --write`, css/md/json → `prettier --write`; `packages/constants` and `packages/schemas` `*.ts` → `eslint --fix` + `prettier --write`, their js/json → `prettier --write`; other `packages/` and root files → `prettier --write` |
+| `commit-msg` | `commitlint`                      | Rejects messages that are not Conventional Commits                                                                                                                                                                                                                                                                                                       |
+| `pre-push`   | `turbo run build test --affected` | Builds and tests only the packages changed against `origin/develop` (override with `TURBO_SCM_BASE`); blocks the push on failure                                                                                                                                                                                                                         |
 
 Fix the cause instead of skipping hooks with `--no-verify`.
 

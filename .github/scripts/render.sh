@@ -15,7 +15,7 @@ require_env() {
 
 # Name of the API preview of pull request $1 (a preview of the Render develop service).
 api_preview_name() {
-  echo "ai-training-api-preview-pull-request-$1"
+  echo "nestjs-training-api-preview-pull-request-$1"
 }
 
 # render METHOD PATH [JSON BODY]: calls the Render API and prints the response body.
