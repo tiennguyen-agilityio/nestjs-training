@@ -4,7 +4,7 @@ A pnpm + Turborepo monorepo for the Coffee Shop app: a NestJS API and a Next.js 
 also the training repo where we practise a Claude Code workflow, from a Trello card to a merged
 pull request.
 
-**Live:** [Website](https://nestjs-training-weld.vercel.app/) ·
+**Live:** [Website](https://nestjs-training-develop.vercel.app/) ·
 [API Swagger](https://nestjs-training-develop.onrender.com/api/docs)
 
 ## Repository Layout

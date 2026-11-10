@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 
 // `*` matches one run of lowercase letters or digits (no `-`, `.` or `/`), e.g. the
-// deployment hash in https://nestjs-training-*-team.vercel.app. Other entries match exactly.
+// deployment hash in https://nestjs-training-web-*-team.vercel.app. Other entries match exactly.
 function parseOrigin(entry: string): string | RegExp {
   if (!entry.includes('*')) {
     return entry;

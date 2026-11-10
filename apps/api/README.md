@@ -4,7 +4,7 @@ A NestJS backend for a coffee shop catalog — Clerk-authenticated users, role-b
 access (Admin/User), and catalog management (categories, products, variants, images) backed by
 PostgreSQL via MikroORM.
 
-**Live:** [Website](https://nestjs-training-weld.vercel.app/) ·
+**Live:** [Website](https://nestjs-training-develop.vercel.app/) ·
 [API Swagger](https://nestjs-training-develop.onrender.com/api/docs)
 
 ## Table of Contents
