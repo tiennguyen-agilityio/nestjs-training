@@ -2,7 +2,7 @@
 
 The shop and admin dashboard for the [Coffee Shop API](../api/README.md), built with Next.js.
 
-**Live:** [Website](https://ai-training-develop.vercel.app/)
+**Live:** [Website](https://nestjs-training-weld.vercel.app/)
 
 ## Tech Stack
 
@@ -135,12 +135,12 @@ apps/web/
 
 ## Deploy
 
-Web is deployed to Vercel (project `ai-training`) by GitHub Actions.
+Web is deployed to Vercel (project `nestjs-training`) by GitHub Actions.
 
 | Environment | Trigger                 | URL                                                                           | Vercel env |
 | ----------- | ----------------------- | ----------------------------------------------------------------------------- | ---------- |
 | Preview     | PR into `develop`       | new URL per push that changes web or the API; one PR comment shows the latest | Preview    |
-| Development | merge into `develop`    | https://ai-training-develop.vercel.app (alias to the latest build)            | Preview    |
+| Development | merge into `develop`    | https://nestjs-training-weld.vercel.app (alias to the latest build)           | Preview    |
 | Production  | `main` (not configured) | —                                                                             | Production |
 
 - **Vercel settings to keep:** Framework Preset Next.js, Root Directory `apps/web`, Node.js 24.x, default Install Command. `vercel.json` only sets the build command and turns off Git deploys.

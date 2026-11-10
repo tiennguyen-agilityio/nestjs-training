@@ -4,8 +4,8 @@ A NestJS backend for a coffee shop catalog — Clerk-authenticated users, role-b
 access (Admin/User), and catalog management (categories, products, variants, images) backed by
 PostgreSQL via MikroORM.
 
-**Live:** [Website](https://ai-training-develop.vercel.app/) ·
-[API Swagger](https://ai-training-develop.onrender.com/api/docs)
+**Live:** [Website](https://nestjs-training-weld.vercel.app/) ·
+[API Swagger](https://nestjs-training-develop.onrender.com/api/docs)
 
 ## Table of Contents
 
@@ -52,8 +52,8 @@ PostgreSQL via MikroORM.
    installs the git hooks.
 
    ```bash
-   git clone -b develop git@github.com:tiennguyen-agilityio/ai-training.git
-   cd ai-training && pnpm install
+   git clone -b develop git@github.com:tiennguyen-agilityio/nestjs-training.git
+   cd nestjs-training && pnpm install
    cd apps/api
    ```
 
@@ -356,10 +356,10 @@ The API is deployed by GitHub Actions: `.github/workflows/ci.yml` calls the reus
 `.github/workflows/deploy-api.yml` after the `quality` and `build-and-scan` jobs pass. It builds
 `apps/api/Dockerfile` (target `production`), pushes the image to GHCR, then deploys it on Render.
 
-| Trigger                                      | Image tag               | Render service                                                              |
-| -------------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
-| Push to `develop`                            | `:develop` and `:<sha>` | develop service ([live](https://ai-training-develop.onrender.com/api/docs)) |
-| Same-repo PR into `develop` that changes API | `:pull-request-<n>`     | preview `ai-training-api-preview-pull-request-<n>` (URL in the PR comment)  |
+| Trigger                                      | Image tag               | Render service                                                                  |
+| -------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------- |
+| Push to `develop`                            | `:develop` and `:<sha>` | develop service ([live](https://nestjs-training-develop.onrender.com/api/docs)) |
+| Same-repo PR into `develop` that changes API | `:pull-request-<n>`     | preview `nestjs-training-api-preview-pull-request-<n>` (URL in the PR comment)  |
 
 - A web-only PR gets no API preview; its web preview uses the develop API.
 - Previews use the develop database, and CI never runs migrations. The PR comment warns when
