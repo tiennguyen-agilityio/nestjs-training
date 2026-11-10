@@ -25,7 +25,6 @@ on:
 jobs:
   push-image:
     runs-on: ubuntu-latest
-    environment: develop-publish
     permissions:
       contents: read
       packages: write
