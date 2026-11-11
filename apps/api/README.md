@@ -110,6 +110,7 @@ PostgreSQL via MikroORM.
 | `CLERK_SECRET_KEY`      | Clerk backend secret key                                                             |
 | `CLERK_PUBLISHABLE_KEY` | Clerk publishable key                                                                |
 | `CLERK_WEBHOOK_SECRET`  | Clerk webhook signing secret                                                         |
+| `CLERK_SYNC_TIMEOUT_MS` | Clerk API timeout, in milliseconds (default `5000`)                                  |
 | `APP_KEY`               | Nest Observe app key                                                                 |
 | `APP_SECRET`            | Nest Observe app secret                                                              |
 

@@ -8,6 +8,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ResilienceModule } from '@nestjs/resilience';
 
 import mikroOrmConfig from './configs/mikro-orm.config.js';
 import { validate } from './configs/env.validation.js';
@@ -27,6 +28,7 @@ import { AuthProviderModule } from './common/providers/auth-provider.module.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate }),
+    ResilienceModule.forRoot(),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: rateLimitConfig,

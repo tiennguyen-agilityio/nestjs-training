@@ -15,6 +15,10 @@ export const ERROR_MESSAGES = {
   WEBHOOK: {
     INVALID_SIGNATURE: 'Invalid webhook signature',
   },
+  AUTH_PROVIDER: {
+    TIMEOUT: 'Auth provider did not respond in time',
+    UNAVAILABLE: 'Auth provider is temporarily unavailable',
+  },
   AUTH: {
     UNAUTHENTICATED: 'Authentication required',
     INACTIVE_ACCOUNT: 'Account is inactive',
@@ -55,11 +59,19 @@ export const ERROR_MESSAGES = {
     CONFLICT: 'Conflict',
     VALIDATION_FAILED: 'Validation failed',
     SYSTEM_ERROR: 'System error',
+    GATEWAY_TIMEOUT: 'Gateway timeout',
+    SERVICE_UNAVAILABLE: 'Service unavailable',
     INTERNAL_ERROR: 'An unexpected error occurred. Please try again later.',
   },
 } as const;
 
 export const ERROR_DESCRIPTIONS = {
+  AUTH_PROVIDER: {
+    TIMEOUT:
+      'Clerk did not answer in time. The change may still apply; check the user before retrying.',
+    UNAVAILABLE:
+      'Clerk keeps failing, so calls to it are paused. Retry after the time given in the Retry-After header.',
+  },
   CATEGORY: {
     NAME_EXISTS: 'A category with this name already exists.',
     NOT_FOUND: 'The category might have been deleted, or the id is incorrect.',

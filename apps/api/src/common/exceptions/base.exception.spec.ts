@@ -6,6 +6,8 @@ import {
   ItemNotFoundException,
   DuplicateResourceException,
   InvalidStateException,
+  DependencyTimeoutException,
+  DependencyUnavailableException,
 } from './base.exception.js';
 import { ErrorDetailDto } from '../dto/error.dto.js';
 import {
@@ -151,5 +153,39 @@ describe('InvalidStateException', () => {
     expect(exception.getStatus()).toBe(HttpStatus.CONFLICT);
     expect(exception.message).toBe(ERROR_MESSAGES.EXCEPTION.CONFLICT);
     expect(exception.getErrors()).toEqual([error]);
+  });
+});
+
+describe('dependency exceptions', () => {
+  const timeoutError: ErrorDetailDto = {
+    errCode: ERROR_CODES.AUTH_PROVIDER.TIMEOUT,
+    field: '',
+    message: ERROR_MESSAGES.AUTH_PROVIDER.TIMEOUT,
+    description: ERROR_DESCRIPTIONS.AUTH_PROVIDER.TIMEOUT,
+  };
+  const unavailableError: ErrorDetailDto = {
+    errCode: ERROR_CODES.AUTH_PROVIDER.UNAVAILABLE,
+    field: '',
+    message: ERROR_MESSAGES.AUTH_PROVIDER.UNAVAILABLE,
+    description: ERROR_DESCRIPTIONS.AUTH_PROVIDER.UNAVAILABLE,
+  };
+
+  it('DependencyTimeoutException answers 504 with its single error', () => {
+    const exception = new DependencyTimeoutException(timeoutError);
+
+    expect(exception.getStatus()).toBe(HttpStatus.GATEWAY_TIMEOUT);
+    expect(exception.message).toBe(ERROR_MESSAGES.EXCEPTION.GATEWAY_TIMEOUT);
+    expect(exception.getErrors()).toEqual([timeoutError]);
+  });
+
+  it('DependencyUnavailableException answers 503 and keeps its retry hint', () => {
+    const exception = new DependencyUnavailableException(unavailableError, 30);
+
+    expect(exception.getStatus()).toBe(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(exception.message).toBe(
+      ERROR_MESSAGES.EXCEPTION.SERVICE_UNAVAILABLE,
+    );
+    expect(exception.getErrors()).toEqual([unavailableError]);
+    expect(exception.retryAfterSeconds).toBe(30);
   });
 });
