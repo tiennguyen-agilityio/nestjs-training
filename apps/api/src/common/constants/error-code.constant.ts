@@ -6,6 +6,10 @@ export const ERROR_CODES = {
   DUPLICATE_RESOURCE: 'duplicateResource',
   INTERNAL_SERVER_ERROR: 'internalServerError',
   UNKNOWN_ERROR: 'error',
+  AUTH_PROVIDER: {
+    TIMEOUT: 'authProviderTimeout',
+    UNAVAILABLE: 'authProviderUnavailable',
+  },
   CATEGORY: {
     NAME_EXISTS: 'categoryNameExists',
     NOT_FOUND: 'categoryNotFound',

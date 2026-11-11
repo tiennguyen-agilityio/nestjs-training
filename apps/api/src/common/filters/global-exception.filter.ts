@@ -9,7 +9,10 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ErrorResponseDto } from '../dto/error.dto.js';
-import { DomainException } from '../exceptions/base.exception.js';
+import {
+  DependencyUnavailableException,
+  DomainException,
+} from '../exceptions/base.exception.js';
 import { ERROR_MESSAGES } from '../constants/message.constant.js';
 import { ERROR_CODES } from '../constants/error-code.constant.js';
 
@@ -37,6 +40,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const body = this.toErrorResponseBody(exception);
+
+    if (
+      exception instanceof DependencyUnavailableException &&
+      exception.retryAfterSeconds !== undefined
+    ) {
+      response.setHeader('Retry-After', String(exception.retryAfterSeconds));
+    }
 
     response.status(body.statusCode).json(body);
   }

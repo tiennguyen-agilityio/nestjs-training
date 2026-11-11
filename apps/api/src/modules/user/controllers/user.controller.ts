@@ -42,7 +42,11 @@ import {
   ApiErrorResponse,
 } from '../../../common/decorators/api-response.decorator.js';
 import { User } from '../entities/user.entity.js';
-import { ERROR_MESSAGES } from '../../../common/constants/message.constant.js';
+import {
+  ERROR_DESCRIPTIONS,
+  ERROR_MESSAGES,
+} from '../../../common/constants/message.constant.js';
+import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 import { mapPaginatedResult } from '../../../common/utils/pagination.util.js';
 
 @ApiTags('users')
@@ -130,6 +134,22 @@ export class UserController {
     ERROR_MESSAGES.EXCEPTION.VALIDATION_FAILED,
   )
   @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.USER.NOT_FOUND)
+  @ApiErrorResponse(
+    HttpStatus.SERVICE_UNAVAILABLE,
+    ERROR_MESSAGES.AUTH_PROVIDER.UNAVAILABLE,
+    {
+      errCode: ERROR_CODES.AUTH_PROVIDER.UNAVAILABLE,
+      description: ERROR_DESCRIPTIONS.AUTH_PROVIDER.UNAVAILABLE,
+    },
+  )
+  @ApiErrorResponse(
+    HttpStatus.GATEWAY_TIMEOUT,
+    ERROR_MESSAGES.AUTH_PROVIDER.TIMEOUT,
+    {
+      errCode: ERROR_CODES.AUTH_PROVIDER.TIMEOUT,
+      description: ERROR_DESCRIPTIONS.AUTH_PROVIDER.TIMEOUT,
+    },
+  )
   async update(
     @Param({ schema: idParamSchema }) { id }: IdParam,
     @Body({ schema: updateUserSchema }) dto: UpdateUserInput,
@@ -144,6 +164,22 @@ export class UserController {
   @ApiOperation({ summary: 'Soft-delete a user (admin only)' })
   @ApiNoContentResponse({ description: 'User deleted' })
   @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.USER.NOT_FOUND)
+  @ApiErrorResponse(
+    HttpStatus.SERVICE_UNAVAILABLE,
+    ERROR_MESSAGES.AUTH_PROVIDER.UNAVAILABLE,
+    {
+      errCode: ERROR_CODES.AUTH_PROVIDER.UNAVAILABLE,
+      description: ERROR_DESCRIPTIONS.AUTH_PROVIDER.UNAVAILABLE,
+    },
+  )
+  @ApiErrorResponse(
+    HttpStatus.GATEWAY_TIMEOUT,
+    ERROR_MESSAGES.AUTH_PROVIDER.TIMEOUT,
+    {
+      errCode: ERROR_CODES.AUTH_PROVIDER.TIMEOUT,
+      description: ERROR_DESCRIPTIONS.AUTH_PROVIDER.TIMEOUT,
+    },
+  )
   remove(@Param({ schema: idParamSchema }) { id }: IdParam): Promise<void> {
     return this.userService.remove(id);
   }

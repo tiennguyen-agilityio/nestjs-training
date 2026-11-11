@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
 import { UserController } from './user.controller.js';
 import { UserService } from '../services/user.service.js';
 import { User } from '../entities/user.entity.js';
@@ -7,6 +11,10 @@ import { ResponseUserDto } from '../dto/response-user.dto.js';
 import { UserRole, UserStatus } from '@repo/constants';
 
 import type { Mock } from 'vitest';
+
+// `DECORATORS.API_RESPONSE` of @nestjs/swagger, which does not export its constants.
+const SWAGGER_API_RESPONSE = 'swagger/apiResponse';
+
 describe('UserController', () => {
   let controller: UserController;
   let userService: {
@@ -183,5 +191,26 @@ describe('UserController', () => {
         controller.remove({ id: 'missing-id' }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+  });
+
+  describe('auth provider error docs', () => {
+    it.each(['update', 'remove'] as const)(
+      'documents 503 and 504 on %s',
+      (method) => {
+        const handler = Object.getOwnPropertyDescriptor(
+          UserController.prototype,
+          method,
+        )?.value as object;
+        const responses: unknown = Reflect.getMetadata(
+          SWAGGER_API_RESPONSE,
+          handler,
+        );
+
+        expect(responses).toHaveProperty(
+          String(HttpStatus.SERVICE_UNAVAILABLE),
+        );
+        expect(responses).toHaveProperty(String(HttpStatus.GATEWAY_TIMEOUT));
+      },
+    );
   });
 });

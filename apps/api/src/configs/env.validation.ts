@@ -65,6 +65,12 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   CLERK_PUBLISHABLE_KEY!: string;
 
+  // Empty or 0 means unset: ClerkAuthProvider falls back to DEFAULT_CLERK_SYNC_TIMEOUT_MS.
+  @IsOptional()
+  @Transform(toNumber)
+  @IsInt()
+  CLERK_SYNC_TIMEOUT_MS?: number;
+
   @IsOptional()
   @IsString()
   @IsNotEmpty()

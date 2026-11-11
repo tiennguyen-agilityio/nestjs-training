@@ -6,8 +6,14 @@ import {
 } from '@nestjs/common';
 import { GlobalExceptionFilter } from './global-exception.filter.js';
 import { ErrorDetailDto } from '../dto/error.dto.js';
-import { DomainException } from '../exceptions/base.exception.js';
-import { ERROR_MESSAGES } from '../constants/message.constant.js';
+import {
+  DependencyUnavailableException,
+  DomainException,
+} from '../exceptions/base.exception.js';
+import {
+  ERROR_DESCRIPTIONS,
+  ERROR_MESSAGES,
+} from '../constants/message.constant.js';
 import { ERROR_CODES } from '../constants/error-code.constant.js';
 
 import type { Mock, MockInstance } from 'vitest';
@@ -21,6 +27,7 @@ describe('GlobalExceptionFilter', () => {
   let filter: GlobalExceptionFilter;
   let jsonMock: Mock;
   let statusMock: Mock;
+  let setHeaderMock: Mock;
   let host: ArgumentsHost;
   let errorSpy: MockInstance;
 
@@ -28,13 +35,14 @@ describe('GlobalExceptionFilter', () => {
     filter = new GlobalExceptionFilter();
     jsonMock = vi.fn();
     statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+    setHeaderMock = vi.fn();
     errorSpy = vi
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
 
     host = {
       switchToHttp: () => ({
-        getResponse: () => ({ status: statusMock }),
+        getResponse: () => ({ status: statusMock, setHeader: setHeaderMock }),
       }),
     } as unknown as ArgumentsHost;
   });
@@ -145,5 +153,35 @@ describe('GlobalExceptionFilter', () => {
     filter.catch(exception, host);
 
     expect(errorSpy).toHaveBeenCalledWith('boom', exception.stack);
+  });
+
+  describe('Retry-After', () => {
+    const unavailableError = {
+      errCode: ERROR_CODES.AUTH_PROVIDER.UNAVAILABLE,
+      field: '',
+      message: ERROR_MESSAGES.AUTH_PROVIDER.UNAVAILABLE,
+      description: ERROR_DESCRIPTIONS.AUTH_PROVIDER.UNAVAILABLE,
+    };
+
+    it('sets Retry-After from a DependencyUnavailableException retry hint', () => {
+      filter.catch(
+        new DependencyUnavailableException(unavailableError, 30),
+        host,
+      );
+
+      expect(setHeaderMock).toHaveBeenCalledWith('Retry-After', '30');
+      expect(statusMock).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE);
+      expect(jsonMock).toHaveBeenCalledWith({
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+        message: ERROR_MESSAGES.EXCEPTION.SERVICE_UNAVAILABLE,
+        errors: [unavailableError],
+      });
+    });
+
+    it('does not set Retry-After when the exception has no retry hint', () => {
+      filter.catch(new DependencyUnavailableException(unavailableError), host);
+
+      expect(setHeaderMock).not.toHaveBeenCalled();
+    });
   });
 });

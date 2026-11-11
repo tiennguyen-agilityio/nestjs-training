@@ -68,3 +68,26 @@ export class InvalidStateException extends SingleErrorDomainException {
     super(HttpStatus.CONFLICT, ERROR_MESSAGES.EXCEPTION.CONFLICT, error);
   }
 }
+
+export class DependencyTimeoutException extends SingleErrorDomainException {
+  constructor(error: ErrorDetailDto) {
+    super(
+      HttpStatus.GATEWAY_TIMEOUT,
+      ERROR_MESSAGES.EXCEPTION.GATEWAY_TIMEOUT,
+      error,
+    );
+  }
+}
+
+export class DependencyUnavailableException extends SingleErrorDomainException {
+  constructor(
+    error: ErrorDetailDto,
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(
+      HttpStatus.SERVICE_UNAVAILABLE,
+      ERROR_MESSAGES.EXCEPTION.SERVICE_UNAVAILABLE,
+      error,
+    );
+  }
+}
