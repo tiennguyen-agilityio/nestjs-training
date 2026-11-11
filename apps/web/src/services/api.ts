@@ -131,6 +131,7 @@ export class ApiClient {
     getToken,
     query,
     skipAuth,
+    headers: extraHeaders,
     parseSuccess,
   }: {
     url: string
@@ -140,12 +141,16 @@ export class ApiClient {
     getToken?: TokenGetter
     query?: Record<string, QueryValue>
     skipAuth?: boolean
+    headers?: Record<string, string>
     parseSuccess: (response: globalThis.Response) => Promise<TResponse>
   }): Promise<ApiResult<TResponse>> {
     const headers = await this.createHeaders(getToken, {
       jsonBody: body !== undefined,
       skipAuth,
     })
+    for (const [name, value] of Object.entries(extraHeaders ?? {})) {
+      headers.set(name, value)
+    }
     const requestUrl = this.buildUrlWithQuery(url, query)
 
     try {
@@ -197,9 +202,11 @@ export class ApiClient {
   async post<TResponse>(
     url: string,
     body: unknown,
-    options: Omit<ApiRequestOptions, 'query'>,
+    options: Omit<ApiRequestOptions, 'query'> & {
+      headers?: Record<string, string>
+    },
   ): Promise<ApiResult<TResponse>> {
-    const { getToken, fallbackError, skipAuth } = options
+    const { getToken, fallbackError, skipAuth, headers } = options
 
     return this.request<TResponse>({
       url,
@@ -207,6 +214,7 @@ export class ApiClient {
       body,
       getToken,
       skipAuth,
+      headers,
       fallbackError,
       parseSuccess: async (response) => {
         try {

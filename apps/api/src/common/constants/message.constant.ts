@@ -4,6 +4,12 @@ import {
 } from '@repo/schemas';
 
 export const ERROR_MESSAGES = {
+  IDEMPOTENCY: {
+    // Sent by @nestjs/idempotency itself; kept here for the Swagger docs.
+    KEY_REQUIRED: 'An idempotency key is required for this operation.',
+    KEY_REUSED:
+      'This idempotency key was already used for a different request.',
+  },
   USER: {
     EMAIL_EXISTS: 'Email already exists',
     CLERK_ID_EXISTS: 'Clerk id already exists',
@@ -66,6 +72,10 @@ export const ERROR_MESSAGES = {
 } as const;
 
 export const ERROR_DESCRIPTIONS = {
+  IDEMPOTENCY: {
+    HEADER:
+      'Required. A client-generated key (1–255 printable ASCII, e.g. a UUID): a new one for each create, the same one when retrying it. A repeat after success replays the original 201 with `Idempotent-Replayed: true` instead of creating a second record. A missing or malformed key gets 400 `invalidRequest`; the same key while the first request still runs gets 409 `duplicateResource` with `Retry-After`.',
+  },
   AUTH_PROVIDER: {
     TIMEOUT:
       'Clerk did not answer in time. The change may still apply; check the user before retrying.',

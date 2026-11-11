@@ -30,6 +30,7 @@ import {
 } from '../../../common/dto/pagination.schema.js';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator.js';
 import { AdminOnly } from '../../../common/decorators/admin-only.decorator.js';
+import { IdempotentCreate } from '../../../common/decorators/idempotent-create.decorator.js';
 import {
   ApiDataResponse,
   ApiPaginatedResponse,
@@ -114,6 +115,7 @@ export class CategoryController {
 
   @Post()
   @AdminOnly()
+  @IdempotentCreate()
   @ApiOperation({ summary: 'Create a category (admin only)' })
   @ApiDataResponse(HttpStatus.CREATED, ResponseCategoryDto)
   @ApiErrorResponse(

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { MikroORM, RequestContext } from '@mikro-orm/core';
@@ -764,6 +765,7 @@ describe('ProductController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({ categoryId: category.id, name: 'Non Admin Product' })
         .expect(403);
     });
@@ -779,6 +781,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name,
@@ -829,6 +832,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name,
@@ -865,6 +869,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name,
@@ -887,6 +892,7 @@ describe('ProductController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name: uniqueName('Two Primary Images E2E'),
@@ -925,6 +931,7 @@ describe('ProductController (e2e)', () => {
       const name = uniqueName('Rolled Back Product E2E');
       await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name,
@@ -961,6 +968,7 @@ describe('ProductController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name: uniqueName('Out Of Range Price E2E'),
@@ -985,6 +993,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name: uniqueName('Percent Discount E2E'),
@@ -1023,6 +1032,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name: uniqueName('Untyped Discount E2E'),
@@ -1050,6 +1060,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name,
@@ -1091,6 +1102,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name: uniqueName('No Discount E2E'),
@@ -1118,6 +1130,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name: uniqueName('Fixed Discount E2E'),
@@ -1172,6 +1185,7 @@ describe('ProductController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name: uniqueName('Huge Sort Order E2E'),
@@ -1197,6 +1211,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: category.id,
           name: uniqueName('Long Image Url E2E'),
@@ -1224,6 +1239,7 @@ describe('ProductController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: '00000000-0000-0000-0000-000000000000',
           name: uniqueName('No Category Product E2E'),
@@ -1240,6 +1256,7 @@ describe('ProductController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
         .send({
           categoryId: 'not-a-uuid',
           name: 'x',

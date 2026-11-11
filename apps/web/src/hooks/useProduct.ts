@@ -23,6 +23,7 @@ import {
   throwIfServiceFailed,
   toQueryResult,
 } from '@/utils/query'
+import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 
 export interface UseProductsResult {
   products: Product[]
@@ -114,14 +115,19 @@ export const useProducts = (params: ProductOptions = {}): UseProductsResult => {
 
 export function useCreateProduct() {
   const queryClient = useQueryClient()
+  const idempotency = useIdempotencyKey()
 
   return useMutation({
     mutationFn: async (body: CreateProductPayload) => {
-      const result = await createProduct(body)
+      const idempotencyKey = idempotency.keyFor(body)
+      const result = await sendUntilSettled(() =>
+        createProduct(body, { idempotencyKey }),
+      )
       if (!result.ok) throwIfServiceFailed(result)
       return result.product
     },
     onSuccess: () => {
+      idempotency.clear()
       void queryClient.invalidateQueries({ queryKey: productsQueryRoot })
     },
   })

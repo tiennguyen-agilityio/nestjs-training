@@ -14,6 +14,7 @@ The layering and conventions the code actually follows. Plans, code reviews and 
 - Module repositories declare `protected readonly entity = X`.
 - They compose the ORM-agnostic protected helpers: `findOneBy`, `findMany`, `paginate`, `countOf`, `createAndSave`.
 - Services **never** touch `EntityManager`.
+- Exception: `src/modules/idempotency/stores/postgres-idempotency.store.ts` runs its own SQL through MikroORM's connection, outside `BaseRepository`: the `@nestjs/idempotency` store contract needs single-statement conditional writes the helpers cannot express.
 
 **Soft delete is a MikroORM filter.**
 

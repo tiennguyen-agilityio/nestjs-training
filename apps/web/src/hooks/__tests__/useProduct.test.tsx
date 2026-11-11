@@ -8,12 +8,20 @@ import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
 import {
   productDetailQueryKey,
   productsListQueryKey,
+  useCreateProduct,
   useDeleteProduct,
   useProductById,
   useProducts,
   useUpdateProduct,
 } from '@/hooks/useProduct'
-import { fetchProductById, fetchProducts } from '@/services/product'
+import {
+  createProduct,
+  fetchProductById,
+  fetchProducts,
+} from '@/services/product'
+import { IDEMPOTENCY } from '@/constants/common'
+import { ServiceError } from '@/utils/query'
+import type { CreateProductPayload } from '@repo/schemas'
 import type { ResponseMeta } from '@/types/api'
 import type { Product } from '@/types/product'
 
@@ -21,6 +29,7 @@ jest.mock('@clerk/nextjs', () => ({ useAuth: jest.fn() }))
 
 jest.mock('@/services/product', () => ({
   ...jest.requireActual('@/services/product'),
+  createProduct: jest.fn(),
   deleteProduct: jest.fn().mockResolvedValue({ ok: true }),
   updateProduct: jest.fn().mockResolvedValue({ ok: true, product: {} }),
   fetchProducts: jest
@@ -269,5 +278,138 @@ describe('useUpdateProduct', () => {
     })
 
     expect(client.getQueryState(adminDetailKey)?.isInvalidated).toBe(true)
+  })
+})
+
+const createdProduct = product('prod-new', 'Espresso')
+const espresso = { name: 'Espresso' } as CreateProductPayload
+const latte = { name: 'Latte' } as CreateProductPayload
+
+describe('useCreateProduct', () => {
+  const mockCreate = jest.mocked(createProduct)
+  const inFlight = {
+    ok: false as const,
+    error: 'In progress',
+    status: 409,
+    errorResponse: {
+      statusCode: 409,
+      message: 'Conflict',
+      errors: [
+        { errCode: 'duplicateResource', field: '', message: 'In progress' },
+      ],
+    },
+  }
+
+  beforeEach(() => {
+    mockClerk({ isLoaded: true, userId: 'user-1' })
+    mockCreate.mockReset()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  const keysSent = () =>
+    mockCreate.mock.calls.map(([, options]) => options?.idempotencyKey)
+
+  it('useCreateProduct reuses the Idempotency-Key when the same values are retried', async () => {
+    mockCreate
+      .mockResolvedValueOnce({ ok: false, error: 'Network error' })
+      .mockResolvedValueOnce({ ok: true, product: createdProduct })
+    const { result } = renderWithClient(() => useCreateProduct())
+
+    await act(async () => {
+      await result.current.mutateAsync(espresso).catch(() => undefined)
+    })
+    let created: unknown
+    await act(async () => {
+      created = await result.current.mutateAsync(espresso)
+    })
+
+    const [first, second] = keysSent()
+    expect(first).toEqual(expect.any(String))
+    expect(second).toBe(first)
+    expect(created).toEqual(createdProduct)
+  })
+
+  it('useCreateProduct uses a new Idempotency-Key after a success', async () => {
+    mockCreate.mockResolvedValue({ ok: true, product: createdProduct })
+    const { result } = renderWithClient(() => useCreateProduct())
+
+    await act(async () => {
+      await result.current.mutateAsync(espresso)
+    })
+    await act(async () => {
+      await result.current.mutateAsync(espresso)
+    })
+
+    const [first, second] = keysSent()
+    expect(second).not.toBe(first)
+  })
+
+  it('useCreateProduct uses a new Idempotency-Key when the values change', async () => {
+    mockCreate.mockResolvedValue({ ok: false, error: 'Network error' })
+    const { result } = renderWithClient(() => useCreateProduct())
+
+    await act(async () => {
+      await result.current.mutateAsync(espresso).catch(() => undefined)
+    })
+    await act(async () => {
+      await result.current.mutateAsync(latte).catch(() => undefined)
+    })
+
+    const [first, second] = keysSent()
+    expect(second).not.toBe(first)
+  })
+
+  it('useCreateProduct retries an in-flight 409 with the same key and resolves with the record', async () => {
+    jest.useFakeTimers()
+    mockCreate
+      .mockResolvedValueOnce(inFlight)
+      .mockResolvedValueOnce({ ok: true, product: createdProduct })
+    const { result } = renderWithClient(() => useCreateProduct())
+
+    let created: unknown
+    await act(async () => {
+      const pending = result.current.mutateAsync(espresso)
+      await jest.advanceTimersByTimeAsync(IDEMPOTENCY.IN_FLIGHT_RETRY_MS)
+      created = await pending
+    })
+
+    const [first, second] = keysSent()
+    expect(keysSent()).toHaveLength(2)
+    expect(second).toBe(first)
+    expect(created).toEqual(createdProduct)
+  })
+
+  it('useCreateProduct keeps a name-exists 409 as an error', async () => {
+    mockCreate.mockResolvedValue({
+      ok: false,
+      error: 'Name exists',
+      status: 409,
+      errorResponse: {
+        statusCode: 409,
+        message: 'Conflict',
+        errors: [
+          {
+            errCode: 'productNameExists',
+            field: 'name',
+            message: 'Name exists',
+          },
+        ],
+      },
+    })
+    const { result } = renderWithClient(() => useCreateProduct())
+
+    let error: unknown
+    await act(async () => {
+      error = await result.current
+        .mutateAsync(espresso)
+        .catch((e: unknown) => e)
+    })
+
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+    expect(error).toBeInstanceOf(ServiceError)
+    expect((error as ServiceError).errors[0].errCode).toBe('productNameExists')
   })
 })
