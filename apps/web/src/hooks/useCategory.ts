@@ -31,6 +31,7 @@ import {
   throwIfServiceFailed,
   toQueryResult,
 } from '@/utils/query'
+import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 
 export interface UseCategoriesResult {
   categories: Category[]
@@ -107,14 +108,19 @@ export const useCategories = (
 
 export function useCreateCategory() {
   const queryClient = useQueryClient()
+  const idempotency = useIdempotencyKey()
 
   return useMutation({
     mutationFn: async (body: CreateCategoryPayload) => {
-      const result = await createCategory(body)
+      const idempotencyKey = idempotency.keyFor(body)
+      const result = await sendUntilSettled(() =>
+        createCategory(body, { idempotencyKey }),
+      )
       if (!result.ok) throwIfServiceFailed(result)
       return result.category
     },
     onSuccess: () => {
+      idempotency.clear()
       void invalidateCategoryLists(queryClient)
     },
   })

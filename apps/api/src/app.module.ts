@@ -9,6 +9,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ResilienceModule } from '@nestjs/resilience';
+import { ScheduleModule } from '@nestjs/schedule';
 
 import mikroOrmConfig from './configs/mikro-orm.config.js';
 import { validate } from './configs/env.validation.js';
@@ -18,6 +19,7 @@ import { UserModule } from './modules/user/user.module.js';
 import { WebhookModule } from './modules/webhook/webhook.module.js';
 import { CategoryModule } from './modules/category/category.module.js';
 import { ProductModule } from './modules/product/product.module.js';
+import { IdempotencyStoreModule } from './modules/idempotency/idempotency.module.js';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor.js';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter.js';
 import { createStandardSchemaValidationPipe } from './configs/validation-pipe.config.js';
@@ -29,11 +31,14 @@ import { AuthProviderModule } from './common/providers/auth-provider.module.js';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate }),
     ResilienceModule.forRoot(),
+    // App-wide scheduler for @Interval/@Cron jobs (the idempotency prune job).
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: rateLimitConfig,
     }),
     MikroOrmModule.forRoot(mikroOrmConfig),
+    IdempotencyStoreModule,
     AuthProviderModule,
     UserModule,
     WebhookModule,

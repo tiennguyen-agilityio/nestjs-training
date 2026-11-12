@@ -9,3 +9,12 @@ export const LOCAL_STORAGE_KEYS = {
 }
 
 export const CLERK_SESSION_TEMPLATE = 'custom-session'
+
+/** The API's `Idempotency-Key` contract for create requests. */
+export const IDEMPOTENCY = {
+  HEADER: 'Idempotency-Key',
+  /** errCode of the 409 the API sends while a request with the same key runs. */
+  IN_FLIGHT_ERR_CODE: 'duplicateResource',
+  IN_FLIGHT_RETRY_MS: 1000,
+  IN_FLIGHT_MAX_RETRIES: 5,
+} as const

@@ -28,6 +28,7 @@ import {
 } from '../../../common/dto/id-param.schema.js';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator.js';
 import { AdminOnly } from '../../../common/decorators/admin-only.decorator.js';
+import { IdempotentCreate } from '../../../common/decorators/idempotent-create.decorator.js';
 import {
   ApiDataResponse,
   ApiPaginatedResponse,
@@ -87,6 +88,7 @@ export class ProductController {
 
   @Post()
   @AdminOnly()
+  @IdempotentCreate()
   @ApiOperation({ summary: 'Create a product (admin only)' })
   @ApiDataResponse(HttpStatus.CREATED, ResponseProductDto)
   @ApiErrorResponse(

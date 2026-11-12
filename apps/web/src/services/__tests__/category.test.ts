@@ -1,6 +1,7 @@
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { API_ROUTES } from '@/constants/routes'
 import {
+  createCategory,
   fetchCategoryById,
   restoreCategory,
   updateCategory,
@@ -167,5 +168,21 @@ describe('category service update flows', () => {
       error: `${API_FALLBACK_ERRORS.CATEGORY_RESTORE} (500)`,
       status: 500,
     })
+  })
+
+  it('createCategory sends the Idempotency-Key header', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ data: { id: 'cat-1', name: 'Coffee' } }),
+    })
+    globalThis.fetch = fetchMock as typeof fetch
+
+    await createCategory({ name: 'Coffee' }, { idempotencyKey: 'key-1' })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(API_ROUTES.CATEGORIES)
+    expect(init).toMatchObject({ method: 'POST', credentials: 'include' })
+    expect(new Headers(init.headers).get('Idempotency-Key')).toBe('key-1')
   })
 })

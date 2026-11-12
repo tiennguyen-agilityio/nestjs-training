@@ -1,3 +1,4 @@
+import { IDEMPOTENCY } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { API_ROUTES } from '@/constants/routes'
 import type {
@@ -5,7 +6,11 @@ import type {
   UpdateCategoryPayload,
 } from '@repo/schemas'
 import type { Category } from '@/types/category'
-import type { Response as ApiResponse, ResponseMeta } from '@/types/api'
+import type {
+  ApiErrorResponse,
+  Response as ApiResponse,
+  ResponseMeta,
+} from '@/types/api'
 import { apiClient } from '@/services/api'
 
 export interface CategoryOptions {
@@ -18,15 +23,21 @@ export interface CategoryOptions {
 
 export async function createCategory(
   body: CreateCategoryPayload,
-  options: Pick<CategoryOptions, 'getToken'> = {},
+  options: Pick<CategoryOptions, 'getToken'> & { idempotencyKey: string },
 ): Promise<
   | { ok: true; category: Category }
-  | { ok: false; error: string; status?: number }
+  | {
+      ok: false
+      error: string
+      status?: number
+      errorResponse?: ApiErrorResponse
+    }
 > {
-  const { getToken } = options
+  const { getToken, idempotencyKey } = options
   const result = await apiClient.post<unknown>(API_ROUTES.CATEGORIES, body, {
     getToken,
     fallbackError: API_FALLBACK_ERRORS.CATEGORY_CREATE,
+    headers: { [IDEMPOTENCY.HEADER]: idempotencyKey },
   })
   if (!result.ok) return result
 

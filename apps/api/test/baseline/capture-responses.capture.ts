@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -111,7 +112,10 @@ describe('API response capture', () => {
         name,
         'POST',
         path,
-        http().post(`${API_BASE_PATH}${path}`).send(payload),
+        http()
+          .post(`${API_BASE_PATH}${path}`)
+          .set('Idempotency-Key', randomUUID())
+          .send(payload),
       ),
     patch: (name: string, path: string, payload: object) =>
       record(

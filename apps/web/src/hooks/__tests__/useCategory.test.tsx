@@ -7,10 +7,17 @@ import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
 import {
   categoriesListQueryKey,
   useCategories,
+  useCreateCategory,
   useDeleteCategory,
   useRestoreCategory,
 } from '@/hooks/useCategory'
-import { fetchCategories, restoreCategory } from '@/services/category'
+import {
+  createCategory,
+  fetchCategories,
+  restoreCategory,
+} from '@/services/category'
+import { IDEMPOTENCY } from '@/constants/common'
+import { ServiceError } from '@/utils/query'
 import type { Category } from '@/types/category'
 import type { ResponseMeta } from '@/types/api'
 
@@ -18,6 +25,7 @@ jest.mock('@clerk/nextjs', () => ({ useAuth: jest.fn() }))
 
 jest.mock('@/services/category', () => ({
   ...jest.requireActual('@/services/category'),
+  createCategory: jest.fn(),
   deleteCategory: jest.fn().mockResolvedValue({ ok: true }),
   restoreCategory: jest.fn(),
   fetchCategories: jest
@@ -308,5 +316,140 @@ describe('useRestoreCategory', () => {
     const list = client.getQueryData<ListCache>(includeDeletedKey)
     expect(list?.categories[0].deletedAt).toBe('2026-02-01T00:00:00.000Z')
     expect(invalidateSpy).not.toHaveBeenCalled()
+  })
+})
+
+const createdCategory = { id: 'cat-new', name: 'Espresso' } as Category
+
+describe('useCreateCategory', () => {
+  const mockCreate = jest.mocked(createCategory)
+  const inFlight = {
+    ok: false as const,
+    error: 'In progress',
+    status: 409,
+    errorResponse: {
+      statusCode: 409,
+      message: 'Conflict',
+      errors: [
+        { errCode: 'duplicateResource', field: '', message: 'In progress' },
+      ],
+    },
+  }
+
+  beforeEach(() => {
+    mockClerk({ isLoaded: true, userId: 'user-1' })
+    mockCreate.mockReset()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  const keysSent = () =>
+    mockCreate.mock.calls.map(([, options]) => options?.idempotencyKey)
+
+  it('useCreateCategory reuses the Idempotency-Key when the same values are retried', async () => {
+    mockCreate
+      .mockResolvedValueOnce({ ok: false, error: 'Network error' })
+      .mockResolvedValueOnce({ ok: true, category: createdCategory })
+    const { result } = renderWithClient(() => useCreateCategory())
+
+    await act(async () => {
+      await result.current
+        .mutateAsync({ name: 'Espresso' })
+        .catch(() => undefined)
+    })
+    let created: unknown
+    await act(async () => {
+      created = await result.current.mutateAsync({ name: 'Espresso' })
+    })
+
+    const [first, second] = keysSent()
+    expect(first).toEqual(expect.any(String))
+    expect(second).toBe(first)
+    expect(created).toEqual(createdCategory)
+  })
+
+  it('useCreateCategory uses a new Idempotency-Key after a success', async () => {
+    mockCreate.mockResolvedValue({ ok: true, category: createdCategory })
+    const { result } = renderWithClient(() => useCreateCategory())
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Espresso' })
+    })
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Espresso' })
+    })
+
+    const [first, second] = keysSent()
+    expect(second).not.toBe(first)
+  })
+
+  it('useCreateCategory uses a new Idempotency-Key when the values change', async () => {
+    mockCreate.mockResolvedValue({ ok: false, error: 'Network error' })
+    const { result } = renderWithClient(() => useCreateCategory())
+
+    await act(async () => {
+      await result.current
+        .mutateAsync({ name: 'Espresso' })
+        .catch(() => undefined)
+    })
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Latte' }).catch(() => undefined)
+    })
+
+    const [first, second] = keysSent()
+    expect(second).not.toBe(first)
+  })
+
+  it('useCreateCategory retries an in-flight 409 with the same key and resolves with the record', async () => {
+    jest.useFakeTimers()
+    mockCreate
+      .mockResolvedValueOnce(inFlight)
+      .mockResolvedValueOnce({ ok: true, category: createdCategory })
+    const { result } = renderWithClient(() => useCreateCategory())
+
+    let created: unknown
+    await act(async () => {
+      const pending = result.current.mutateAsync({ name: 'Espresso' })
+      await jest.advanceTimersByTimeAsync(IDEMPOTENCY.IN_FLIGHT_RETRY_MS)
+      created = await pending
+    })
+
+    const [first, second] = keysSent()
+    expect(keysSent()).toHaveLength(2)
+    expect(second).toBe(first)
+    expect(created).toEqual(createdCategory)
+  })
+
+  it('useCreateCategory keeps a name-exists 409 as an error', async () => {
+    mockCreate.mockResolvedValue({
+      ok: false,
+      error: 'Name exists',
+      status: 409,
+      errorResponse: {
+        statusCode: 409,
+        message: 'Conflict',
+        errors: [
+          {
+            errCode: 'categoryNameExists',
+            field: 'name',
+            message: 'Name exists',
+          },
+        ],
+      },
+    })
+    const { result } = renderWithClient(() => useCreateCategory())
+
+    let error: unknown
+    await act(async () => {
+      error = await result.current
+        .mutateAsync({ name: 'Espresso' })
+        .catch((e: unknown) => e)
+    })
+
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+    expect(error).toBeInstanceOf(ServiceError)
+    expect((error as ServiceError).errors[0].errCode).toBe('categoryNameExists')
   })
 })

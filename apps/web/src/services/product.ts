@@ -1,3 +1,4 @@
+import { IDEMPOTENCY } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { API_ROUTES } from '@/constants/routes'
 import type {
@@ -32,13 +33,20 @@ export interface ProductOptions {
 
 export async function createProduct(
   body: CreateProductPayload,
-  options: ProductOptions = {},
+  options: Pick<ProductOptions, 'getToken'> & { idempotencyKey: string },
 ): Promise<
-  { ok: true; product: Product } | { ok: false; error: string; status?: number }
+  | { ok: true; product: Product }
+  | {
+      ok: false
+      error: string
+      status?: number
+      errorResponse?: ApiErrorResponse
+    }
 > {
   const result = await apiClient.post<unknown>(API_ROUTES.PRODUCTS, body, {
     getToken: options.getToken,
     fallbackError: API_FALLBACK_ERRORS.PRODUCT_CREATE,
+    headers: { [IDEMPOTENCY.HEADER]: options.idempotencyKey },
   })
   if (!result.ok) return result
 

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { MikroORM, RequestContext } from '@mikro-orm/core';
@@ -12,7 +13,7 @@ import { ProductService } from './../../src/modules/product/services/product.ser
 import { RoastLevel, UserRole } from '@repo/constants';
 import { ERROR_CODES } from './../../src/common/constants/error-code.constant.js';
 import type { User } from './../../src/modules/user/entities/user.entity.js';
-import type { Category } from './../../src/modules/category/entities/category.entity.js';
+import { Category } from './../../src/modules/category/entities/category.entity.js';
 import { slugFrom } from './../../src/common/utils/slug.util.js';
 import { API_BASE_PATH } from './../utils/api-path.util.js';
 import { initTestApp } from './../utils/init-test-app.util.js';
@@ -224,6 +225,7 @@ describe('CategoryController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .send({ name: 'Non Admin Category' })
         .expect(403);
     });
@@ -267,6 +269,7 @@ describe('CategoryController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .send({ name })
         .expect(201);
 
@@ -284,6 +287,7 @@ describe('CategoryController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .send({ name: 'a' })
         .expect(400);
 
@@ -303,6 +307,7 @@ describe('CategoryController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .send({ name: 'a'.repeat(256) })
         .expect(400);
 
@@ -319,8 +324,26 @@ describe('CategoryController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
         .send({ name: category.name })
         .expect(409);
+    });
+
+    it('POST /categories twice with the same body and no Idempotency-Key: both respond 400, no row', async () => {
+      const admin = await createTestUser(UserRole.ADMIN);
+      mockSessionFor(admin.clerkId);
+      const name = uniqueName('Baseline E2E');
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await request(app.getHttpServer())
+          .post(`${API_BASE_PATH}/categories`)
+          .send({ name })
+          .expect(400);
+      }
+
+      expect(
+        await orm.em.fork().count(Category, { name }, { filters: false }),
+      ).toBe(0);
     });
 
     it('PATCH /categories/:id responds 200 and updates the category', async () => {
