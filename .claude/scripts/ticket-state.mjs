@@ -1,15 +1,19 @@
 #!/usr/bin/env node
-// The saved status of one /work-ticket card: where the flow stopped, so a new
+// The saved status of one /work-ticket ticket: where the flow
+// stopped, so a new
 // session continues at the exact task step instead of re-reading the spec.
 //
-//   node .claude/scripts/ticket-state.mjs <command> <spec dir> [args]
+//   node <repo root>/.claude/scripts/ticket-state.mjs <command> <spec dir> [args]
 //
-//   init <spec> <card url> <branch>     create <spec>/state.json (flow 2)
+//   init <spec> <ticket> <branch>       create <spec>/state.json (flow 2);
+//                                       <ticket> is a URL or none:<feature>
 //   rename <spec> <new spec> <branch>   rewrite the spec dir and branch fields
 //                                       (Gate 1 option C; move the dir after)
-//   flow <spec> <step>                  2 3 gate1 5 6 7 8 9 10 11 12 closed
+//   flow <spec> <step>                  2 3 gate1 5 6 7 8 9 (UAT) 10 (commit)
+//                                       11 (security) 12 (push + PR)
+//                                       13 (ticket to review) closed
 //   base <spec> <commit> [<branch>]     the base commit and branch (step 5;
-//                                       branch defaults to develop)
+//                                       branch defaults to git.baseBranch)
 //   at <spec> <task> <step>             steps before <step> are done, <step> is
 //                                       in progress: fingerprint + tick boxes
 //   boundary <spec>                     fingerprint only (after the autofix)
@@ -20,28 +24,31 @@
 //   await <spec> <gate>                 the AskUserQuestion input about to be
 //                                       asked, as JSON on stdin
 //   answered <spec>                     the question was answered
-//   findings <spec>                     code review findings, JSON on stdin:
+//   findings <spec> [--uat] [file]      code review findings (or, with --uat,
+//                                       the UAT-* ones only), JSON on stdin:
 //                                       [{ "id", "summary" }]
 //   finding <spec> fixed|left <id> [reason]
 //   round <spec> pre|post               one workflow rule 8 round used
-//   close <spec>                        the card is finished: drop its refs
+//   close <spec>                        the ticket is finished: drop its refs
 //
 //   status [<spec>] [--no-brief]        print the resume brief (unless
 //                                       --no-brief), then the status, ending
 //                                       with one `Next:` line. No spec: the
-//                                       card of the current branch, else the
+//                                       ticket of the current branch, else the
 //                                       list. Exit 3 when there is no usable
 //                                       saved status.
 //
 // Nothing but <spec>/state.json is written in the spec dir.
-//   status --list                       one line per card in progress
+//   status --list                       one line per ticket in progress
 //
 // A fingerprint is a tree of the whole working tree, built with a temporary
 // index outside .git/ (the real index, HEAD and branches are never touched),
 // wrapped in a parentless commit and kept by refs/work-ticket/<feature>/*.
 // Every command except init does nothing and exits 0 when <spec> has no
 // state.json, so it can ride along with a test or autofix command.
-// Offline: only local files and local git, never gh or Trello.
+// Offline: only local files and local git, never gh or the tracker.
+// Project values (base branch, specs dir, lockfile) come from
+// .claude/workflow.json through config.mjs.
 import { execFileSync } from 'node:child_process';
 import {
   existsSync,
@@ -57,6 +64,13 @@ import {
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
+import {
+  ConfigError,
+  isEntry,
+  commands as pmCommands,
+  loadConfig,
+} from './config.mjs';
+
 const STATE = 'state.json';
 export const FLOW_STEPS = [
   '2',
@@ -70,6 +84,7 @@ export const FLOW_STEPS = [
   '10',
   '11',
   '12',
+  '13',
   'closed',
 ];
 const IDENTITY = {
@@ -97,12 +112,18 @@ export function repoRoot(cwd = process.cwd()) {
 export function readState(specDir) {
   const path = join(specDir, STATE);
   if (!existsSync(path)) return null;
-  const state = JSON.parse(readFileSync(path, 'utf8'));
-  // Names saved before 2026-11-06, when steps 9 and 11 were Gates 2 and 3.
-  // Their questions no longer exist, so a saved one is dropped.
-  const renamed = { gate2: '9', gate3: '11' };
-  if (Object.hasOwn(renamed, state.flow)) state.flow = renamed[state.flow];
-  if (Object.hasOwn(renamed, state.awaiting?.gate ?? '')) state.awaiting = null;
+  return migrate(JSON.parse(readFileSync(path, 'utf8')));
+}
+
+// v1 had no UAT step: steps 9-12 are now 10-13. In memory only; the next
+// write saves version 2.
+const RENUMBERED = { 9: '10', 10: '11', 11: '12', 12: '13' };
+function migrate(state) {
+  if (state.version != null && state.version !== 1) return state;
+  state.version = 2;
+  if (RENUMBERED[state.flow]) state.flow = RENUMBERED[state.flow];
+  const gate = state.awaiting?.gate;
+  if (RENUMBERED[gate]) state.awaiting.gate = RENUMBERED[gate];
   return state;
 }
 
@@ -239,10 +260,10 @@ export function tickSteps(text, taskNumber, upTo) {
   return lines.join('\n');
 }
 
-function newState(card, branch, specDir) {
+function newState(ticket, branch, specDir) {
   return {
-    version: 1,
-    card,
+    version: 2,
+    ticket,
     branch,
     specDir,
     base: null,
@@ -275,7 +296,6 @@ export function taskDiff(root, specDir, state, n) {
   return { diff, files };
 }
 
-const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 // JSON from a file argument, or from stdin when there is none (or `-`).
 const readInput = (arg) =>
   JSON.parse(readFileSync(arg && arg !== '-' ? arg : 0, 'utf8'));
@@ -290,10 +310,11 @@ const FLOW_LABELS = {
   6: 'Implement',
   7: 'Code review',
   8: 'Verify',
-  9: 'Commit',
-  10: 'Security review',
-  11: 'Push + PR',
-  12: 'Card to REVIEW',
+  9: 'UAT',
+  10: 'Commit',
+  11: 'Security review',
+  12: 'Push + PR',
+  13: 'Ticket to review',
   closed: 'Closed',
 };
 const TASK_WORDS = {
@@ -304,16 +325,18 @@ const TASK_WORDS = {
   review_pass: 'review passed',
 };
 const ROUND_LIMIT = 3;
+const isUat = (finding) => String(finding.id).startsWith('UAT-');
 const flowAt = (step) => FLOW_STEPS.indexOf(step);
 
 // Paths the workflow itself writes, never flagged as outside the plan
-// (workflow rule 6 "not deviations"): screenshot dirs and the lockfile.
-export function exemptPatterns(manifest, branch) {
-  const dirs = Object.values(manifest?.apps ?? {})
+// (workflow rule 6 "not deviations"): screenshot dirs and the lockfiles.
+export function exemptPatterns(config, branch) {
+  const dirs = Object.values(config?.apps ?? {})
     .map((app) => app.screenshot?.dir)
     .filter(Boolean)
     .map((dir) => `${dir.replace('{feature}', featureOf(branch))}/`);
-  return [...new Set(dirs), 'pnpm-lock.yaml'];
+  const lockfiles = config ? pmCommands(config.packageManager).lockfiles : [];
+  return [...new Set(dirs), ...lockfiles];
 }
 
 const toRegex = (path) =>
@@ -362,13 +385,13 @@ function nextTaskAction(state, facts) {
 // The one action a resumed session takes next. Pure: `facts` are read from
 // git and the files by status().
 export function nextAction(state, facts) {
-  // Once the card's commit exists, steps 7 to 9 come back only inside the
-  // step 10 security fix (and in a status saved before 2026-11-06).
+  // Once the ticket's commit exists, steps 7 to 10 come back only inside the
+  // step 11 security fix.
   const flow =
-    facts.commitsAfterBase && ['7', '8', '9'].includes(state.flow)
-      ? '10'
+    facts.commitsAfterBase && ['7', '8', '9', '10'].includes(state.flow)
+      ? '11'
       : state.flow;
-  if (flow === 'closed') return 'nothing: card closed';
+  if (flow === 'closed') return 'nothing: ticket closed';
   if (
     facts.currentBranch !== state.branch &&
     (facts.dirty || flowAt(flow) >= flowAt('6'))
@@ -376,9 +399,9 @@ export function nextAction(state, facts) {
     if (!facts.dirty) return `check out ${state.branch}`;
     const where = facts.currentBranch ?? 'a detached HEAD';
     if (flowAt(flow) < flowAt('6')) {
-      return `stop: on ${where} with uncommitted changes; commit or stash them before the card continues`;
+      return `stop: on ${where} with uncommitted changes; commit or stash them before the ticket continues`;
     }
-    return `stop: on ${where} with uncommitted changes; the card's branch is ${state.branch}`;
+    return `stop: on ${where} with uncommitted changes; the ticket's branch is ${state.branch}`;
   }
   if (state.awaiting) {
     const changed = facts.changedSinceAwaiting;
@@ -417,7 +440,9 @@ export function nextAction(state, facts) {
       return nextTaskAction(state, facts);
     case '7': {
       if (!state.codeReview.done) return 'run code-review';
-      const open = state.codeReview.findings.filter((f) => f.status === 'open');
+      const open = state.codeReview.findings.filter(
+        (f) => f.status === 'open' && !isUat(f),
+      );
       if (open.length) {
         return `fix findings ${open.map((f) => f.id).join(', ')}, then code-review on the fix`;
       }
@@ -425,16 +450,38 @@ export function nextAction(state, facts) {
     }
     case '8':
       return 'run step 8';
-    case '9':
-      return 'run step 9 (commit)';
+    case '9': {
+      const anyOpen = state.codeReview.findings.filter(
+        (f) => f.status === 'open',
+      );
+      if (anyOpen.length && (state.rounds?.pre ?? 0) >= ROUND_LIMIT) {
+        return anyOpen.some(isUat)
+          ? 'ask the UAT gate'
+          : 'stop: round limit reached; ask the user';
+      }
+      // A code review of a UAT fix runs here too: its findings come first.
+      const review = state.codeReview.findings.filter(
+        (f) => f.status === 'open' && !isUat(f),
+      );
+      if (review.length) {
+        return `fix findings ${review.map((f) => f.id).join(', ')}, then code-review on the fix`;
+      }
+      const open = state.codeReview.findings.filter(
+        (f) => f.status === 'open' && isUat(f),
+      );
+      if (!open.length) return 'run step 9 (UAT)';
+      return `fix UAT findings ${open.map((f) => f.id).join(', ')}, then code-review on the fix, step 8, then step 9`;
+    }
     case '10':
-      return facts.dirty
-        ? 'finish the step 10 security fix: code-review on it, step 8, amend, then security-review (same round)'
-        : 'run step 10';
+      return 'run step 10 (commit)';
     case '11':
-      return 'check the PR (gh pr view); if there is none, run step 11';
+      return facts.dirty
+        ? 'finish the step 11 security fix: code-review on it, step 8, step 9, amend, then security-review (same round)'
+        : 'run step 11';
+    case '12':
+      return 'check the PR (gh pr view); if there is none, run step 12';
     default:
-      return 'check the PR, then move the card and close';
+      return 'check the PR, then move the ticket and close';
   }
 }
 
@@ -456,8 +503,17 @@ export function ledgerFor(root, planPath) {
   return result;
 }
 
-function cardNumber(card) {
-  return card?.match(/trello\.com\/c\/[^/]+\/(\d+)-/)?.[1] ?? '?';
+// The ticket of a state; states written before tickets had a `card` field.
+const ticketOf = (state) => state.ticket ?? state.card ?? null;
+
+// A short label for a ticket ref: `#<n>` for a numbered Trello card URL, the
+// feature for `none:<feature>`, else the ref itself.
+export function ticketLabel(ref) {
+  if (!ref) return '?';
+  const trello = ref.match(/trello\.com\/c\/[^/]+\/(\d+)-/);
+  if (trello) return `#${trello[1]}`;
+  if (ref.startsWith('none:')) return ref.slice('none:'.length);
+  return ref;
 }
 
 function flowLine(state, plan) {
@@ -469,7 +525,7 @@ function flowLine(state, plan) {
 }
 
 const specsGlob = (root) => {
-  const base = join(root, 'docs', 'specs');
+  const base = join(root, loadConfig(root).specsDir);
   if (!existsSync(base)) return [];
   return readdirSync(base)
     .flatMap((day) => {
@@ -495,15 +551,15 @@ export function findSpecByBranch(root, branch) {
   });
 }
 
-function listCards(root) {
+function listTickets(root) {
   const lines = specsGlob(root)
     .map((spec) => [spec, readState(spec)])
     .filter(([, state]) => state.flow !== 'closed')
     .map(
       ([spec, state]) =>
-        `#${cardNumber(state.card)} ${state.branch} · ${flowLine(state, planTasks(readPlan(spec)))}`,
+        `${ticketLabel(ticketOf(state))} ${state.branch} · ${flowLine(state, planTasks(readPlan(spec)))}`,
     );
-  return lines.length ? lines.join('\n') : 'No card in progress';
+  return lines.length ? lines.join('\n') : 'No ticket in progress';
 }
 
 const exists = (root, object) => {
@@ -528,9 +584,9 @@ const names = (root, from, to) =>
     ? []
     : git(['diff', '--name-only', from, to], root).split('\n').filter(Boolean);
 
-// Commits made on the card's branch since the base: merges and commits that
-// came from the base branch (a merge or rebase of develop) do not count.
-function cardCommits(root, base, baseBranch) {
+// Commits made on the ticket's branch since the base: merges and commits that
+// came from the base branch (a merge or rebase of it) do not count.
+function branchCommits(root, base, baseBranch) {
   const upstream = [`origin/${baseBranch}`, baseBranch].filter((ref) =>
     tryGit(['rev-parse', '--verify', '-q', `${ref}^{commit}`], root),
   );
@@ -543,8 +599,7 @@ function readFacts(root, spec, state, planText) {
   const { tree } = snapshot(root);
   const boundaryTree = state.boundary?.tree;
   const relPlan = relative(root, join(spec, 'plan.md'));
-  const manifestPath = join(root, '.claude', 'apps.json');
-  const manifest = existsSync(manifestPath) ? readJson(manifestPath) : null;
+  const config = loadConfig(root);
   const base =
     state.base &&
     tryGit(['rev-parse', '--verify', `${state.base}^{commit}`], root);
@@ -557,10 +612,11 @@ function readFacts(root, spec, state, planText) {
       ? names(root, state.awaiting.tree, tree)
       : [],
     commitsAfterBase:
-      Boolean(base) && cardCommits(root, base, state.baseBranch ?? 'develop'),
+      Boolean(base) &&
+      branchCommits(root, base, state.baseBranch ?? config.git.baseBranch),
     ledger: ledgerFor(root, relPlan),
     plan: planTasks(planText),
-    exempt: exemptPatterns(manifest, state.branch),
+    exempt: exemptPatterns(config, state.branch),
   };
 }
 
@@ -628,7 +684,7 @@ function statusOf(root, spec, state, { brief }) {
     ledgerComplete: facts.ledger.complete,
   });
   const lines = [
-    `Card: ${state.card} (#${cardNumber(state.card)})`,
+    `Ticket: ${ticketOf(state)} (${ticketLabel(ticketOf(state))})`,
     `Spec: ${relative(root, spec)}`,
     `Branch: ${state.branch}`,
     `Flow: ${flowLine(state, facts.plan)}`,
@@ -696,7 +752,7 @@ function statusCommand(args) {
   }
   const root = repoRoot(specArg ? resolve(specArg) : process.cwd());
   if (list) {
-    console.log(listCards(root));
+    console.log(listTickets(root));
     return 0;
   }
   let spec = specArg && realpathSync(resolve(specArg));
@@ -704,7 +760,7 @@ function statusCommand(args) {
     const branch = tryGit(['symbolic-ref', '--short', '-q', 'HEAD'], root);
     spec = branch && findSpecByBranch(root, branch);
     if (!spec) {
-      console.log(listCards(root));
+      console.log(listTickets(root));
       return 0;
     }
   }
@@ -727,13 +783,13 @@ function usage(message) {
 }
 
 const commands = {
-  init(spec, [card, branch]) {
-    if (!card || !branch) return usage('init needs <card url> <branch>');
+  init(spec, [ticket, branch]) {
+    if (!ticket || !branch) return usage('init needs <ticket> <branch>');
     if (readState(spec)) {
       console.log(`ticket-state: ${spec}/${STATE} already exists`);
       return 0;
     }
-    writeState(spec, newState(card, branch, spec));
+    writeState(spec, newState(ticket, branch, spec));
     return 0;
   },
   rename(spec, [newSpec, branch], state) {
@@ -749,10 +805,11 @@ const commands = {
     writeState(spec, state);
     return 0;
   },
-  base(spec, [commit, baseBranch], state) {
+  base(spec, [commit, baseBranch], state, root) {
     if (!commit) return usage('base needs <commit> [<base branch>]');
     state.base = commit;
-    state.baseBranch = baseBranch ?? state.baseBranch ?? 'develop';
+    state.baseBranch =
+      baseBranch ?? state.baseBranch ?? loadConfig(root).git.baseBranch;
     writeState(spec, state);
     return 0;
   },
@@ -835,19 +892,37 @@ const commands = {
     writeState(spec, state);
     return 0;
   },
-  findings(spec, [file], state) {
-    const findings = readInput(file).map(({ id, summary }) => ({
+  findings(spec, args, state) {
+    const uat = args.includes('--uat');
+    const [file] = args.filter((arg) => arg !== '--uat');
+    const input = readInput(file);
+    const wrong = input.filter((f) => isUat(f) !== uat).map((f) => f.id);
+    if (wrong.length) {
+      return usage(
+        uat
+          ? `findings --uat needs UAT- ids: ${wrong.join(', ')}`
+          : `findings without --uat takes no UAT- ids: ${wrong.join(', ')}`,
+      );
+    }
+    const fresh = input.map(({ id, summary }) => ({
       id,
       summary,
       status: 'open',
       reason: null,
     }));
-    const earlier = [
+    // Each kind replaces only its own open findings; the other kind stays.
+    const own = (f) => isUat(f) === uat;
+    const kept = state.codeReview.findings.filter((f) => !own(f));
+    const replaced = state.codeReview.findings.filter(own);
+    const closed = [
       ...(state.codeReview.closed ?? []),
-      ...state.codeReview.findings,
+      ...replaced.filter((f) => f.status !== 'open'),
     ];
-    const closed = earlier.filter((f) => f.status !== 'open');
-    state.codeReview = { done: true, findings, closed };
+    state.codeReview = {
+      done: uat ? state.codeReview.done : true,
+      findings: [...kept, ...fresh],
+      closed,
+    };
     writeState(spec, state);
     return 0;
   },
@@ -904,6 +979,12 @@ export function main(argv) {
   return command(spec, args, state, repoRoot(spec));
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
-  process.exitCode = main(process.argv.slice(2));
+if (isEntry(import.meta.url)) {
+  try {
+    process.exitCode = main(process.argv.slice(2));
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    console.error(error.message);
+    process.exitCode = 1;
+  }
 }

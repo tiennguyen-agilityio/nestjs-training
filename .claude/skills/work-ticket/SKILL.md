@@ -1,19 +1,24 @@
 ---
 name: work-ticket
-description: End-to-end workflow for one Trello card on the Claude Training board — discuss, plan, branch, implement, review, verify, commit, open a GitHub PR, update the card. Run only when the user invokes /work-ticket.
-argument-hint: <trello card URL> [base branch, default develop] | <card URL> done
+description: End-to-end workflow for one ticket — discuss, plan, branch, implement, review, verify, UAT, commit, open a GitHub PR, update the ticket in the project's tracker. Run only when the user invokes /work-ticket.
+argument-hint: <ticket URL | "task text" | task.md | spec dir> [base branch] | <ticket> done
 disable-model-invocation: true
 ---
 
-# Work a Trello ticket end to end
+# Work a ticket end to end
 
-Arguments: `$ARGUMENTS` — a card URL, optionally a base branch (default `develop`), or `<card URL> done`.
+Arguments: `$ARGUMENTS` — a ticket (a tracker URL, a task text in quotes, or a Markdown file), or a spec dir to resume, optionally a base branch (default `git.baseBranch`); or `<ticket> done`.
+
+**Setup, before anything else.**
+- Read the config: `node "<repo root>/.claude/scripts/config.mjs" get tracker.type`, `get specsDir`, `get git.baseBranch`. A missing or invalid config prints one line: show it, tell the user to run `/turbo-workflow:init`, and stop.
+- Read `.claude/trackers/<tracker.type>/adapter.md`. Its operations — `parse`, `read`, `move`, `prLine`, done-on-merge — are the only way this skill touches the tracker. The workflow states are `todo`, `inProgress`, `review` and `done`; the adapter maps them to the tracker.
+- The workflow rules are `.claude/rules/workflow.md`, loaded automatically; `<specsDir>` below is the config's `specsDir`.
 
 If the arguments end in `done`, go to `done`. Otherwise start at step 0.
 
 Follow `.claude/rules/workflow.md` for every superpowers step; it overrides their save paths, plan header and commit steps. Review, verify and finishing follow the repo's own rules 7–11, not superpowers skills. Run commands from the repo root; app commands (verify, coverage) from each changed app's dir (workflow rule 0).
 
-**Card lookup** (step 0 and `done`): take the short link from the card URL (`trello.com/c/<short link>/…`) and run `grep -lE '^(- )?\*\*Card:\*\*.*trello\.com/c/<short link>([/)]|$)' docs/specs/*/*/design.md`. It matches only a design's Card line, not a design that merely links the card. More than one match → ask the user which one, newest first. A glob error (no design exists yet) counts as not found.
+**Ticket lookup** (step 0 and `done`): an argument that is a spec dir (it holds `design.md`) is the spec itself. Otherwise take the adapter's `parse(<argument>)`: a ticket id and its canonical ref. Run `grep -lE '^(- )?\*\*(Ticket|Card):\*\*.*<id>([/)]|$)' <specsDir>/*/*/design.md`. It matches only a design's Ticket line (`**Card:**` in designs written before tickets), not a design that merely links the ticket. More than one match → ask the user which one, newest first. A glob error (no design exists yet) counts as not found.
 
 ## Gates and notifications
 
@@ -23,48 +28,48 @@ Follow `.claude/rules/workflow.md` for every superpowers step; it overrides thei
   - D is the tool's "Other" field, for the user's own input.
   - Wait for the answer.
 - A 🛑 **Gate** is a question whose options name exactly what will happen. Without approval, stop.
-- After Gate 1, the run goes on without a gate: the commit (step 9), the amend of a security fix (step 10), the push and the draft PR (step 11) are approved by Gate 1. Moving the card is approved by invoking `/work-ticket`:
-  - step 1 moves it from **TODO** to **IN PROGRESS**;
-  - step 12 moves it to **REVIEW** right after the PR is created;
-  - `.github/workflows/trello.yml` moves it to **DONE** when the PR is merged;
-  - `done` moves it from **REVIEW** to **DONE** if `trello.yml` did not.
-  Any other Trello write needs a gate.
-- At every gate, and whenever a step fails and you stop, call `PushNotification` first with one line saying what is needed: `work-ticket #<card no>: <step>: <what you need>` (under 200 chars). On completion, send one with the PR and card result. No notifications for other questions or routine progress.
-- All Trello work goes through the `trello-manager` subagent. Pass write approvals to it explicitly: card + target list.
+- After Gate 1, the run goes on without a gate: the commit (step 10), the amend of a security fix (step 11), the push and the draft PR (step 12) are approved by Gate 1. Besides the plan-change gate (workflow rule 6), the only later gate is the 🛑 **UAT gate** (step 9), asked only when the round limit runs out with a UAT AC still failing. Moving the ticket is approved by invoking `/work-ticket`:
+  - step 1 moves it from `todo` to `inProgress`;
+  - step 13 moves it to `review` right after the PR is created;
+  - the adapter's done-on-merge moves it to `done` when the PR is merged;
+  - `done` moves it from `review` to `done` if done-on-merge did not.
+  Any other tracker write needs a gate. With an adapter whose `move` does nothing (`none`), these steps are skipped.
+- At every gate, and whenever a step fails and you stop, call `PushNotification` first with one line saying what is needed: `work-ticket <ticket label>: <step>: <what you need>` (under 200 chars). On completion, send one with the PR and ticket result. No notifications for other questions or routine progress.
+- All tracker work goes through the adapter, as its sections say. Pass write approvals explicitly: ticket + target state.
 
 ## Saved status
 
-From step 2 on, the card's status lives in `<spec dir>/state.json` (workflow rule 1), and only `node .claude/scripts/ticket-state.mjs <command> <spec dir> …` writes it (usage in the script's header). A resume reads it instead of the spec files.
+From step 2 on, the ticket's status lives in `<spec dir>/state.json` (workflow rule 1), and only `node "<repo root>/.claude/scripts/ticket-state.mjs" <command> <spec dir> …` writes it (usage in the script's header). A resume reads it instead of the spec files.
 
-- Bookkeeping rides along with work: chain each command onto the step's own Bash call (`… && node .claude/scripts/ticket-state.mjs at <spec dir> 3 2`); give it a call of its own only when the step has no command.
-- `flow <step>` at the start of each step and gate (`2 3 gate1 5 6 7 8 9 10 11 12`). Steps 7 and 8 called from step 10 run no `flow`: the run stays at `10`.
+- Bookkeeping rides along with work: chain each command onto the step's own Bash call (`… && node "<repo root>/.claude/scripts/ticket-state.mjs" at <spec dir> 3 2`); give it a call of its own only when the step has no command.
+- `flow <step>` at the start of each step and gate (`2 3 gate1 5 6 7 8 9 10 11 12 13`). Steps 7 and 8 called from step 9 (a UAT fix) run no `flow`: the run stays at `9`. Steps 7, 8 and 9 called from step 11 run no `flow`: the run stays at `11`.
 - Before every AskUserQuestion once `state.json` exists: pipe the exact tool input as JSON into `await <spec dir> <gate>` (a heredoc: `await` saves it), ask, then `answered` right after the answer.
 - With no `state.json` (a spec started before it existed), every command does nothing and exits 0.
 
 ## Steps
 
-0. **Pre-flight.** Run the card lookup. Found → go to Resume. Not found: if `git status --short` shows changes, stop and report them; otherwise `git checkout <base> && git pull`.
-1. **Read the card.** `trello-manager`, read-only: title, full description, every checklist with its items, list, dependencies, and the current state of the related code.
-   - Check the card's list. **REVIEW**, **DONE** or any list other than TODO and IN PROGRESS → do not move it (it may already have a PR or be finished). Notify, report its list and ask: A "Stop" (Recommended) or B "Continue without moving the card". With B, step 12 does not move the card either.
-   - Pick the branch name `<type>/<feature-name>` from the card (workflow rule 4). Run `git fetch origin`, then `git branch -a --list '<branch>' 'origin/<branch>'`. Any output → ask for another name.
-   - Then, if the card is in **TODO**, dispatch `trello-manager` with the card URL, the source list `TODO` and the target list `IN PROGRESS`, without asking. It re-reads the card and moves it only if it is still in TODO; otherwise it reports the current list and you stop and ask. State that the move is the workflow's own, approved by invoking `/work-ticket`. Continue only after its report lists the move as done; if the move fails, stop and notify. A card already in IN PROGRESS is not moved.
-2. **Discuss → `design.md`.** Invoke `superpowers:brainstorming` with the card as the request, applying workflow rules 1–3 and the rule 6 overrides: always a written design, no commit.
-   - Save under `docs/specs/<today>/<feature-name>/`, with the Card and Branch header lines. Right after `design.md` is first written, run `node .claude/scripts/ticket-state.mjs init <spec dir> <card URL> <branch>`.
-   - Turn the card's description and checklists into `## Requirements from card` (R1…).
+0. **Pre-flight.** Run the ticket lookup. Found → go to Resume. Not found: if `git status --short` shows changes, stop and report them; otherwise `git checkout <base> && git pull`.
+1. **Read the ticket.** The adapter's `read`, read-only: title, full description, every checklist with its items, its state, dependencies, and the current state of the related code.
+   - Check the ticket's state. `review`, `done` or any state other than `todo` and `inProgress` → do not move it (it may already have a PR or be finished). Notify, report its state and ask: A "Stop" (Recommended) or B "Continue without moving the ticket". With B, step 13 does not move the ticket either.
+   - Pick the branch name `<type>/<feature-name>` from the ticket (workflow rule 4). Run `git fetch origin`, then `git branch -a --list '<branch>' 'origin/<branch>'`. Any output → ask for another name.
+   - Then, if the ticket is in `todo`, run the adapter's `move(<id>, todo, inProgress)`, without asking. It re-reads the ticket and moves it only if it is still in `todo`; otherwise it reports the current state and you stop and ask. State that the move is the workflow's own, approved by invoking `/work-ticket`. Continue only after the move is reported done; if it fails, stop and notify. A ticket already in `inProgress` is not moved.
+2. **Discuss → `design.md`.** Invoke `superpowers:brainstorming` with the ticket as the request, applying workflow rules 1–3 and the rule 6 overrides: always a written design, no commit.
+   - Save under `<specsDir>/<today>/<feature-name>/`, with the Ticket and Branch header lines. Right after `design.md` is first written, run `node "<repo root>/.claude/scripts/ticket-state.mjs" init <spec dir> <ticket ref> <branch>` (the ref from `parse`).
+   - Turn the ticket's description and checklists into `## Requirements from ticket` (R1…).
    - Discussion table; builder check after every playback.
    - When the user approves the design, add the `**Design approved:**` line.
-3. **Plan → `plan.md`.** Invoke `superpowers:writing-plans`, applying rules 4–6: Git section from real git output, `## Card requirements` table with every R, `## Risks`, `## Plan checks` when the plan's files give no changed app (rule 4), Global Constraints from the rules of each changed app (rule 5), no commit steps. `writing-plans` ends after saving the plan, with no commit, and does not offer an execution choice; go to Gate 1.
+3. **Plan → `plan.md`.** Invoke `superpowers:writing-plans`, applying rules 4–6: Git section from real git output, `## Ticket requirements` table with every R, `## Risks`, `## Plan checks` when the plan's files give no changed app (rule 4), Global Constraints from the rules of each changed app (rule 5), no commit steps. `writing-plans` ends after saving the plan, with no commit, and does not offer an execution choice; go to Gate 1.
 4. 🛑 **Gate 1.** Approve the plan and the branch name. The plan always runs natively with `executing-plans` (step 6).
    - Before asking, show: the `plan.md` path and its task titles; the changed apps from `changed-apps.mjs --files` (or "no changed app" and the plan checks); the branch name; and from the plan's `## Risks` the riskiest task, every `accepted` risk, and the rejected approaches.
    - Options:
      - A "Approve and start" (Recommended): add the Gate 1 row to the Git section (rule 4), then go to step 5. If C changed the design, also set the design's `**Design approved:**` line to today.
-     - B "Stop here": nothing else is created; `/work-ticket <card URL>` later resumes at Gate 1.
+     - B "Stop here": nothing else is created; `/work-ticket <ticket>` (or the spec dir) later resumes at Gate 1.
      - C "Request changes", with the change in the answer's notes or in D (Other): a change to the plan, the scope, the design or the branch name. Edit `plan.md` (a scope, requirement or design change also updates `design.md` and its Discussion table), show what changed and ask again. A new branch name reruns the step 1 name check, then renames the spec dir and updates the branch and spec-dir paths in the design and plan headers (`**Branch:**`, `**Spec:**`) and the Git section. Run `rename <old spec dir> <new spec dir> <new branch>` before moving the dir.
 5. **Branch + coverage baseline.** Using the plan's Git section:
    - `git fetch origin <base>`
    - `git checkout --no-track -b <feature branch> origin/<base>`
    - Update the Git section's Base commit from `HEAD` (rule 4), and record it with `base <spec dir> <commit> <base branch>`.
-   - Before touching code, run `node .claude/scripts/changed-apps.mjs --files <the plan's files>` (workflow rule 0) and capture one `coverage-baseline-<app>.json` per changed app (rule 7). No changed app → no baseline.
+   - Before touching code, run `node "<repo root>/.claude/scripts/changed-apps.mjs" --files <the plan's files>` (workflow rule 0) and capture one `coverage-baseline-<app>.json` per changed app (rule 7). No changed app → no baseline.
    - If the plan has `## Screens`, dispatch the `ui-screenshotter` agent for the before shots now, without asking and before any UI edit. Brief it with phase `before` and every `## Screens` row: `<screen>=<path>`, steps, what it must show, and whether it writes data (approved at Gate 1). Handle its report as in **Screenshot report**.
 6. **Implement.** Invoke `superpowers:executing-plans` with the rule 6 overrides; never `subagent-driven-development` here. For each task:
    - TDD: write the AC's test, watch it fail, implement, watch it pass. Run `at <task> <step>` at each step boundary (the script ticks the done steps' checkboxes), chained into the step's command when it has one.
@@ -72,54 +77,71 @@ From step 2 on, the card's status lives in `<spec dir>/state.json` (workflow rul
    - A gap → `review <task> gap <text>`, fix it, and review again before the next task.
    - No gap → `review pass` and the plugin's `task-done` in one Bash call (workflow rule 6: `task-done` only after the review).
    - A deviation from the plan → workflow rule 6. One that changes what Gate 1 approved is a 🛑 **plan-change gate**: stop before making it and ask with the options in rule 6. An "unapproved deviation" from `plan-reviewer` goes to the same gate. Any other deviation is only recorded, in the plan's `## Deviations` before `plan-reviewer` runs, and in the ledger.
-   After the last task, run the autofix on the whole change (workflow rule 7: `lint-staged --diff=<base commit> --no-hide-partially-staged`, with `boundary` after every autofix in the same call), run the rebuild precondition (workflow rule 7), then, for each changed app (workflow rule 0), from `apps/<app>/`, run `pnpm run build` and `pnpm run test`; both must pass before step 7. No changed app → only the autofix runs here.
-7. **Code review.** Run the autofix (workflow rule 7; it includes `git add -N` on the untracked files), then invoke the `code-review` skill at `medium`. Per workflow rule 8, name the target (the working tree against the base commit) and the rules files. When it returns, save its findings with `findings <spec dir>`, JSON on stdin (`[{ "id", "summary" }]`, `[]` for none), then `finding fixed|left <id>` as each one is handled, and `round pre` for each round, once when its fix starts. Called from step 10, run no `flow`, and the round is step 10's `round post`. Handle findings per rule 8:
+   After the last task, run the autofix on the whole change (workflow rule 7: `lint-staged --diff=<base commit> --no-hide-partially-staged`, with `boundary` after every autofix in the same call), run the rebuild precondition (workflow rule 7), then, for each changed app (workflow rule 0), from `apps/<app>/`, run the commands `config.mjs cmd run build` and `cmd run test` print; both must pass before step 7. No changed app → only the autofix runs here.
+7. **Code review.** Run the autofix (workflow rule 7; it includes `git add -N` on the untracked files), then invoke the `code-review` skill at `medium`. Per workflow rule 8, name the target (the working tree against the base commit) and the rules files. When it returns, save its findings with `findings <spec dir>`, JSON on stdin (`[{ "id", "summary" }]`, `[]` for none), then `finding fixed|left <id>` as each one is handled, and `round pre` for each round, once when its fix starts. Called from step 9, run no `flow`: the round is the UAT fix's `round pre`. Called from step 11, run no `flow`, and the round is step 11's `round post`. Handle findings per rule 8:
    - A bug or a rules violation → fix, run the related tests and the autofix, then `code-review` on the fix. Round limit: workflow rule 8.
-   - A fix that deviates from the plan (workflow rule 6) goes through the plan-change gate first. This also covers the fixes that step 8 and step 10 send back here.
+   - A fix that deviates from the plan (workflow rule 6) goes through the plan-change gate first. This also covers the fixes that step 8 and step 11 send back here; a UAT fix from step 9 follows step 9's plan rule instead.
    - A cleanup or a false positive → do not fix; keep one line for `report.md`.
-8. **Verify + test report + `report.md`.** Run the autofix again and the rebuild precondition (workflow rule 7), then, for each changed app (workflow rule 0), from `apps/<app>/`, read and run `apps/<app>/.claude/skills/verify/SKILL.md` with the unit gate on `test:cov`, and write `test-report.md` from `.claude/templates/test-report.md`, with each app's rows and Coverage block. Every gate must PASS, or be SKIPPED or n/a with a reason. No changed app → run the plan's `## Plan checks` instead and write their results in the report's "Plan checks" section.
+8. **Verify + test report + `report.md`.** Run the autofix again and the rebuild precondition (workflow rule 7), then, for each changed app (workflow rule 0), from `apps/<app>/`, read and run `apps/<app>/.claude/skills/verify/SKILL.md` with the unit gate on the app's `coverage` command from `.claude/workflow.json`, and write `test-report.md` from `.claude/templates/test-report.md`, with each app's rows and Coverage block. Every gate must PASS, or be SKIPPED or n/a with a reason. No changed app → run the plan's `## Plan checks` instead and write their results in the report's "Plan checks" section.
    - Verify runs before the after screenshots: a verify build can overwrite the dev server's output (`next build` rewrites `.next`), so start the dev server again for the screenshots.
    - On a failure, the notification names `test-report.md`. A fix that changes logic in `src/` goes back to step 7 for that fix; a test, lint or format fix reruns this step. This overrides the `verify` skill's step 4 ("Fix and rerun") for logic fixes.
-   - Round limit: workflow rule 8 (shared with step 7 before the commit); each rerun is a `round pre`. Called from step 10, run no `flow`, and the rerun belongs to step 10's `round post`.
-   - When it passes, check that every plan checkbox is `[x]` and every `R<n>` in the design's `## Requirements from card` has a row in the plan's `## Card requirements` table. Anything open → back to step 6.
-   - Then, if the plan has `## Screens`, dispatch the `ui-screenshotter` agent for the after shots, on every run of this step (also from step 10), without asking, with phase `after` and the same rows. Handle its report as in **Screenshot report**.
-   - File check: every `## Screens` row needs `<screen>-before.<ext>` and `<screen>-after.<ext>` in `screenshot.dir` of `.claude/apps.json`. A missing file counts as a failed screen; no new screenshot run.
+   - Round limit: workflow rule 8 (shared with steps 7 and 9 before the commit); each rerun is a `round pre`. Called from step 9, run no `flow`, and the rerun belongs to the UAT fix's round. Called from step 11, run no `flow`, and the rerun belongs to step 11's `round post`.
+   - When it passes, check that every plan checkbox is `[x]` and every `R<n>` in the design's `## Requirements from ticket` has a row in the plan's `## Ticket requirements` table. Anything open → back to step 6.
+   - Then, if the plan has `## Screens`, dispatch the `ui-screenshotter` agent for the after shots, on every run of this step (also from steps 9 and 11), without asking, with phase `after` and the same rows. Handle its report as in **Screenshot report**.
+   - File check: every `## Screens` row needs `<screen>-before.<ext>` and `<screen>-after.<ext>` in `screenshot.dir` of `.claude/workflow.json`. A missing file counts as a failed screen; no new screenshot run.
    - `report.md` lists each failed screen as `No screenshot: <screen>: <before|after|before and after> image missing`: the reason is which image the file check found missing, nothing else.
-   - Evidence: every row gets one type from workflow rule 9: `PASS`, `PASS (screenshot, manual)`, `PASS (plan check)` or `Not verified`. An AC without a test, or whose test is in a SKIPPED gate (e.g. the API's e2e skipped by the database guard), is Not verified with the reason, never PASS, and does not send you back to step 6.
+   - Evidence: every row gets one type from workflow rule 9: `PASS`, `PASS (screenshot, manual)`, `PASS (plan check)` or `Not verified`. An AC without a test, or whose test is in a SKIPPED gate (e.g. an app's e2e skipped by its database guard), is Not verified with the reason, never PASS, and does not send you back to step 6.
    - A row whose evidence is a failed screen is `Not verified`, with that screen's `No screenshot:` line as its reason (one per failed screen); a row proven by a passing test keeps `PASS`.
-   - Tick each `R<n>` in the design's `## Requirements from card` from this run only: `PASS`, `PASS (screenshot, manual)` or `PASS (plan check)` → ticked; Not verified → unticked, also when an earlier run ticked it. Then write `report.md` (rule 9) with `Security: pending`. A rerun from step 10 keeps the existing Security line and its findings.
+   - Tick each `R<n>` in the design's `## Requirements from ticket` from this run only: `PASS`, `PASS (screenshot, manual)` or `PASS (plan check)` → ticked; Not verified → unticked, also when an earlier run ticked it. Then write `report.md` (rule 9) with `Security: pending`, and go to step 9. A rerun from step 11 keeps the existing Security line and its findings.
    - **Screenshot report** (steps 5 and 8). The agent retries each screen up to 3 times.
      - `DONE` → read the saved files and go on.
      - `FAILED` → no question: the agent deleted each failed screen's image; go on. At step 8 the file check marks those screens.
      - `BLOCKED` → relay what it needs to the user, then continue the same agent with SendMessage.
      - `PARTIAL` → continue it with SendMessage for what is left.
-9. **Commit.** Run `git add -A`, then commit with one message per workflow rule 11, without asking. Nothing is ticked on Trello. If a hook fails, fix the cause; never use `--no-verify`.
-10. **Security review.** Check `<base commit>..HEAD` against the areas listed in workflow rule 8 (access control, config or secrets, dependencies, and the paths in each app's `security` list in `.claude/apps.json`). None touched → replace `Security: pending` in `report.md` with `Security: skipped, no security-relevant change` and go to step 11. Otherwise invoke the `security-review` skill:
+9. **UAT.** Check the change in the running app against what the ticket asked, with the `uat-tester` agent (the `/uat` skill), blind to the plan and the code. `"noApp":true` (workflow rule 0) → skip it: `flow 9`, then `flow 10`, and go to step 10. Otherwise dispatch the agent without asking, and brief it with these only (never `plan.md`, `report.md`, `test-report.md`, the diff or the tests):
+   - the ticket's own words, inline: the description and every checklist item from the adapter's `read` (tracker `none`: the task text or `task.md` as given). The agent never calls the tracker;
+   - the spec dir, the `design.md` path, and `<spec dir>/uat-scenarios.md` when it exists. When `design.md` changed after that file was written (a design revised after a `pending` deviation), say so: the agent writes it fresh;
+   - every app with a `screenshot.url` and `screenshot.devCommand` in `.claude/workflow.json`, changed or not, and `uat.api.devCommand` when set.
+   Handle its report:
+   - `BLOCKED` (sign-in, 2FA, captcha, several accounts) → relay its `blocked_reason` and ask the user to sign in in that browser window, then continue the same agent with SendMessage.
+   - New scenarios in the report → save them to `<spec dir>/uat-scenarios.md`.
+   - Infrastructure (`not_run` set in the report: an app or the database will not start, no app URL; or an agent error) → not an AC failure and no code fix: the status is `UAT: not run (<reason>)`. Run no `findings --uat` (an empty list would drop the open `UAT-*` findings unrecorded); write the report (below) and go on as its last line says.
+   - UAT passed only when `passed_ac` is true **and** no row of kind `ac` is `FAIL`. After every run that is not `not_run`, for each open `UAT-AC<n>` finding that now passes, `finding fixed UAT-AC<n>`; then `findings <spec dir> --uat` with the failing ACs as `[{ "id": "UAT-AC<n>", "summary" }]` (`[]` for none). An AC disputed in an earlier run (`finding left`, whether still in `codeReview.findings` or moved to `codeReview.closed`) stays left while `uat-scenarios.md` is the same file: leave it out of that list and do not fix it; once the scenarios are written fresh (design changed), earlier `left` UAT findings no longer apply, since the new ids may name other ACs.
+   - A failing AC whose assertion is itself wrong, with concrete evidence (a selector that matches nothing the AC is about, an assertion on the wrong text, an AC misread from the ticket) → `finding left UAT-AC<n> <reason>`: no fix and no round. The status is `failed (AC<n> disputed: <reason>)`, and the AC goes under `## Needs your review`. Without such evidence, the AC is fixed.
+   - Any other failing AC: before starting a new fix round, check the round limit (workflow rule 8: 3 before the commit, shared with steps 7 and 8). No round left → the UAT gate below (a resume's `Next:` is then `ask the UAT gate`). Otherwise `round pre` when the fix starts, then step 7 (code review on the fix), step 8, and this step again. A rerun hands back `uat-scenarios.md`, so `UAT-AC<n>` keeps meaning the same AC.
+   - A UAT fix that changes what Gate 1 approved (an AC, the scope, the `## Ticket requirements` mapping, a test the plan names, a file the plan does not list) asks no plan-change question: the failed AC, from the owner's words, is the approval. Update `plan.md` (the AC, `## Ticket requirements`, the tests, and each file the fix touches that the plan does not list, added to the `**Files:**` block of the owning task: the task the failing AC's `R<n>` maps to in `## Ticket requirements`, or the last task when the AC maps to no R), add the `## Deviations` entry `Task <n>: <what changes> — from UAT AC<n>, <YYYY-MM-DD>`, and the ledger's `Ruling:` line. A change of the changed apps, a `planChanges` item or a dependency still goes through the plan-change gate (workflow rule 6).
+   - A `negative` or `extra` row that fails → no fix, no block: list it under `## Needs your review`.
+   - 🛑 **UAT gate**, when the rounds run out with an AC still failing: `await <spec dir> uat` before AskUserQuestion, `answered` after it (a resume while it is pending gets `ask again: uat`). A "Stop; I check it myself" (Recommended): `answered`, then stop and notify. B "Commit and open the draft PR with UAT failed": `answered`, then `flow <spec dir> 10` (a stop between them asks the gate again, since the round limit still holds), and go on to step 10 with the status `failed`; inside step 11's fix, no `flow` change (see below).
+   - After every UAT run, update `report.md` (workflow rule 9): `## UAT` (the status `passed`, `failed`, `failed (AC<n> disputed: <reason>)` or `not run (<reason>)`; whether a fix round ran; the table `Scenario | Covers | Kind | Result | Assertion`; the console error count) and `## Needs your review` (not-run reasons, negative or extra failures, disputed ACs, ticket/design disagreements, or "none"). Then rewrite the `R → test → result` table: an R with no passing test whose `AC<n> (R<n>)` rows all passed is `PASS (UAT)`; an R with a passing test keeps `PASS`; an R whose only evidence is a failed or not-run UAT row stays `Not verified`. Tick the design's `## Requirements from ticket` the same way: `PASS (UAT)` → ticked. Then, with UAT passed or not run, every failing AC `left`, or the gate's B, go to step 10; inside step 11's fix, go to its amend instead.
+   - Inside step 11's security fix (7 → 8 → 9 → amend), the run belongs to step 11's `round post`; an AC failing there goes straight to the UAT gate, where B amends instead of committing.
+10. **Commit.** Run `git add -A`, then commit with one message per workflow rule 11, without asking. Nothing is changed in the tracker. If a hook fails, fix the cause; never use `--no-verify`.
+11. **Security review.** Check `<base commit>..HEAD` against the areas listed in workflow rule 8 (access control, config or secrets, dependencies, and the paths in each app's `security` list in `.claude/workflow.json`). None touched → replace `Security: pending` in `report.md` with `Security: skipped, no security-relevant change` and go to step 12. Otherwise invoke the `security-review` skill:
     - No finding → `Security: no findings`.
-    - A finding → fix it, then `code-review` on the fix (step 7), then step 8; that rerun keeps the Security line.
+    - A finding → fix it, then `code-review` on the fix (step 7), then step 8, then step 9; that rerun keeps the Security line.
     - Then `git add -A` and `git commit --amend --no-edit`, without asking: nothing is pushed yet.
     - Then rerun `security-review`. Round limit: workflow rule 8 (3 rounds after the commit); each round is one `round post`, run when its fix starts. Finishing a fix that a stopped run left half done is the same round.
     - When it is clean, write `Security: findings fixed` with each finding and its fix.
-11. **Push + draft PR.** Follow workflow rule 10, without asking:
+12. **Push + draft PR.** Follow workflow rule 10, without asking:
     - The `pr-description` skill drafts `pr-description.md`; it is not shown.
-    - `git push -u origin <branch>`, then `gh pr create --draft`, per rule 10.
+    - `git push -u <git.remote> <branch>`, then `gh pr create --draft`, per rule 10.
     - A failed push or `gh pr create` → stop and notify; a resume runs this step again.
-12. **Card → REVIEW.** No gate: right after `gh pr create` succeeds, dispatch `trello-manager` with the card URL, the source list `IN PROGRESS` and the target list `REVIEW` (skip if B was chosen at step 1). State that the move is the workflow's own, approved by invoking `/work-ticket`. If the move fails, stop and notify. After the move, run `close <spec dir>`.
-13. **Report.** Send the completion notification, then a short summary with the PR link (a draft: the developer reviews it on GitHub and marks it ready, which starts the Claude Code Review action; never run `gh pr ready`), the card link (in REVIEW; `.github/workflows/trello.yml` moves it to DONE when the PR is merged, and if that run fails, `/work-ticket <card URL> done` is the fallback), and the local paths of `report.md`, `test-report.md`, `pr-description.md`, `design.md` and `plan.md`. The details live in `report.md`; do not repeat them.
+13. **Ticket → review.** No gate: right after `gh pr create` succeeds, run the adapter's `move(<id>, inProgress, review)` (skip if B was chosen at step 1). State that the move is the workflow's own, approved by invoking `/work-ticket`. If the move fails, stop and notify. After the move, run `close <spec dir>`.
+14. **Report.** Send the completion notification, then a short summary with the PR link (a draft: the developer reviews it on GitHub and marks it ready, which starts the project's review automation, if any; never run `gh pr ready`), the ticket (in `review`; the adapter's done-on-merge moves it to `done` when the PR is merged, and if that fails, `/work-ticket <ticket> done` is the fallback), the UAT status, and the local paths of `report.md`, `test-report.md`, `pr-description.md`, `design.md` and `plan.md`. The details live in `report.md`; do not repeat them.
 
 ## Resume
 
 The spec dir is the directory of the matched `design.md`; every later file is read from and written to it.
 
 **With a saved status** (`state.json` in the spec dir):
-1. If its branch is known, `gh pr view <branch> --json state`: `MERGED` → the card is finished; report it, suggest `<card URL> done`, and stop. A `gh` error (no GitHub remote, offline) counts as not merged.
-2. Run `node .claude/scripts/ticket-state.mjs status <spec dir>`. It prints the resume brief (Global Constraints, `## Deviations`, the ledger's rulings, the code review findings and the current task's section), then the status, ending with one `Next:` line.
+1. If its branch is known, `gh pr view <branch> --json state`: `MERGED` → the ticket is finished; report it, suggest `<ticket> done`, and stop. A `gh` error (no GitHub remote, offline) counts as not merged.
+2. Run `node "<repo root>/.claude/scripts/ticket-state.mjs" status <spec dir>`. It prints the resume brief (Global Constraints, `## Deviations`, the ledger's rulings, the code review findings and the current task's section), then the status, ending with one `Next:` line.
 3. Use only that output and do what `Next:` says. Do not re-read `design.md`, the whole `plan.md` or the report files. At step 6, `executing-plans` resumes as workflow rule 6 says.
    - `ask again: <gate>` → `PushNotification` as at every gate, then ask the saved `awaiting.payload` from `state.json` unchanged.
    - `ask the user: …` → show what differs and ask: A "Continue: the change goes through the plan-change gate" (Recommended) or B "Stop: I sort the changes out myself".
+   - `ask the UAT gate` → step 9's 🛑 UAT gate: the rounds ran out with a UAT AC still open.
    - `check out <branch>` → `git checkout <branch>`, then run `status` again.
    - `stop: …` → report it and stop.
-   - `check the PR …` → `gh pr view <branch>`; a PR exists → step 12 (its `trello-manager` move only happens from IN PROGRESS), then `close`; none → run step 11.
+   - `check the PR …` → `gh pr view <branch>`; a PR exists → step 13 (its move only happens from `inProgress`), then `close`; none → run step 12.
 4. Exit 3 (`No saved status`) → use the table below.
 
 **Without a saved status:** re-read the spec files: `design.md`, `plan.md`, `report.md`, `test-report.md` and `pr-description.md`. Do not redo finished steps.
@@ -130,15 +152,15 @@ Where to continue (the first matching row wins):
 
 | Found | Continue at |
 | --- | --- |
-| a feature branch is known and `gh pr view <branch> --json state` shows `MERGED` | the card is finished: report it, suggest `<card URL> done`, and stop |
+| a feature branch is known and `gh pr view <branch> --json state` shows `MERGED` | the ticket is finished: report it, suggest `<ticket> done`, and stop |
 | design without `**Design approved:**` | step 2 (finish the design, ask for approval) |
 | approved design, no `plan.md` | step 3 |
 | `plan.md` without the Gate 1 row | Gate 1 |
 | feature branch missing | step 5 |
 | Base commit differs from `git merge-base <feature branch> origin/<base>` (after `git fetch origin <base>`) | finish step 5: set Base commit from that merge-base, then capture the baseline |
-| a changed app without a baseline | finish step 5: capture its baseline (workflow rule 7), unless `node .claude/scripts/changed-apps.mjs <base commit>` already lists that app: its code has changed, so note "no clean baseline" for it instead (rule 7). Classify the changed apps with `node .claude/scripts/changed-apps.mjs --files <the plan's files>`, not from `git diff`: the diff is empty on a fresh branch and partial mid-work. An existing `coverage-baseline.json` is the API baseline. No changed app → no baseline needed |
-| commits after the base commit, `Security: pending` in `report.md` and uncommitted changes | a security fix in progress: finish step 10 from its step 7 → step 8 → amend |
-| feature branch exists | the first unfinished step from the plan checkboxes, `test-report.md`, `report.md`, commits after the base commit (step 9 done), a Security line in `report.md` other than `Security: pending` (step 10 done) and `gh pr view <branch>` (step 11 done). The code review leaves no record: with every checkbox ticked and no `report.md`, continue at step 7 (a finished review may run once more) |
+| a changed app without a baseline | finish step 5: capture its baseline (workflow rule 7), unless `node "<repo root>/.claude/scripts/changed-apps.mjs" <base commit>` already lists that app: its code has changed, so note "no clean baseline" for it instead (rule 7). Classify the changed apps with `node "<repo root>/.claude/scripts/changed-apps.mjs" --files <the plan's files>`, not from `git diff`: the diff is empty on a fresh branch and partial mid-work.  No changed app → no baseline needed |
+| commits after the base commit, `Security: pending` in `report.md` and uncommitted changes | a security fix in progress: finish step 11 from its step 7 → step 8 → step 9 → amend |
+| feature branch exists | the first unfinished step from the plan checkboxes, `test-report.md`, `report.md`, a `## UAT` section in `report.md` (status `passed` or `not run` → step 9 done; status `failed` with no commit yet → resume step 9, its fix loop or the gate; with no changed app, step 9 is skipped), commits after the base commit (step 10 done), a Security line in `report.md` other than `Security: pending` (step 11 done) and `gh pr view <branch>` (step 12 done). The code review leaves no record: with every checkbox ticked and no `report.md`, continue at step 7 (a finished review may run once more) |
 
 Before continuing, act on git:
 
@@ -152,12 +174,12 @@ Before continuing, act on git:
 
 ## `done`
 
-1. Run the card lookup. No match → report and stop. Take the branch and the base from the plan's Git section; with no `plan.md`, take the branch from the design's `**Branch:**` line and the base from the arguments.
+1. Run the ticket lookup. No match → report and stop. Take the branch and the base from the plan's Git section; with no `plan.md`, take the branch from the design's `**Branch:**` line and the base from the arguments.
 2. `gh pr view <branch> --json state,url`. Not merged → report the state and stop.
-3. Merged → `trello-manager` (read-only) reads the card's list. If it is still in **REVIEW** (`.github/workflows/trello.yml` normally moves it), dispatch `trello-manager` with the card URL, the source list `REVIEW` and the target list `DONE`, without asking: the move is the workflow's own, approved by invoking `done`. If the move fails, stop and notify. A card in any other list than REVIEW or DONE (for example one left in place by option B at step 1) is not moved: report its list.
+3. Merged → the adapter's `read` gives the ticket's state. If it is still in `review` (done-on-merge normally moves it), run the adapter's `move(<id>, review, done)`, without asking: the move is the workflow's own, approved by invoking `done`. If the move fails, stop and notify. A ticket in any other state than `review` or `done` (for example one left in place by option B at step 1) is not moved: report its state.
 4. Delete the local branch, without asking: invoking `done` on a merged PR approves it, and `git branch -d` refuses a branch with commits that are not merged.
    - On the merged branch with a dirty tree: stop and report.
    - On the merged branch with a clean tree: `git checkout <base> && git pull && git branch -d <branch>`.
    - On any other branch: `git branch -d <branch>`, without leaving the current branch. It checks the branch against its upstream (`origin/<branch>`), so no fetch is needed.
 5. A command that refuses → report its output, name the command that would finish the step, and stop; never run a forced command yourself.
-6. Run `node .claude/scripts/ticket-state.mjs close <spec dir>` (nothing happens for a spec without `state.json`).
+6. Run `node "<repo root>/.claude/scripts/ticket-state.mjs" close <spec dir>` (nothing happens for a spec without `state.json`).

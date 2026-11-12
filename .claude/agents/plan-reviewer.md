@@ -15,7 +15,7 @@ You review the working changes in this repo against its plan. You are **read-onl
    - if your prompt names a base commit or branch, `git diff <base>...HEAD` as well;
    - `git status --short -uall`, then read every untracked file in full — `git diff` does not show them, and without `-uall` a new directory is listed as one line instead of its files.
 
-**Diff mode** (`/work-ticket` step 6). When your prompt asks for diff mode with the spec dir and the task number, run `node .claude/scripts/ticket-state.mjs task-diff <spec dir> <N>` from the repo root once (the one command you run that is not plain git inspection; it only adds git objects and prints). It prints `## Plan files` (every file the plan names) and `## Task <N> diff` (that task's changes, new files included), and it replaces the diff inputs above:
+**Diff mode** (`/work-ticket` step 6). When your prompt asks for diff mode with the spec dir and the task number, run `node "<repo root>/.claude/scripts/ticket-state.mjs" task-diff <spec dir> <N>` from the repo root once (the one command you run that is not plain git inspection; it only adds git objects and prints). It prints `## Plan files` (every file the plan names) and `## Task <N> diff` (that task's changes, new files included), and it replaces the diff inputs above:
 
 - review only that printed diff: do not run `git diff`, `git diff --staged` or `git status`, and do not read untracked files the diff does not name;
 - read only the plan's `### Task <N>` section and its `## Deviations`, not the whole plan;
@@ -31,14 +31,14 @@ Bash is for read-only git and inspection commands only (`git diff`, `git status`
 Extract each concrete requirement from the plan (tasks, acceptance criteria, endpoints, fields, error cases, migrations, tests it calls for). Skip items the plan marks as out of scope, deferred, optional, or for a later phase. If your prompt names a phase or tasks, review only those. For each remaining requirement, decide from the diff and the surrounding code:
 
 - **Missing:** the plan requires it and the diff does not implement it.
-- **Wrong:** it is implemented, but the behaviour contradicts the plan or is incorrect (logic error, wrong status code or error type, unhandled case the plan names, entity change without the migration the plan expects, a web service calling a literal API URL instead of `API_ROUTES`).
+- **Wrong:** it is implemented, but the behaviour contradicts the plan or is incorrect (logic error, wrong status code or error type, unhandled case the plan names, entity change without the migration the plan expects, a call to a literal URL where the app has route constants).
 - **Incomplete:** partly done — e.g. a service method with no route, a route with no validation schema, a requirement with no test when the plan asks for one.
 
 Some requirements can only be checked by running something: tests pass, a migration applies, an e2e flow succeeds. You may not run anything, so list these under **Not verified** rather than calling them met or missing. If the plan asks for a test, still check that the test exists and asserts what the plan describes.
 
 Review against the plan as amended by its `## Deviations` entries, if it has any. Whether or not it has that section, a change that `.claude/rules/workflow.md` rule 6 says needs approval is **Wrong** unless a Deviations entry marked `approved` covers it; say "unapproved deviation" in the Gap cell. Rule 6 also lists the files that are not deviations.
 
-Read the code around each hunk before calling a gap; a requirement may be satisfied by existing code outside the diff. Use the rules of each app the change touches (`apps/<app>/.claude/rules/coding.md` and `testing.md`; see "Changed apps" in `.claude/rules/workflow.md` rule 0) for repo conventions only where breaking one makes the change incorrect (e.g. in the API, a relative import without `.js` fails at runtime under ESM; in web, a literal API URL bypasses `API_ROUTES` and `API_BASE_URL`).
+Read the code around each hunk before calling a gap; a requirement may be satisfied by existing code outside the diff. Use the rules of each app the change touches (`apps/<app>/.claude/rules/coding.md` and `testing.md`; see "Changed apps" in `.claude/rules/workflow.md` rule 0) for repo conventions only where breaking one makes the change incorrect (e.g. a relative import without `.js` that fails at runtime under ESM, or a literal URL that bypasses the app's route constants).
 
 ## What not to report
 

@@ -1,36 +1,29 @@
 #!/usr/bin/env node
 // Which apps a change touches, for the workflow's per-app rules, verify and coverage.
 //
-//   node .claude/scripts/changed-apps.mjs <base ref>
+//   node <repo root>/.claude/scripts/changed-apps.mjs <base ref>
 //     Classify `git diff --name-only --no-renames $(git merge-base <base ref> HEAD)`
-//     plus the untracked files. A branch name such as origin/develop works: commits
-//     the base gained after the merge-base are not counted.
+//     plus the untracked files. A branch name such as origin/<base branch> works:
+//     commits the base gained after the merge-base are not counted.
 //
-//   node .claude/scripts/changed-apps.mjs --files <path ...>
+//   node <repo root>/.claude/scripts/changed-apps.mjs --files <path ...>
 //     Classify the given repo-relative paths.
 //
 // Prints one JSON line: {"apps":[...],"rebuild":true|false,"noApp":true|false}.
-// The apps and shared paths come from .claude/apps.json. An app counts when a
-// code or app-config file under its dir changed: anything except <dir>/.claude/**
-// and *.md. A shared path (a package every app uses, or a file such as the pnpm
-// catalog) counts as every app and sets `rebuild`: the packages' dist is rebuilt
-// first, all at once, so pnpm orders the builds by dependency. Anything else
-// counts as no app.
+// The apps and shared paths come from .claude/workflow.json. An app counts when
+// a code or app-config file under its dir changed: anything except
+// <dir>/.claude/** and *.md. A shared path (a package every app uses, or a file
+// such as the workspace catalog) counts as every app and sets `rebuild`: the
+// packages' dist is rebuilt first, all at once, in dependency order. Anything
+// else counts as no app.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-export function loadManifest(
-  path = join(import.meta.dirname, '..', 'apps.json'),
-) {
-  return JSON.parse(readFileSync(path, 'utf8'));
-}
+import { isEntry, loadConfig } from './config.mjs';
 
 const under = (path, dir) => path.startsWith(`${dir}/`);
 const matches = (path, shared) => path === shared || under(path, shared);
 
-export function classify(paths, manifest = loadManifest()) {
+export function classify(paths, manifest = loadConfig()) {
   const names = Object.keys(manifest.apps);
   const apps = new Set();
   let rebuild = false;
@@ -78,8 +71,7 @@ export function changedPaths(base, cwd) {
   ];
 }
 
-const entry = process.argv[1] && realpathSync(process.argv[1]);
-if (entry === fileURLToPath(import.meta.url)) {
+if (isEntry(import.meta.url)) {
   const args = process.argv.slice(2);
   let paths;
   if (args[0] === '--files') {
@@ -95,5 +87,10 @@ if (entry === fileURLToPath(import.meta.url)) {
     console.error('Usage: changed-apps.mjs <base ref> | --files <path ...>');
     process.exit(2);
   }
-  console.log(JSON.stringify(classify(paths)));
+  try {
+    console.log(JSON.stringify(classify(paths)));
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 }

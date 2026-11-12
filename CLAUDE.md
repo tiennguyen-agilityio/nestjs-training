@@ -22,3 +22,11 @@ pnpm + Turborepo monorepo: `apps/api` (NestJS, ESM), `apps/web` (Next.js), share
 - Fix a failing hook instead of passing `--no-verify`. Pre-push runs `turbo run build test --affected` against `origin/develop` (`TURBO_SCM_BASE=<ref> git push` overrides it).
 - `pull-request-checks` is the only required status check: keep every PR job in its `needs`, and never add a path filter to `pull_request`.
 - PR previews run on the develop database, and CI never runs migrations.
+
+<!-- turbo-workflow -->
+## Ticket workflow (turbo-workflow)
+
+- Config: `.claude/workflow.json` (edit with `/turbo-workflow:init`). Per-app rules: `apps/<app>/.claude/rules/`, per-app gates: `apps/<app>/.claude/skills/verify/`.
+- One ticket end to end: `/work-ticket <ticket | "task" | spec dir>`; where it stopped: `/ticket-status`.
+- The workflow is copied into `.claude/` (see `.claude/turbo-workflow.lock`): update it with `/turbo-workflow-sync`. `/turbo-workflow:init` needs the plugin enabled for this project first: `claude plugin enable turbo-workflow@claude-turbo-workflow --scope local`.
+<!-- /turbo-workflow -->

@@ -1,0 +1,29 @@
+{
+  "source": "https://github.com/Tiennd0502/claude-turbo-workflow",
+  "version": "0.2.0",
+  "mode": "copy",
+  "tracker": "trello",
+  "files": {
+    ".claude/agents/plan-reviewer.md": "08704917662e539936c16a6497416b54740d69adf5beb1fc17a1e5e833f01081",
+    ".claude/agents/pr-writer.md": "0668a48e790506b5928fe9b673e10cd98f6c2ad08ed063590b83a00b7bd8a634",
+    ".claude/agents/trello-manager.md": "be32c0185be5e88db99d159f30e8d63f515bada266f91f53d9eb829260c63d83",
+    ".claude/agents/uat-tester.md": "6958a71c7c6b31e50a9274c06353e7ab314edf007f83ca54dd1f2a0293690875",
+    ".claude/agents/ui-screenshotter.md": "93cad35af0874eddce6f4c5d263e56c13aaa3f690927b79825b27e08412c860c",
+    ".claude/hooks/block-forbidden-command.mjs": "8e8102b02e57e6085081e8622badcad24df9a5db164b5cf66befc354e09c4bf7",
+    ".claude/hooks/notify-on-finish.mjs": "b290056ca58dc5e4bca0f39e0c9828b07055f1812e81d173c8852ee5efe69a78",
+    ".claude/rules/workflow.md": "8f0a20f362b8a69f643b0a428f363bdbaf6040422d766566dc84110f944b6645",
+    ".claude/scripts/changed-apps.mjs": "fc902d94440614cf1feed216f7caaf91a962867f87cdea662330736ad39bb282",
+    ".claude/scripts/config.mjs": "7ec675a02a31fc6ba869e0f1d7ae6f4b1f20bd66573ef00d6a530399ac4751bc",
+    ".claude/scripts/coverage-diff.mjs": "d0a4787170d9fb6411132263c350506c75b92f130a71174d6c79ead5bc2f3b8d",
+    ".claude/scripts/ticket-state.mjs": "5760fc95cb4bf9baa0b610b8fcbbe48e7d4a10b42bb9b4adf1db0c7c085b093c",
+    ".claude/skills/pr-description/SKILL.md": "92b6cf2a73bb49fd47be8023a8cc5efd7f907e33c21e27eaab710e9354ad432b",
+    ".claude/skills/ticket-status/SKILL.md": "6c67329989b7c2d60d0f6a17c5689db19cd87670102933b0cf48607517a154f2",
+    ".claude/skills/turbo-workflow-sync/SKILL.md": "40edf1f00c8e0f6559a9b3b80015cc406b17b4705fa4a2b235959e525f39665e",
+    ".claude/skills/uat/SKILL.md": "cd6e5c17a6e7d4bd2a5dfd1fb37508f49f1aa59a0b7a60899d5558ec666a0c52",
+    ".claude/skills/ui-screenshot/SKILL.md": "362009730b4912f2c94fef1f22d48140ba43af3b615b97ffcbdd515fbc50f478",
+    ".claude/skills/work-ticket/SKILL.md": "475fc2edd4b9106cb1ab3045b95a5c735b4a7ad65fd3187efb4a7a5671a84de2",
+    ".claude/templates/pr-description.md": "863b922f32b652f8d26768b852ca079f13c21dd5dcd7d0d978a981f4bb01677c",
+    ".claude/templates/test-report.md": "a37ec4a5a9f629387f7c168120f4a6c288b437c6ef5d3c11f792c59f36ebd0ae",
+    ".claude/trackers/trello/adapter.md": "00316cd9963c03ade4c897da61d061588dde26d247bd0531d4971bf96f9fb5e2"
+  }
+}

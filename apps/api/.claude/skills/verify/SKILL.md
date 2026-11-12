@@ -20,7 +20,7 @@ Run from `apps/api/`.
    pnpm run test
    ```
 
-   Inside the `/work-ticket` workflow, replace `pnpm run test` with the app's `coverage` command in `../../.claude/apps.json` and write the test report afterwards (`../../.claude/rules/workflow.md` §7).
+   Inside the `/work-ticket` workflow, replace `pnpm run test` with the app's `coverage` command in `../../.claude/workflow.json` (`node ../../.claude/scripts/config.mjs get apps.api.coverage`) and write the test report afterwards (`../../.claude/rules/workflow.md` §7).
 
 2. **E2E.** Run it when the change touches controllers, DTO schemas, guards, middleware, filters, interceptors, repositories, entities, migrations or `test/`.
    - First print the database `pretest:e2e` will truncate. This follows the same load order as `test/reset-test-db.ts`, shell variables included:

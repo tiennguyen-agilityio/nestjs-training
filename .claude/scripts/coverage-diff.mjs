@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 // Coverage baseline + diff for the test report.
 //
-//   node .claude/scripts/coverage-diff.mjs snapshot <out.json>
+//   node <repo root>/.claude/scripts/coverage-diff.mjs snapshot <out.json>
 //     Save coverage/coverage-summary.json with repo-relative paths.
 //
-//   node .claude/scripts/coverage-diff.mjs diff <baseline.json> [file ...]
+//   node <repo root>/.claude/scripts/coverage-diff.mjs diff <baseline.json> [file ...]
 //     Print the report's Coverage table: rows for the given files (default: every
 //     file whose numbers changed or that is new), then the drop warnings.
 //
-// Run from the app directory (apps/api/ or apps/web/, as ../../.claude/scripts/coverage-diff.mjs)
-// after `pnpm run test:cov` with a json-summary reporter:
-//   Vitest (api): --coverage.reporter=json-summary
-//   Jest (web):   --coverageReporters=json-summary
+// Run from the app directory, after the app's `coverage` command in
+// .claude/workflow.json, which writes coverage/coverage-summary.json with a
+// json-summary reporter (Vitest: --coverage.reporter=json-summary,
+// Jest: --coverageReporters=json-summary).
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
@@ -21,7 +21,7 @@ const SUMMARY = resolve('coverage/coverage-summary.json');
 function load(path) {
   if (!existsSync(path)) {
     console.error(
-      `Not found: ${path}. Run from the app directory, after pnpm run test:cov with a json-summary reporter ` +
+      `Not found: ${path}. Run from the app directory, after the app's \`coverage\` command in .claude/workflow.json ` +
         '(Vitest: --coverage.reporter=json-summary, Jest: --coverageReporters=json-summary).',
     );
     process.exit(1);
