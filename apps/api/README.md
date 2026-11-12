@@ -356,6 +356,10 @@ pnpm run seeder:create      # scaffold a seeder in src/seeders
 pnpm run seeder:run         # run seeders
 ```
 
+The transactional outbox (`@nestjs/outbox`) keeps its tables in the `nest_outbox` schema, created by a
+migration like any other table. The store checks that schema at startup: until `migration:up` has run
+on a database (local, `.env.test`'s e2e database, develop), the API does not start.
+
 ## Testing
 
 ```bash
@@ -379,6 +383,8 @@ The API is deployed by GitHub Actions: `.github/workflows/ci.yml` calls the reus
 - A web-only PR gets no API preview; its web preview uses the develop API.
 - Previews use the develop database, and CI never runs migrations. The PR comment warns when
   `src/migrations/` changes.
+- A PR that adds a migration the API needs at startup (such as the outbox schema) must have that
+  migration applied to the develop database before it is pushed, or its preview never starts.
 - `.github/workflows/preview-cleanup.yml` deletes a PR's API preview when the PR closes.
 - `:develop` only ever holds merged code. No production deploy is configured.
 - Render Health Check Path: `/health/ready`, set in the Render dashboard (not from this repo).

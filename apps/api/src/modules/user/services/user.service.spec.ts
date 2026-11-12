@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service.js';
 import { User } from '../entities/user.entity.js';
@@ -20,6 +21,8 @@ describe('UserService', () => {
     findByClerkId: Mock;
     findAll: Mock;
     create: Mock;
+    createWithRoleSync: Mock;
+    findRoleByClerkId: Mock;
     save: Mock;
     softDelete: Mock;
   };
@@ -48,6 +51,8 @@ describe('UserService', () => {
       findByClerkId: vi.fn(),
       findAll: vi.fn(),
       create: vi.fn(),
+      createWithRoleSync: vi.fn(),
+      findRoleByClerkId: vi.fn(),
       save: vi.fn(),
       softDelete: vi.fn(),
     };
@@ -138,6 +143,105 @@ describe('UserService', () => {
       await service.create(dtoWithRole);
 
       expect(userRepository.create).toHaveBeenCalledWith(dtoWithRole);
+    });
+  });
+
+  describe('createFromAuthProvider', () => {
+    const dto = {
+      clerkId: 'clerk-1',
+      email: 'jane@example.com',
+      firstName: 'Jane',
+      lastName: 'Doe',
+    };
+
+    it('creates the user through createWithRoleSync', async () => {
+      userRepository.findByEmail.mockResolvedValue(null);
+      userRepository.findByClerkId.mockResolvedValue(null);
+      const created = buildUser();
+      userRepository.createWithRoleSync.mockResolvedValue(created);
+
+      const result = await service.createFromAuthProvider(dto);
+
+      expect(userRepository.createWithRoleSync).toHaveBeenCalledWith(dto);
+      expect(userRepository.create).not.toHaveBeenCalled();
+      expect(result).toBe(created);
+    });
+
+    it('throws DuplicateResourceException on duplicate email or clerkId, checking soft-deleted rows too', async () => {
+      userRepository.findByEmail.mockResolvedValueOnce(buildUser());
+      await expect(service.createFromAuthProvider(dto)).rejects.toBeInstanceOf(
+        DuplicateResourceException,
+      );
+      expect(userRepository.findByEmail).toHaveBeenCalledWith(
+        'jane@example.com',
+        { includeDeleted: true },
+      );
+
+      userRepository.findByEmail.mockResolvedValueOnce(null);
+      userRepository.findByClerkId.mockResolvedValueOnce(buildUser());
+      await expect(service.createFromAuthProvider(dto)).rejects.toBeInstanceOf(
+        DuplicateResourceException,
+      );
+      expect(userRepository.findByClerkId).toHaveBeenCalledWith('clerk-1', {
+        includeDeleted: true,
+      });
+
+      expect(userRepository.createWithRoleSync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('syncRoleToAuthProvider', () => {
+    it("pushes the user's current role to the auth provider", async () => {
+      userRepository.findRoleByClerkId.mockResolvedValue(UserRole.ADMIN);
+
+      await service.syncRoleToAuthProvider('clerk-1');
+
+      expect(userRepository.findRoleByClerkId).toHaveBeenCalledWith('clerk-1');
+      expect(authProvider.syncUserRole).toHaveBeenCalledWith(
+        'clerk-1',
+        UserRole.ADMIN,
+      );
+    });
+
+    it('skips a user that no longer exists, without calling the auth provider', async () => {
+      vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      userRepository.findRoleByClerkId.mockResolvedValue(null);
+
+      await expect(
+        service.syncRoleToAuthProvider('clerk-1'),
+      ).resolves.toBeUndefined();
+
+      expect(authProvider.syncUserRole).not.toHaveBeenCalled();
+    });
+
+    it('lets an auth provider error propagate, so the relay retries', async () => {
+      userRepository.findRoleByClerkId.mockResolvedValue(UserRole.USER);
+      authProvider.syncUserRole.mockRejectedValue(new Error('clerk down'));
+
+      await expect(service.syncRoleToAuthProvider('clerk-1')).rejects.toThrow(
+        'clerk down',
+      );
+    });
+
+    it('a second delivery of the same message pushes the same current role again', async () => {
+      userRepository.findRoleByClerkId.mockResolvedValue(UserRole.USER);
+
+      await service.syncRoleToAuthProvider('clerk-1');
+      await service.syncRoleToAuthProvider('clerk-1');
+
+      expect(authProvider.syncUserRole).toHaveBeenCalledTimes(2);
+      expect(authProvider.syncUserRole).toHaveBeenNthCalledWith(
+        1,
+        'clerk-1',
+        UserRole.USER,
+      );
+      expect(authProvider.syncUserRole).toHaveBeenNthCalledWith(
+        2,
+        'clerk-1',
+        UserRole.USER,
+      );
+      expect(authProvider.syncUserStatus).not.toHaveBeenCalled();
+      expect(userRepository.save).not.toHaveBeenCalled();
     });
   });
 

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { User } from '../entities/user.entity.js';
 import type {
   CreateUserInput,
@@ -26,12 +26,42 @@ import { assignDefinedFields } from '../../../common/utils/object.util.js';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     private readonly userRepository: UserRepository,
     private readonly authProvider: AuthProvider,
   ) {}
 
   async create(dto: CreateUserInput): Promise<User> {
+    await this.assertNotDuplicate(dto);
+    return this.userRepository.create(dto);
+  }
+
+  // A user from the auth provider's `user.created`: its role is synced back
+  // through the outbox, committed with the user row.
+  async createFromAuthProvider(dto: CreateUserInput): Promise<User> {
+    await this.assertNotDuplicate(dto);
+    return this.userRepository.createWithRoleSync(dto);
+  }
+
+  /**
+   * The outbox's `user.role-sync`: pushes the role the user has now. An error
+   * from the auth provider propagates, so the relay retries the message.
+   */
+  async syncRoleToAuthProvider(clerkId: string): Promise<void> {
+    const role = await this.userRepository.findRoleByClerkId(clerkId);
+    if (!role) {
+      this.logger.warn(
+        `Role sync for ${clerkId} skipped: no such user (deleted since it was created)`,
+      );
+      return;
+    }
+
+    await this.authProvider.syncUserRole(clerkId, role);
+  }
+
+  private async assertNotDuplicate(dto: CreateUserInput): Promise<void> {
     const existingByEmail = await this.userRepository.findByEmail(dto.email, {
       includeDeleted: true,
     });
@@ -56,8 +86,6 @@ export class UserService {
         description: ERROR_DESCRIPTIONS.USER.CLERK_ID_EXISTS,
       });
     }
-
-    return this.userRepository.create(dto);
   }
 
   async findAll(

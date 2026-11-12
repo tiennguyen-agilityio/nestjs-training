@@ -18,6 +18,7 @@ describe('ClerkWebhookService', () => {
   let authProvider: { verifyWebhook: Mock; syncUserRole: Mock };
   let userService: {
     create: Mock;
+    createFromAuthProvider: Mock;
     findByClerkId: Mock;
     update: Mock;
     remove: Mock;
@@ -54,6 +55,7 @@ describe('ClerkWebhookService', () => {
     authProvider = { verifyWebhook: vi.fn(), syncUserRole: vi.fn() };
     userService = {
       create: vi.fn(),
+      createFromAuthProvider: vi.fn(),
       findByClerkId: vi.fn(),
       update: vi.fn(),
       remove: vi.fn(),
@@ -109,14 +111,12 @@ describe('ClerkWebhookService', () => {
         data: createdEventData,
       } as never;
 
-      it('creates the user and best-effort pushes the role back to Clerk', async () => {
-        const created = buildUser();
-        userService.create.mockResolvedValue(created);
-        authProvider.syncUserRole.mockResolvedValue(undefined);
+      it('creates the user through createFromAuthProvider and never calls Clerk itself', async () => {
+        userService.createFromAuthProvider.mockResolvedValue(buildUser());
 
         await service.handleEvent(createdEvent);
 
-        expect(userService.create).toHaveBeenCalledWith({
+        expect(userService.createFromAuthProvider).toHaveBeenCalledWith({
           clerkId: 'clerk-1',
           email: 'jane@example.com',
           firstName: 'Jane',
@@ -125,10 +125,8 @@ describe('ClerkWebhookService', () => {
           avatarUrl: 'https://example.com/avatar.png',
           role: undefined,
         });
-        expect(authProvider.syncUserRole).toHaveBeenCalledWith(
-          'clerk-1',
-          created.role,
-        );
+        expect(userService.create).not.toHaveBeenCalled();
+        expect(authProvider.syncUserRole).not.toHaveBeenCalled();
       });
 
       it('does not call UserService.create when there is no primary email', async () => {
@@ -142,11 +140,12 @@ describe('ClerkWebhookService', () => {
 
         await service.handleEvent(eventWithoutPrimaryEmail);
 
+        expect(userService.createFromAuthProvider).not.toHaveBeenCalled();
         expect(userService.create).not.toHaveBeenCalled();
       });
 
       it('swallows a DuplicateResourceException from a redelivered webhook', async () => {
-        userService.create.mockRejectedValue(
+        userService.createFromAuthProvider.mockRejectedValue(
           new DuplicateResourceException({
             errCode: ERROR_CODES.USER.EMAIL_EXISTS,
             field: 'email',
@@ -162,21 +161,9 @@ describe('ClerkWebhookService', () => {
       });
 
       it('lets a non-DuplicateResourceException error from create propagate', async () => {
-        userService.create.mockRejectedValue(new Error('boom'));
+        userService.createFromAuthProvider.mockRejectedValue(new Error('boom'));
 
         await expect(service.handleEvent(createdEvent)).rejects.toThrow('boom');
-      });
-
-      it('does not throw when the best-effort Clerk role push fails', async () => {
-        const created = buildUser();
-        userService.create.mockResolvedValue(created);
-        authProvider.syncUserRole.mockRejectedValue(
-          new Error('clerk api down'),
-        );
-
-        await expect(
-          service.handleEvent(createdEvent),
-        ).resolves.toBeUndefined();
       });
     });
 

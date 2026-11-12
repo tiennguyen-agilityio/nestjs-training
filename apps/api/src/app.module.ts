@@ -20,6 +20,7 @@ import { WebhookModule } from './modules/webhook/webhook.module.js';
 import { CategoryModule } from './modules/category/category.module.js';
 import { ProductModule } from './modules/product/product.module.js';
 import { IdempotencyStoreModule } from './modules/idempotency/idempotency.module.js';
+import { OutboxStoreModule } from './modules/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor.js';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter.js';
@@ -41,6 +42,7 @@ import { HEALTH_ROUTES } from './common/constants/env.constant.js';
     }),
     MikroOrmModule.forRoot(mikroOrmConfig),
     IdempotencyStoreModule,
+    OutboxStoreModule.forRoot(),
     AuthProviderModule,
     UserModule,
     WebhookModule,

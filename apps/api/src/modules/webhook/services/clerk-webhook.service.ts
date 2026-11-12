@@ -81,7 +81,7 @@ export class ClerkWebhookService {
     const publicMetadata = data.public_metadata as { role?: UserRole };
 
     try {
-      const created = await this.userService.create({
+      await this.userService.createFromAuthProvider({
         clerkId: data.id,
         email: primaryEmail.email_address,
         firstName: data.first_name ?? '',
@@ -92,15 +92,6 @@ export class ClerkWebhookService {
         avatarUrl: data.image_url,
         role: publicMetadata.role,
       });
-
-      try {
-        await this.authProvider.syncUserRole(data.id, created.role);
-      } catch (err) {
-        this.logger.error(
-          `Failed to sync role back to Clerk for ${data.id}`,
-          err instanceof Error ? err.stack : undefined,
-        );
-      }
     } catch (err) {
       if (err instanceof DuplicateResourceException) {
         this.logger.warn(
