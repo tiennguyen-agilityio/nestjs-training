@@ -91,6 +91,7 @@ PostgreSQL via MikroORM.
 (`src/configs/env.validation.ts`) and does not boot if one is missing or empty.
 
 - `APP_KEY` and `APP_SECRET` are optional: delete their lines instead of leaving them empty.
+- `CLERK_SYNC_TIMEOUT_MS` and `GRACEFUL_SHUTDOWN_TIMEOUT_MS` are optional: empty means the default.
 - `.env`: `NODE_ENV=development`, `PORT=3000`, `CORS_ORIGIN=http://localhost:3001`,
   `DB_HOST=localhost`, `DB_PORT=5432`.
 - `.env.docker`: the same values as `.env`, except `DB_HOST=postgres` and `DB_PORT=5432`.
@@ -111,6 +112,7 @@ PostgreSQL via MikroORM.
 | `CLERK_PUBLISHABLE_KEY` | Clerk publishable key                                                                |
 | `CLERK_WEBHOOK_SECRET`  | Clerk webhook signing secret                                                         |
 | `CLERK_SYNC_TIMEOUT_MS` | Clerk API timeout, in milliseconds (default `5000`)                                  |
+| `GRACEFUL_SHUTDOWN_TIMEOUT_MS` | Wait after `SIGTERM` before shutting down, in milliseconds; health probes answer 503 meanwhile (default `5000`, `0` disables) |
 | `APP_KEY`               | Nest Observe app key                                                                 |
 | `APP_SECRET`            | Nest Observe app secret                                                              |
 
@@ -324,6 +326,18 @@ erDiagram
 | `PATCH`  | `/products/:id` | 👑   | Update product (add/update/remove images)                                                                |
 | `DELETE` | `/products/:id` | 👑   | Archive + soft-delete product                                                                            |
 
+### Health
+
+Not under `/api/v1`: the probes sit at the root and are not versioned, so their path does not
+change when the API gains or drops a version. Public probes for the orchestrator: no auth, never
+rate-limited, and skipped by the Clerk and user-resolution middlewares (GET and HEAD). During the
+`GRACEFUL_SHUTDOWN_TIMEOUT_MS` wait after `SIGTERM`, both answer 503 `shuttingDown`.
+
+| Method | Path            | Auth | Description                                                                            |
+| :----- | :-------------- | :--- | :------------------------------------------------------------------------------------- |
+| `GET`  | `/health/live`  | 🔓   | Liveness: the process answers; checks no dependency                                    |
+| `GET`  | `/health/ready` | 🔓   | Readiness: the database answers `select 1` within 1 s (result cached 2 s); 503 `serviceUnavailable` otherwise |
+
 ### Webhooks
 
 Not under `/api/v1` and excluded from Swagger.
@@ -367,3 +381,8 @@ The API is deployed by GitHub Actions: `.github/workflows/ci.yml` calls the reus
   `src/migrations/` changes.
 - `.github/workflows/preview-cleanup.yml` deletes a PR's API preview when the PR closes.
 - `:develop` only ever holds merged code. No production deploy is configured.
+- Render Health Check Path: `/health/ready`, set in the Render dashboard (not from this repo).
+  Set it only after the health endpoints are deployed: merge into `develop`, check that
+  `https://nestjs-training-develop.onrender.com/health/ready` answers 200, then set the path. A PR
+  preview copies the develop service's settings, so a path set earlier fails the health check of
+  any deploy without the endpoints.

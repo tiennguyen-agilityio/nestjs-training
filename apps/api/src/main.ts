@@ -9,6 +9,7 @@ import {
   DEFAULT_API_VERSION,
   API_PREFIX,
   ROUTE_CONFLICT_POLICY,
+  HEALTH_ROUTES,
 } from './common/constants/env.constant.js';
 import { corsConfig } from './configs/cors.config.js';
 import { setupSwagger } from './configs/swagger.config.js';
@@ -28,7 +29,10 @@ async function bootstrap() {
   app.use(helmet());
   app.enableCors(corsConfig(configService));
   app.setGlobalPrefix(API_PREFIX, {
-    exclude: [{ path: 'webhooks/clerk', method: RequestMethod.POST }],
+    exclude: [
+      { path: 'webhooks/clerk', method: RequestMethod.POST },
+      ...HEALTH_ROUTES,
+    ],
   });
   app.enableVersioning({
     type: VersioningType.URI,

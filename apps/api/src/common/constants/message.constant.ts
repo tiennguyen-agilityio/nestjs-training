@@ -25,6 +25,10 @@ export const ERROR_MESSAGES = {
     TIMEOUT: 'Auth provider did not respond in time',
     UNAVAILABLE: 'Auth provider is temporarily unavailable',
   },
+  HEALTH: {
+    SERVICE_UNAVAILABLE: 'A required dependency is unavailable',
+    SHUTTING_DOWN: 'The service is shutting down',
+  },
   AUTH: {
     UNAUTHENTICATED: 'Authentication required',
     INACTIVE_ACCOUNT: 'Account is inactive',
@@ -81,6 +85,12 @@ export const ERROR_DESCRIPTIONS = {
       'Clerk did not answer in time. The change may still apply; check the user before retrying.',
     UNAVAILABLE:
       'Clerk keeps failing, so calls to it are paused. Retry after the time given in the Retry-After header.',
+  },
+  HEALTH: {
+    SERVICE_UNAVAILABLE:
+      'A health check failed, so this instance should not receive traffic. Retry later.',
+    SHUTTING_DOWN:
+      'This instance received a termination signal and is draining. Send traffic to another instance.',
   },
   CATEGORY: {
     NAME_EXISTS: 'A category with this name already exists.',

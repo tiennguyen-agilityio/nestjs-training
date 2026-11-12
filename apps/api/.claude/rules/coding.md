@@ -15,6 +15,7 @@ The layering and conventions the code actually follows. Plans, code reviews and 
 - They compose the ORM-agnostic protected helpers: `findOneBy`, `findMany`, `paginate`, `countOf`, `createAndSave`.
 - Services **never** touch `EntityManager`.
 - Exception: `src/modules/idempotency/stores/postgres-idempotency.store.ts` runs its own SQL through MikroORM's connection, outside `BaseRepository`: the `@nestjs/idempotency` store contract needs single-statement conditional writes the helpers cannot express.
+- Exception: `src/modules/health/indicators/database-health.indicator.ts` runs `select 1` through MikroORM's connection: Terminus's `MikroOrmHealthIndicator` reports down until the lazy MikroORM 7 connection is opened by another query.
 
 **Soft delete is a MikroORM filter.**
 
