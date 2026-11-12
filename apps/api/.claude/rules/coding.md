@@ -12,10 +12,11 @@ The layering and conventions the code actually follows. Plans, code reviews and 
 **`src/common/repositories/base.repository.ts` is the only MikroORM-aware layer.**
 
 - Module repositories declare `protected readonly entity = X`.
-- They compose the ORM-agnostic protected helpers: `findOneBy`, `findMany`, `paginate`, `countOf`, `createAndSave`.
+- They compose the ORM-agnostic protected helpers: `findOneBy`, `findMany`, `paginate`, `countOf`, `createAndSave`, plus `inTransaction` (hands the open transaction to a store such as `Outbox.add()`) and `inOwnContext` (a persistence context for code outside an HTTP request, such as an outbox handler).
 - Services **never** touch `EntityManager`.
 - Exception: `src/modules/idempotency/stores/postgres-idempotency.store.ts` runs its own SQL through MikroORM's connection, outside `BaseRepository`: the `@nestjs/idempotency` store contract needs single-statement conditional writes the helpers cannot express.
 - Exception: `src/modules/health/indicators/database-health.indicator.ts` runs `select 1` through MikroORM's connection: Terminus's `MikroOrmHealthIndicator` reports down until the lazy MikroORM 7 connection is opened by another query.
+- Exception: `src/modules/outbox/outbox.module.ts` builds the `@nestjs/outbox` PostgreSQL store's executor from MikroORM's Kysely (`fromKysely(em.getKysely())`); it runs no queries of its own, and the open transaction reaches `Outbox.add()` only through `BaseRepository`.
 
 **Soft delete is a MikroORM filter.**
 
@@ -79,6 +80,8 @@ Controllers reuse the same constants in their `@ApiErrorResponse` docs — so **
 - `entities/`
 - `dto/`
 - `enums/` _(optional)_
+- `handlers/` _(optional)_ — `@OnOutboxMessage` handlers (`user/handlers/user-role-sync.handler.ts`)
+- `jobs/` _(optional)_ — `@nestjs/schedule` jobs (`idempotency/jobs/`, `outbox/jobs/`)
 - `<feature>.module.ts` — wires `MikroOrmModule.forFeature([Entity])` + repository + service + controller
 
 Notes:

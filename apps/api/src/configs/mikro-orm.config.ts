@@ -32,6 +32,10 @@ export default defineConfig({
     // snapshot and makes `migration:create` diff against a different baseline
     // depending on which .env is loaded. Keep one snapshot for all databases.
     snapshotName: '.snapshot-coffee_shop',
+    // `migration:up` would otherwise rewrite the snapshot from the live database, pulling in
+    // tables no entity maps (the outbox store's `nest_outbox` schema), which the next
+    // `migration:create` would then drop. Only `migration:create` writes it, from the entities.
+    snapshotOnMigrate: false,
   },
 
   seeder: {

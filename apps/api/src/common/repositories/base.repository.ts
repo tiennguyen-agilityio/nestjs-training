@@ -4,6 +4,7 @@ import type {
   EntityRepository,
   FilterQuery,
 } from '@mikro-orm/core';
+import { RequestContext } from '@mikro-orm/core';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { BaseEntity } from '../entities/base.entity.js';
 import {
@@ -14,6 +15,13 @@ import {
 import { PaginatedResult } from '../dto/pagination.dto.js';
 import { QueryParams } from '../dto/query-params.dto.js';
 import { escapeLikePattern } from '../utils/like-pattern.util.js';
+
+/**
+ * The open transaction, as the persistence library's own handle (Kysely's
+ * `Transaction` under MikroORM). Opaque to everyone but the code that hands it
+ * to a store written for that library, such as `Outbox.add()`.
+ */
+export type TransactionHandle = unknown;
 
 /**
  * The only place that knows the persistence library. Module repositories
@@ -39,6 +47,25 @@ export abstract class BaseRepository<T extends BaseEntity> {
 
   transactional<R>(callback: () => Promise<R>): Promise<R> {
     return this.em.transactional(() => callback());
+  }
+
+  /**
+   * Runs `work` in one transaction and hands it the transaction's handle, for
+   * writes that must commit or roll back with this repository's (an outbox
+   * message). Entity writes inside `work` join the same transaction.
+   */
+  protected inTransaction<R>(
+    work: (tx: TransactionHandle) => Promise<R>,
+  ): Promise<R> {
+    return this.em.transactional((em) => work(em.getKysely()));
+  }
+
+  /**
+   * Runs `work` in a persistence context of its own, for code that runs
+   * outside an HTTP request (an outbox handler), where none exists.
+   */
+  protected inOwnContext<R>(work: () => Promise<R>): Promise<R> {
+    return RequestContext.create(this.em, work);
   }
 
   async softDelete(entity: T): Promise<void> {
