@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Min,
   validateSync,
 } from 'class-validator';
 
@@ -12,6 +13,12 @@ const NODE_ENVIRONMENTS = ['development', 'production', 'test'] as const;
 
 const toNumber = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? Number(value) : value;
+
+// Like toNumber, but an empty or blank value stays unset instead of becoming 0.
+const toOptionalNumber = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' && value.trim() === ''
+    ? undefined
+    : toNumber({ value });
 
 export class EnvironmentVariables {
   @IsIn(NODE_ENVIRONMENTS)
@@ -70,6 +77,13 @@ export class EnvironmentVariables {
   @Transform(toNumber)
   @IsInt()
   CLERK_SYNC_TIMEOUT_MS?: number;
+
+  // Unset or empty: terminusConfig falls back to DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS; 0 disables the wait.
+  @IsOptional()
+  @Transform(toOptionalNumber)
+  @IsInt()
+  @Min(0)
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS?: number;
 
   @IsOptional()
   @IsString()

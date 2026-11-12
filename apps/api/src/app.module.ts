@@ -20,12 +20,14 @@ import { WebhookModule } from './modules/webhook/webhook.module.js';
 import { CategoryModule } from './modules/category/category.module.js';
 import { ProductModule } from './modules/product/product.module.js';
 import { IdempotencyStoreModule } from './modules/idempotency/idempotency.module.js';
+import { HealthModule } from './modules/health/health.module.js';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor.js';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter.js';
 import { createStandardSchemaValidationPipe } from './configs/validation-pipe.config.js';
 import { ClerkAuthMiddleware } from './common/middlewares/clerk-auth.middleware.js';
 import { UserResolutionMiddleware } from './common/middlewares/user-resolution.middleware.js';
 import { AuthProviderModule } from './common/providers/auth-provider.module.js';
+import { HEALTH_ROUTES } from './common/constants/env.constant.js';
 
 @Module({
   imports: [
@@ -44,6 +46,7 @@ import { AuthProviderModule } from './common/providers/auth-provider.module.js';
     WebhookModule,
     CategoryModule,
     ProductModule,
+    HealthModule,
     ...(process.env.NODE_ENV !== 'production'
       ? [
           ObserveModule.forRootAsync({
@@ -76,7 +79,11 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply(ClerkAuthMiddleware, UserResolutionMiddleware)
-      .exclude({ path: 'webhooks/clerk', method: RequestMethod.POST })
+      // Health probes are public and must answer even when Clerk or the users table cannot.
+      .exclude(
+        { path: 'webhooks/clerk', method: RequestMethod.POST },
+        ...HEALTH_ROUTES,
+      )
       .forRoutes('*');
   }
 }
