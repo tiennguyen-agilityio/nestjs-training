@@ -5,7 +5,7 @@ description: Take before/after screenshots of a web app page or state under the 
 
 # UI screenshots, before and after
 
-Before and after must differ only by the change, so every shot uses the same fixed conditions. The project's values (URL, config, conditions) are in **This project** at the end.
+Before and after must differ only by the change, so every shot uses the same fixed conditions. The project's values (URL, dev command, conditions) come from `.claude/workflow.json`, as **From the project config** at the end says.
 
 - **File:** `<dir>/<screen>-<before|after>.<ext>`, in the project's screenshot folder and format.
 - **Screen name:** kebab-case `<area>-<page>[-<state>]`, one per page or state the change alters.
@@ -31,12 +31,12 @@ Before and after must differ only by the change, so every shot uses the same fix
 - A before taken after the UI edit already shows the change: `git stash -u`, take it, then `git stash pop` (stop on a conflict). Pop before any stop: never report `BLOCKED` or `FAILED`, or return, while the work is stashed.
 - The `ui-screenshotter` agent keeps the images out of your context. Brief it with the phase, each `<screen>=<path>` with its steps and what it must show, and whether data-writing steps are approved. It shares the browser, so don't drive it while the agent runs.
 
-## This project
+## From the project config
 
-Edit this section (and `.mcp.json`, and the MCP tool names in `.claude/agents/ui-screenshotter.md`) when copying the skill to another project.
+Read the app's `screenshot` block: `node "<repo root>/.claude/scripts/config.mjs" get apps.<app>.screenshot` (the app whose `ui` globs the change touches). Skip any field that is not set.
 
-- **Folder and format:** `screenshot.dir` and `screenshot.format` in `.claude/apps.json` (`{feature}` = branch name after `<type>/`; `jpeg` → `.jpg`).
-- **App:** `http://localhost:<port>`, with the `-p` port of the web app's `dev` script; start with `pnpm dev:web` (and `pnpm dev:api` when the page needs the API). Restart it after a `next build`.
-- **Browser:** MCP server `playwright-screenshot` in `.mcp.json` (tools `mcp__playwright-screenshot__browser_*`); viewport = its `--viewport-size` (restart Claude Code after a change).
-- **Conditions:** theme light — `localStorage.setItem('<screenshot.themeStorageKey>', 'light')`; sidebar expanded — `document.cookie = 'sidebar_state=true; path=/'`.
-- **Page ready:** no `.animate-pulse`, then about 2 s for hydration (a click before it submits the form natively); remove `nextjs-portal`.
+- **Folder and format:** `dir` and `format` (`{feature}` = branch name after `<type>/`; `jpeg` → `.jpg`).
+- **App:** `url`; start it with `devCommand` from the repo root (and any other app's `devCommand` the page needs, such as an API). Restart it after a production build of the app.
+- **Browser:** the plugin's MCP server `playwright-screenshot` (tools `mcp__playwright-screenshot__browser_*`); viewport = its `--viewport-size` (restart Claude Code after a change).
+- **Conditions:** theme light when `themeStorageKey` is set — `localStorage.setItem('<themeStorageKey>', 'light')`; each of `cookies` — `document.cookie = '<name>=<value>; path=/'`.
+- **Page ready:** when `readyCheck.absentSelector` is set, wait until no element matches it, then `readyCheck.settleMs` ms (hydration: a click before it can submit a form natively); remove every element matching `removeSelectors`.

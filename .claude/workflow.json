@@ -1,4 +1,23 @@
 {
+  "version": 1,
+  "packageManager": "pnpm",
+  "git": {
+    "remote": "origin",
+    "baseBranch": "develop",
+    "protected": ["develop", "main"]
+  },
+  "tracker": {
+    "type": "trello",
+    "board": "https://trello.com/b/0kDr8gOc/nestjs-training",
+    "lists": {
+      "todo": "TODO",
+      "inProgress": "IN PROGRESS",
+      "review": "REVIEW",
+      "done": "DONE"
+    }
+  },
+  "autofix": "lint-staged",
+  "specsDir": "docs/specs",
   "apps": {
     "api": {
       "dir": "apps/api",
@@ -49,9 +68,14 @@
         "tailwind.config.ts"
       ],
       "screenshot": {
-        "themeStorageKey": "node-brew-theme",
+        "dir": "docs/images/{feature}",
         "format": "png",
-        "dir": "docs/images/{feature}"
+        "themeStorageKey": "node-brew-theme",
+        "devCommand": "pnpm --filter web dev",
+        "url": "http://localhost:3001",
+        "cookies": [{ "name": "sidebar_state", "value": "true" }],
+        "readyCheck": { "absentSelector": ".animate-pulse", "settleMs": 2000 },
+        "removeSelectors": ["nextjs-portal"]
       }
     }
   },

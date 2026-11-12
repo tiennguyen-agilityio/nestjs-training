@@ -1,20 +1,18 @@
 #!/usr/bin/env node
 // PreToolUse hook (Bash, Edit, Write, MultiEdit): asks before commands that
-// break the repo's git, database or secret-file rules, and before edits to
-// secret files. A backstop against mistakes, not a sandbox: it splits commands
-// with a regex, not a shell parser, and fails open (any error prints nothing,
-// exit 0). The GitHub ruleset on develop and main is what actually blocks
-// pushes there.
+// break the generic git and secret-file rules, and before edits to secret
+// files. A backstop against mistakes, not a sandbox: it splits commands with a
+// regex, not a shell parser, and fails open (any error prints nothing, exit 0).
+// Protected branches are `git.protected` in the project's
+// .claude/workflow.json; without that file, pushes are not checked. A branch
+// ruleset on the host is what actually blocks pushes there. Stack-specific
+// rules (databases, Docker volumes) belong in a project hook.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const PROTECTED = new Set(['develop', 'main']);
-
-// Commands that run package scripts or the MikroORM CLI.
-const DB_RUNNERS = ['pnpm', 'npm', 'npx', 'yarn', 'bun', 'bunx', 'mikro-orm'];
-const DB_DESTRUCTIVE = /(migration:(down|fresh)|schema:(drop|fresh))$/;
 const SHELLS = ['sh', 'bash', 'zsh', 'dash'];
 const FILE_TOOLS = ['Edit', 'Write', 'MultiEdit'];
 
@@ -108,8 +106,8 @@ const shortFlag = (args, letter) =>
   args.some((a) => /^-[a-zA-Z]+$/.test(a) && a.includes(letter));
 const isDryRun = (args) => args.includes('--dry-run') || shortFlag(args, 'n');
 
-/** True when a push targets develop or main; `branch` is the current one. */
-function pushesToProtected(args, branch) {
+/** True when a push targets a protected branch; `branch` is the current one. */
+function pushesToProtected(args, branch, protectedBranches) {
   if (isDryRun(args)) return false;
   if (args.some((a) => /^--(all|branches|mirror)$/.test(a))) return true;
   const refspecs = args
@@ -124,7 +122,7 @@ function pushesToProtected(args, branch) {
     if (spec.includes('$(')) return branch();
     const [src, dst = ''] = spec.replace(/^\+/, '').split(':');
     if (!dst && (src === 'HEAD' || src === '@')) return branch();
-    return PROTECTED.has((dst || src).replace(/^refs\/heads\//, ''));
+    return protectedBranches.has((dst || src).replace(/^refs\/heads\//, ''));
   });
 }
 
@@ -169,16 +167,6 @@ function wipesKeptFolder(arg, ctx) {
   return [homedir(), ctx.projectDir, ctx.cwd].some(
     (dir) => dir && (dir === target || dir.startsWith(prefix)),
   );
-}
-
-/**
- * Index of `names` as the command, or inside docker exec and the like;
- * -1 when it is only an argument (grep dropdb).
- */
-function commandAt(words, names) {
-  if (names.includes(words[0])) return 0;
-  if (!/^(docker|docker-compose|podman|kubectl)$/.test(words[0])) return -1;
-  return words.findIndex((w) => names.includes(w.split('/').pop()));
 }
 
 /** .env files (not .env.example and its copies), keys and credentials. */
@@ -230,14 +218,14 @@ const RULES = [
   {
     id: 'protected-push',
     test({ git }, ctx) {
-      if (git?.sub !== 'push') return false;
+      if (git?.sub !== 'push' || !ctx.protected) return false;
       const dir = git.dir ? resolve(ctx.cwd ?? '.', git.dir) : ctx.cwd;
       const branch = () =>
-        PROTECTED.has((git.dir ? null : ctx.branch) ?? currentBranch(dir));
-      return pushesToProtected(git.args, branch);
+        ctx.protected.has((git.dir ? null : ctx.branch) ?? currentBranch(dir));
+      return pushesToProtected(git.args, branch, ctx.protected);
     },
     reason:
-      '[protected-push] Pushing to develop or main directly is not allowed. Push a feature branch and open a pull request into develop instead.',
+      '[protected-push] Pushing directly to a protected branch (git.protected in .claude/workflow.json) is not allowed. Push a feature branch and open a pull request instead.',
   },
   {
     id: 'rm-rf-root',
@@ -311,47 +299,6 @@ const RULES = [
       '[discard-work] This throws away uncommitted work or stashes for good (git reset --hard, clean -f, checkout . / -f, switch -f, restore ., stash drop / clear). Stash first, or restore specific files by path.',
   },
   {
-    id: 'db-destructive',
-    test({ words }) {
-      if (commandAt(words, ['dropdb']) !== -1) return true;
-      const psql = commandAt(words, ['psql']);
-      if (
-        psql !== -1 &&
-        words.slice(psql).some((w) => /\b(drop|truncate)\s/i.test(w))
-      )
-        return true;
-      const runner = commandAt(words, DB_RUNNERS);
-      if (runner === -1) return false;
-      const args = words.slice(runner + 1);
-      if (args.some((a) => DB_DESTRUCTIVE.test(a))) return true;
-      const update = args.findIndex((a) => a.endsWith('schema:update'));
-      return (
-        update !== -1 &&
-        args
-          .slice(update + 1)
-          .some((a) => /^--run(=(?!false$).*)?$|^-[a-zA-Z]*r/.test(a))
-      );
-    },
-    reason:
-      '[db-destructive] This drops or rewrites database data (migration:down / fresh, schema:drop / fresh, schema:update --run, dropdb, DROP / TRUNCATE in psql). Add a forward migration (migration:create, migration:up) or preview with schema:update --dump instead.',
-  },
-  {
-    id: 'docker-data',
-    test({ words }) {
-      if (!/^docker(-compose)?$/.test(words[0])) return false;
-      const plain = words.filter((w) => !w.startsWith('-'));
-      if (plain.includes('down'))
-        return words.some((w) => w === '--volumes' || /^-[a-zA-Z]*v/.test(w));
-      return (
-        (plain.includes('volume') &&
-          ['rm', 'remove', 'prune'].some((w) => plain.includes(w))) ||
-        (plain.includes('system') && plain.includes('prune'))
-      );
-    },
-    reason:
-      '[docker-data] docker compose down -v, docker volume rm / prune and docker system prune delete Docker volumes, including the local Postgres data. Stop the stack with docker compose down (no -v) instead.',
-  },
-  {
     id: 'pipe-to-shell',
     test({ words }) {
       // A shell with no -c and no script file reads its script from stdin.
@@ -366,8 +313,11 @@ const RULES = [
   },
 ];
 
-/** Rules that `command` breaks, each with the simple command that matched. */
-function findViolations(command, ctx = {}) {
+/**
+ * Rules that `command` breaks, each with the simple command that matched.
+ * `ctx.protected` is the Set of protected branches, or null to skip pushes.
+ */
+export function findViolations(command, ctx = {}) {
   const { segments, writes } = parse(command);
   const found = new Map();
   let branch = null;
@@ -379,17 +329,31 @@ function findViolations(command, ctx = {}) {
       if (!found.has(rule.id) && rule.test({ prefix, words, git }, context))
         found.set(rule.id, { ...rule, matched: segment.join(' ') });
     }
-    // `git switch develop && git push` pushes develop.
+    // `git switch <protected> && git push` pushes that branch.
     if (git && /^(switch|checkout)$/.test(git.sub)) {
       const target = git.args.find((a) => !a.startsWith('-'));
-      if (PROTECTED.has(target)) branch = target;
+      if (ctx.protected?.has(target)) branch = target;
     }
   }
   return [...found.values()];
 }
 
+/** `git.protected` of the project's workflow.json, or null when unreadable. */
+function loadProtected(projectDir) {
+  if (!projectDir) return null;
+  try {
+    const config = JSON.parse(
+      readFileSync(join(projectDir, '.claude', 'workflow.json'), 'utf8'),
+    );
+    const list = config?.git?.protected;
+    return Array.isArray(list) ? new Set(list) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Rules that a tool call breaks: a Bash command, or an edit to a secret file. */
-function checkToolCall({ tool_name: tool, tool_input: input, cwd }) {
+export function checkToolCall({ tool_name: tool, tool_input: input, cwd }) {
   if (FILE_TOOLS.includes(tool)) {
     const path = input?.file_path;
     if (typeof path !== 'string' || !isSecretFile(path)) return [];
@@ -397,9 +361,11 @@ function checkToolCall({ tool_name: tool, tool_input: input, cwd }) {
     return [{ ...rule, matched: `${tool} ${path}` }];
   }
   if (tool !== 'Bash' || typeof input?.command !== 'string') return [];
+  const projectDir = process.env.CLAUDE_PROJECT_DIR;
   return findViolations(input.command, {
     cwd,
-    projectDir: process.env.CLAUDE_PROJECT_DIR,
+    projectDir,
+    protected: loadProtected(projectDir),
   });
 }
 
@@ -420,8 +386,21 @@ function main() {
 }
 
 // No process.exit: it can cut off stdout still being written to the pipe.
-try {
-  main();
-} catch {
-  // fail open
+function isEntry() {
+  try {
+    return (
+      realpathSync(process.argv[1]) ===
+      realpathSync(fileURLToPath(import.meta.url))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isEntry()) {
+  try {
+    main();
+  } catch {
+    // fail open
+  }
 }

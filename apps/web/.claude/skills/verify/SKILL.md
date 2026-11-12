@@ -21,7 +21,7 @@ Run from `apps/web/`.
    pnpm run test
    ```
 
-   - Inside the `/work-ticket` workflow, replace `pnpm run test` with the app's `coverage` command in `../../.claude/apps.json` and write the test report afterwards (`../../.claude/rules/workflow.md` §7).
+   - Inside the `/work-ticket` workflow, replace `pnpm run test` with the app's `coverage` command in `../../.claude/workflow.json` (`node ../../.claude/scripts/config.mjs get apps.web.coverage`) and write the test report afterwards (`../../.claude/rules/workflow.md` §7).
    - A missing `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` makes Build `FAIL` with that reason.
 
 2. **E2E.** There is no web e2e suite. Always report the row `E2E tests | n/a | no web e2e suite; UI shown by screenshots (workflow rule 9)`.

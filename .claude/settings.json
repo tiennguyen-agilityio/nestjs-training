@@ -46,5 +46,9 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "turbo-workflow@claude-turbo-workflow": false
   }
 }

@@ -1,6 +1,6 @@
 # Test Report: {{feature}}
 
-- Time: {{YYYY-MM-DD HH:mm:ss}} (GMT+7)
+- Time: {{YYYY-MM-DD HH:mm:ss}} ({{timezone}})
 - Branch: {{branch}} · Commit: {{short sha of HEAD}}{{ + uncommitted changes, if any}}
 - Result: {{PASS / FAIL}} {{(N bugs)}}
 
@@ -11,7 +11,7 @@
 | Unit test ({{app}}, {{runner}}) | {{passed}} | {{failed}} | {{skipped}} | {{duration}} | {{N}} files |
 | E2E test ({{app}}) | {{passed}} | {{failed}} | {{skipped}} | {{duration}} | {{N}} files |
 
-<!-- One row set per changed app (.claude/rules/workflow.md rule 0), with the app's `runner` from .claude/apps.json; a runner that counts suites (Jest) writes "{{N}} suites".
+<!-- One row set per changed app (.claude/rules/workflow.md rule 0), with the app's `runner` from .claude/workflow.json; a runner that counts suites (Jest) writes "{{N}} suites".
      E2E not run: put — in the number columns and "Skipped: <reason>" in Scope
      (e.g. "Skipped: DB resolves to coffee_shop, not *_test" or "Skipped: service-only change").
      An app with "e2e": false: `| E2E test ({{app}}) | — | — | — | — | n/a: no {{app}} e2e suite |`.
@@ -21,12 +21,12 @@
 
 <!-- One block per failing test in this run. With no failures, write "None." and drop the block. -->
 
-### Bug {{i}}: {{api or specFile}} — {{test name}}
+### Bug {{i}}: {{app or specFile}} — {{test name}}
 
 | Field | Detail |
 | --- | --- |
-| Type | {{Unit test / E2E test}} ({{api / web}}) |
-| API | {{method}} {{path}} <!-- — for unit tests, and — for web --> |
+| Type | {{Unit test / E2E test}} ({{app}}) |
+| Endpoint | {{method}} {{path}} <!-- — when the failing test is not an endpoint test --> |
 | Expected | {{expected value}} |
 | Actual | {{actual value}} |
 | Error message | {{message}} |
@@ -57,8 +57,7 @@
 Compared with the baseline from {{YYYY-MM-DD}}, commit {{base commit}}.
 
 <!-- Paste the output of, run from apps/<app>/:
-     node ../../.claude/scripts/coverage-diff.mjs diff ../../<spec dir>/coverage-baseline-<app>.json <changed src files>
-     For api, use coverage-baseline.json when coverage-baseline-api.json is absent (a spec started before per-app baselines).
+     node "<repo root>/.claude/scripts/coverage-diff.mjs" diff <abs spec dir>/coverage-baseline-<app>.json <changed src files>
      Do not compute or edit the numbers by hand. -->
 
 | File | Statements | Branches | Functions | Lines |
