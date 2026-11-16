@@ -1,0 +1,111 @@
+@startuml class-diagram
+
+skinparam classAttributeIconSize 0
+
+abstract class BaseEntity {
+  + id : string
+  + createdAt : Date
+  + updatedAt : Date
+  + deletedAt : Date [0..1] = null
+}
+
+class Category {
+  + name : string
+  + slug : string
+}
+
+class Product {
+  + name : string
+  + slug : string
+  + description : string
+  + roastLevel : RoastLevel
+  + isOrganic : boolean = false
+  + isFairTrade : boolean = false
+  + status : ProductStatus = DRAFT
+  + tastingNotes : string [0..1] = null
+  + origin : string
+  + processingMethod : string
+}
+
+class ProductVariant {
+  + sku : string
+  + weight : string
+  + unit : ProductUnit
+  + name : string
+  + price : string
+  + discountType : DiscountType [0..1] = null
+  + discountValue : string [0..1] = null
+  + quantity : number = 0
+}
+
+class ProductImage {
+  + url : string
+  + isPrimary : boolean = false
+  + sortOrder : number = 0
+}
+
+class User {
+  + clerkId : string
+  + email : string
+  + role : UserRole = USER
+  + firstName : string
+  + lastName : string
+  + phoneNumber : string [0..1] = null
+  + avatarUrl : string [0..1] = null
+  + status : UserStatus = ACTIVE
+}
+
+enum RoastLevel <<enumeration>> {
+  LIGHT
+  MEDIUM
+  DARK
+}
+
+enum ProductStatus <<enumeration>> {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ProductUnit <<enumeration>> {
+  KG
+  G
+  ML
+  L
+}
+
+enum DiscountType <<enumeration>> {
+  PERCENT
+  FIXED
+}
+
+enum UserRole <<enumeration>> {
+  ADMIN
+  USER
+}
+
+enum UserStatus <<enumeration>> {
+  ACTIVE
+  INACTIVE
+}
+
+note bottom of ProductVariant
+  weight, price, discountValue: decimal(10,2) in Postgres,
+  typed as string in TypeScript.
+  sku is unique.
+end note
+
+note bottom of User
+  clerkId and email are unique.
+end note
+
+note bottom of Product
+  name is unique.
+end note
+
+note bottom of Category
+  name is unique.
+end note
+
+@enduml
