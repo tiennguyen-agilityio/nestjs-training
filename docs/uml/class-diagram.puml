@@ -6,7 +6,7 @@ abstract class BaseEntity {
   + id : string
   + createdAt : Date
   + updatedAt : Date
-  + deletedAt : Date [0..1] = null
+  + deletedAt : Date [0..1]
 }
 
 class Category {
@@ -22,19 +22,19 @@ class Product {
   + isOrganic : boolean = false
   + isFairTrade : boolean = false
   + status : ProductStatus = DRAFT
-  + tastingNotes : string [0..1] = null
+  + tastingNotes : string [0..1]
   + origin : string
   + processingMethod : string
 }
 
 class ProductVariant {
   + sku : string
-  + weight : string
+  + weight : Decimal
   + unit : ProductUnit
   + name : string
-  + price : string
-  + discountType : DiscountType [0..1] = null
-  + discountValue : string [0..1] = null
+  + price : Decimal
+  + discountType : DiscountType [0..1]
+  + discountValue : Decimal [0..1]
   + quantity : number = 0
 }
 
@@ -50,8 +50,8 @@ class User {
   + role : UserRole = USER
   + firstName : string
   + lastName : string
-  + phoneNumber : string [0..1] = null
-  + avatarUrl : string [0..1] = null
+  + phoneNumber : string [0..1]
+  + avatarUrl : string [0..1]
   + status : UserStatus = ACTIVE
 }
 
@@ -91,8 +91,6 @@ enum UserStatus <<enumeration>> {
 }
 
 note bottom of ProductVariant
-  weight, price, discountValue: decimal(10,2) in Postgres,
-  typed as string in TypeScript.
   sku is unique.
 end note
 
@@ -106,6 +104,68 @@ end note
 
 note bottom of Category
   name is unique.
+end note
+
+' ---------------------------------------------------------------
+' Relationships
+' ---------------------------------------------------------------
+
+' Inheritance (Generalization): every class is-a BaseEntity.
+BaseEntity <|-- Category
+BaseEntity <|-- Product
+BaseEntity <|-- ProductVariant
+BaseEntity <|-- ProductImage
+BaseEntity <|-- User
+
+note right of BaseEntity
+  Inheritance: every class is-a BaseEntity
+  and takes its identity, timestamps and
+  deleted marker from it. BaseEntity is
+  abstract: it never exists on its own.
+end note
+
+' Association: Product -> Category, navigable one way.
+Product "0..*" --> "1" Category
+note on link
+  Association, not aggregation: a category
+  classifies products, a product is not part of it.
+  Only a product knows its category, so the
+  arrow points to Category.
+  1: every product belongs to exactly one category.
+  0..*: a category can have no products.
+  A category that still has products cannot be
+  deleted.
+end note
+
+' Composition: variants and images belong to one product.
+Product "1" *-- "1..*" ProductVariant
+note on link
+  Composition: a variant belongs to exactly one
+  product. It is created with the product, changed
+  only through it, and never exists on its own.
+  1..*: a product always has at least 1 variant.
+end note
+
+Product "1" *-- "2..6" ProductImage
+note on link
+  Composition: same reasons as variants.
+  2..6: a product must have exactly 1 primary
+  image and at least 1 gallery image, at most 6
+  in total.
+end note
+
+note bottom of ProductImage
+  Deleting a product archives it (status
+  ARCHIVED). Its variants and images go with it:
+  they exist only as parts of their product.
+end note
+
+note top of User
+  User has no relationship to another class;
+  it is identified by the external sign-in
+  provider (clerkId).
+  Enums are attribute types, so no line is
+  drawn to them.
 end note
 
 @enduml
