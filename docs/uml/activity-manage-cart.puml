@@ -1,0 +1,53 @@
+@startuml activity-manage-cart
+' Manage cart: view the cart, change a quantity, remove an item, go to checkout.
+' Every change goes back to the same merge, so an emptied cart ends the flow.
+' Items out of stock must be removed before checkout.
+
+title Manage cart
+
+|Guest|
+|Coffee Shop System|
+
+|Guest|
+start
+:1 · Open the cart;
+|Coffee Shop System|
+:Load the cart\n(current prices and stock);
+repeat
+  if (Cart empty?) then ([yes])
+    :Show "Your cart is empty";
+    stop
+  else ([no])
+  endif
+  :Show the items and totals\n(items out of stock are marked);
+  |Guest|
+  switch (What next?)
+  case ([change quantity])
+    :2 · Change a quantity;
+    |Coffee Shop System|
+    :Check the stock\n(for the new quantity);
+    if (Enough in stock?) then ([yes])
+      :Update the quantity\nand the totals;
+    else ([no])
+      :Show how many are left;
+    endif
+  case ([remove])
+    |Guest|
+    :3 · Click Remove, then confirm;
+    |Coffee Shop System|
+    :Remove the item;
+  case ([checkout])
+    |Guest|
+    :4 · Click Checkout;
+    |Coffee Shop System|
+    if (Any item out of stock?) then ([yes])
+      :Show the items to remove\n(out of stock);
+    else ([no])
+      :Checkout\n(activity 7);
+      stop
+    endif
+  endswitch
+  |Coffee Shop System|
+repeat while (back to the cart)
+
+@enduml

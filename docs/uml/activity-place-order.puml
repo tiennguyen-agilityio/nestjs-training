@@ -1,0 +1,44 @@
+@startuml activity-place-order
+' Place order: called from Checkout once the form is valid.
+' Two forks with joins: stock and cart at the same time, then the
+' "Order placed" page and the confirmation email at the same time.
+
+title Place order
+
+|Coffee Shop System|
+|Email service|
+
+|Coffee Shop System|
+start
+:Check stock and prices\n(of every item, again);
+if (All items available?) then ([no])
+  :Show the items that changed;
+  :Manage cart\n(activity 6);
+  stop
+else ([yes])
+endif
+:Create the order\n(status Pending, items copied);
+fork
+  :Reserve the stock;
+fork again
+  :Empty the cart;
+end fork
+if (Payment method?) then ([card or PayPal])
+  :Pay online\n(activity 9);
+  if (Paid?) then ([no])
+    :Show "Order placed, awaiting payment"\n(order number, Pay now button);
+    stop
+  else ([yes])
+  endif
+else ([cash on delivery])
+endif
+fork
+  :Show "Order placed"\n(order number and total);
+fork again
+  |Email service|
+  :Send the order confirmation email;
+end fork
+|Coffee Shop System|
+stop
+
+@enduml

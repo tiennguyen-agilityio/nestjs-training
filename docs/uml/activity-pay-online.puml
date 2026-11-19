@@ -1,0 +1,41 @@
+@startuml activity-pay-online
+' Pay online: called from Place order for card or PayPal.
+' PlantUML repeats the question "Approved?" as the loop condition.
+
+title Pay online
+
+|Customer|
+|Coffee Shop System|
+|Payment gateway|
+
+|Coffee Shop System|
+start
+:Start the payment\n(for the order total);
+|Payment gateway|
+:Open the payment page\n(card or PayPal);
+repeat
+  |Customer|
+  :1 · Enter the payment details\n(card or PayPal account);
+  :2 · Click Pay;
+  |Payment gateway|
+  :Charge the payment;
+  if (Approved?) then ([no])
+    |Coffee Shop System|
+    :Show why it failed\n(for example "card declined");
+    |Customer|
+    if (Try again?) then ([no])
+      |Coffee Shop System|
+      :Mark the payment failed\n(the order waits for payment);
+      stop
+    else ([yes])
+    endif
+  else ([yes])
+  endif
+repeat while (Approved?) is ([no]) not ([yes])
+
+|Coffee Shop System|
+:Mark the payment paid\nand the order Confirmed;
+:Show "Payment successful";
+stop
+
+@enduml

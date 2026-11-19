@@ -1,0 +1,25 @@
+@startuml activity-manage-inventory
+' Manage inventory: the admin sets the stock of a product variant.
+
+title Manage inventory
+
+|Admin|
+|Coffee Shop System|
+
+|Admin|
+start
+:1 · Open Manage Inventory;
+|Coffee Shop System|
+:Show the stock\n(per variant, low stock marked);
+repeat
+  |Admin|
+  :2 · Pick a variant, enter the quantity, click Save;
+  |Coffee Shop System|
+  :Check the quantity\n(whole number, 0 or more);
+backward :Show the error;
+repeat while (Valid?) is ([no]) not ([yes])
+:Save the new quantity;
+:Show the updated stock;
+stop
+
+@enduml

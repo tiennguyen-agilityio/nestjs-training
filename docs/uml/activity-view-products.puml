@@ -1,0 +1,34 @@
+@startuml activity-view-products
+' View & search products: the Catalog use cases View product list,
+' Search products («extend») and View product details.
+
+title View & search products
+
+|Guest|
+|Coffee Shop System|
+
+|Guest|
+start
+:1 · Open the Roasts page;
+repeat
+  |Coffee Shop System|
+  :Show the product list;
+  |Guest|
+  if (What next?) then ([open a product])
+    break
+  else ([search, filter, sort or page])
+    :2 · Search, filter, sort or change page;
+  endif
+repeat while (back to the list)
+|Guest|
+:3 · Open Product detail;
+|Coffee Shop System|
+:Load the product\n(variants, images, stock);
+if (Found and on sale?) then ([yes])
+  :Show the product details;
+else ([no])
+  :Show "Product not found";
+endif
+stop
+
+@enduml

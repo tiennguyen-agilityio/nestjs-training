@@ -1,0 +1,35 @@
+@startuml activity-add-item-to-cart
+' Add item to cart: a guest or a customer puts one coffee in the cart
+' from its detail page. The quantity picker stops at the stock, and
+' Add to Cart is disabled for a coffee out of stock.
+
+title Add item to cart
+
+|Guest|
+|Coffee Shop System|
+
+|Guest|
+start
+:1 · Open Product detail\n(from Home, Roasts or search);
+|Coffee Shop System|
+:Load the coffee\n(price and stock of its variant);
+if (In stock?) then ([no])
+  :Show "Out of stock"\n(Add to Cart disabled);
+  stop
+else ([yes])
+endif
+|Guest|
+:2 · Choose the quantity\n(from 1 up to the stock);
+:3 · Click Add to Cart;
+|Coffee Shop System|
+if (Already in the cart?) then ([yes])
+  :Raise its quantity\n(never above the stock);
+else ([no])
+  :Add a new line;
+endif
+:Save the cart\n(device for a guest, shop for a user);
+:Show "Added to cart"\n(quantity × coffee name);
+:Open the Cart page;
+stop
+
+@enduml
