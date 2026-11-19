@@ -1,0 +1,49 @@
+@startuml activity-update-shipping-status
+' Update shipping status: GHN reports each change of a shipment (webhook).
+' Events are checked and handled once.
+
+title Update shipping status
+
+|GHN|
+|Coffee Shop System|
+|Payment gateway|
+|Email service|
+
+|GHN|
+start
+:Send a status event\n(picked, delivered, returned);
+|Coffee Shop System|
+:Check the event signature;
+if (Valid?) then ([no])
+  :Reject the event;
+  stop
+else ([yes])
+endif
+:Find the order\n(by tracking number);
+if (Already up to date?) then ([yes])
+  :Ignore the event;
+  stop
+else ([no])
+endif
+switch (New status?)
+case ([shipping])
+  :Set SHIPPING;
+case ([delivered])
+  :Set DELIVERED\n(order Completed);
+  if (Cash on delivery?) then ([yes])
+    :Mark the payment PAID;
+  else ([no])
+  endif
+case ([returned])
+  :Set RETURNED\n(items back in stock);
+  if (Paid online?) then ([yes])
+    |Payment gateway|
+    :Refund the payment;
+  else ([no])
+  endif
+endswitch
+|Email service|
+:Email the customer the new status;
+stop
+
+@enduml

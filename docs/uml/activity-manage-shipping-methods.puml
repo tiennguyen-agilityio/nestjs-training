@@ -23,7 +23,7 @@ case ([add or edit])
   :Show the form\n(empty, or the method's details);
   repeat
     |Admin|
-    :3 · Enter name, description, price, then click Save;
+    :3 · Enter name, description, GHN service, then click Save;
     |Coffee Shop System|
     :Check the form;
   backward :Show the errors;
