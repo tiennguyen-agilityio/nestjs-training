@@ -12,8 +12,6 @@ Customer <|-- Admin
 rectangle "Coffee Shop System" {
   usecase "View product list" as BP
   usecase "View product details" as VP
-  usecase "View category list" as BC
-  usecase "View category details" as VC
   usecase "See hidden items" as Hidden
   usecase "Manage cart" as Cart
   usecase "Sign up" as SignUp
@@ -34,8 +32,6 @@ rectangle "Coffee Shop System" {
 
 Guest -- BP
 Guest -- VP
-Guest -- BC
-Guest -- VC
 Guest -- Cart
 Guest -- SignUp
 Guest -- SignIn
@@ -67,8 +63,6 @@ MngS ..> Auth : <<include>>
 
 Hidden ..> BP : <<extend>>
 Hidden ..> VP : <<extend>>
-Hidden ..> BC : <<extend>>
-Hidden ..> VC : <<extend>>
 note right of Hidden
   condition: {viewer is an active admin}
   extension point: show hidden items
@@ -87,24 +81,15 @@ actor Guest
 rectangle Catalog {
   usecase "View product list" as BP
   usecase "View product details" as VP
-  usecase "View category details" as VC
-  usecase "View category list" as BC
   usecase "Search products" as SP
-  usecase "Search categories" as SC
   usecase "See hidden items" as Hidden
 }
 Guest -- BP
 Guest -- VP
-Guest -- VC
-Guest -- BC
 SP ..> BP : <<extend>>
-SC ..> BC : <<extend>>
 note right of SP : condition: {keyword entered}
-note right of SC : condition: {keyword entered}
 Hidden ..> BP : <<extend>>
 Hidden ..> VP : <<extend>>
-Hidden ..> VC : <<extend>>
-Hidden ..> BC : <<extend>>
 note right of Hidden
   condition: {viewer is an active admin}
   extension point: show hidden items
@@ -212,13 +197,45 @@ Retry ..> O2 : <<extend>>
 note right of Retry : condition: {payment failed}
 @enduml
 
-' 6. Administration module: each manage use case split into smaller use cases
+' 6. Shipping module: the admin moves each order's shipping by hand
+@startuml use-case-shipping
+left to right direction
+actor Customer <<role USER>>
+actor Admin <<role ADMIN>>
+actor "Email service" as Mail <<external system>>
+rectangle Shipping {
+  usecase "Choose delivery method" as Dlv
+  usecase "View order details" as O2
+  usecase "Track shipment" as Track
+  usecase "Update shipping status" as ShipStatus
+  usecase "Enter tracking number" as TrackNo
+  usecase "Send shipping update" as ShipMail
+}
+Customer -- Dlv
+Customer -- O2
+Admin -- ShipStatus
+note right of Dlv : included by Checkout (Ordering module)
+note right of O2 : from the Ordering module
+Track ..> O2 : <<extend>>
+note right of Track : condition: {order has a tracking number}
+TrackNo ..> ShipStatus : <<extend>>
+note right of TrackNo : condition: {status changes to Shipping}
+ShipStatus ..> ShipMail : <<include>>
+ShipMail -- Mail
+note right of ShipMail
+  COD order delivered: payment becomes PAID
+  Returned: the items go back in stock
+end note
+@enduml
+
+' 7. Administration module: each manage use case split into smaller use cases
 @startuml use-case-administration
 left to right direction
 actor Admin <<role ADMIN>>
 actor Clerk <<external system>>
 rectangle Administration {
   usecase "Manage categories" as MngC
+  usecase "List categories" as C0
   usecase "Create category" as C1
   usecase "Edit category" as C2
   usecase "Delete category" as C3
@@ -252,6 +269,7 @@ Admin -- MngU
 Admin -- MngO
 Admin -- MngS
 ' generalization: each smaller use case is a kind of its manage use case
+MngC <|-- C0
 MngC <|-- C1
 MngC <|-- C2
 MngC <|-- C3
