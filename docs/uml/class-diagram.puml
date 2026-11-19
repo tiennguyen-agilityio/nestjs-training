@@ -1,58 +1,124 @@
 @startuml class-diagram
 
 skinparam classAttributeIconSize 0
+skinparam groupInheritance 2
 
 abstract class BaseEntity {
-  + id : string
-  + createdAt : Date
-  + updatedAt : Date
-  + deletedAt : Date [0..1]
+  + id : String
+  + createdAt : DateTime
+  + updatedAt : DateTime
+  + deletedAt : DateTime [0..1]
+}
+
+abstract class AuditableEntity {
+  + createdBy : User [0..1]
+  + updatedBy : User [0..1]
+  + deletedBy : User [0..1]
 }
 
 class Category {
-  + name : string
-  + slug : string
+  + name : String
+  + slug : String
 }
 
 class Product {
-  + name : string
-  + slug : string
-  + description : string
+  + name : String
+  + slug : String
+  + description : String
   + roastLevel : RoastLevel
-  + isOrganic : boolean = false
-  + isFairTrade : boolean = false
+  + isOrganic : Boolean = false
+  + isFairTrade : Boolean = false
   + status : ProductStatus = DRAFT
-  + tastingNotes : string [0..1]
-  + origin : string
-  + processingMethod : string
+  + tastingNotes : String [0..1]
+  + origin : String
+  + processingMethod : String
 }
 
 class ProductVariant {
-  + sku : string
-  + weight : Decimal
+  + sku : String
+  + size : Decimal
   + unit : ProductUnit
-  + name : string
+  + name : String
   + price : Decimal
   + discountType : DiscountType [0..1]
   + discountValue : Decimal [0..1]
-  + quantity : number = 0
+  + stockQuantity : Integer = 0
 }
 
 class ProductImage {
-  + url : string
-  + isPrimary : boolean = false
-  + sortOrder : number = 0
+  + url : String
+  + isPrimary : Boolean = false
+  + sortOrder : Integer = 0
 }
 
 class User {
-  + clerkId : string
-  + email : string
+  + clerkId : String
+  + email : String
   + role : UserRole = USER
-  + firstName : string
-  + lastName : string
-  + phoneNumber : string [0..1]
-  + avatarUrl : string [0..1]
+  + firstName : String
+  + lastName : String
+  + phoneNumber : String [0..1]
+  + avatarUrl : String [0..1]
   + status : UserStatus = ACTIVE
+  + address : Address [0..1]
+}
+
+class Cart {
+  + totalQuantity : Integer
+  + subTotal : Decimal
+}
+
+class CartItem {
+  + quantity : Integer
+}
+
+class Order {
+  + orderNumber : String
+  + status : OrderStatus = PENDING
+  + shippingStatus : ShippingStatus = PENDING
+  + shippingFee : Decimal
+  + shippingMethodName : String
+  + tax : Decimal
+  + totalAmount : Decimal
+  + shippingAddress : Address
+  + note : String [0..1]
+}
+
+class OrderItem {
+  + id : String
+  + productName : String
+  + productImage : String
+  + variantName : String
+  + unitPrice : Decimal
+  + discountAmount : Decimal
+  + quantity : Integer
+}
+
+class Payment {
+  + method : PaymentMethod
+  + status : PaymentStatus = UNPAID
+  + transactionId : String [0..1]
+  + paidAt : DateTime [0..1]
+  + refundedAt : DateTime [0..1]
+  + failureReason : String [0..1]
+}
+
+class ShippingMethod {
+  + name : String
+  + description : String
+  + price : Decimal
+  + status : ShippingMethodStatus = ACTIVE
+}
+
+class Address <<dataType>> {
+  + firstName : String
+  + lastName : String
+  + phoneNumber : String
+  + addressLine : String
+  + city : String
+  + district : String
+  + ward : String
+  + postalCode : String
 }
 
 enum RoastLevel <<enumeration>> {
@@ -90,82 +156,221 @@ enum UserStatus <<enumeration>> {
   INACTIVE
 }
 
-note bottom of ProductVariant
-  sku is unique.
+enum OrderStatus <<enumeration>> {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum ShippingStatus <<enumeration>> {
+  PENDING
+  SHIPPING
+  DELIVERED
+  RETURNED
+}
+
+enum PaymentStatus <<enumeration>> {
+  UNPAID
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod <<enumeration>> {
+  COD
+  CARD
+  E_WALLET
+}
+
+enum ShippingMethodStatus <<enumeration>> {
+  ACTIVE
+  INACTIVE
+}
+
+' ---------------------------------------------------------------
+' Rules
+' ---------------------------------------------------------------
+
+note bottom of BaseEntity
+  deletedAt marks a deleted object:
+  no value means not deleted.
 end note
 
-note bottom of User
-  clerkId and email are unique.
-end note
-
-note bottom of Product
-  name is unique.
+note bottom of AuditableEntity
+  createdBy, updatedBy and deletedBy are the
+  users who made the change; empty when the
+  system made it.
 end note
 
 note bottom of Category
   name is unique.
 end note
 
+note bottom of Product
+  name is unique.
+  Deleting a product archives it (status
+  ARCHIVED): it is no longer shown or sold,
+  and it can be set back to ACTIVE later.
+  Past orders keep their own copy of the
+  names and prices.
+end note
+
+note bottom of ProductVariant
+  sku is unique.
+  discountType and discountValue are both
+  set or both empty.
+  PERCENT: discountValue from 0 to 100.
+  FIXED: discountValue not more than price.
+  A variant used by an order is never
+  removed, only marked deleted.
+end note
+
+note bottom of User
+  clerkId and email are unique.
+  User is identified by the external
+  sign-in provider (clerkId).
+  address is saved from the user's first
+  checkout and suggested at later checkouts.
+  Editing the address at checkout does
+  not change it.
+end note
+
+note bottom of Cart
+  A guest's cart stays on the guest's
+  device and is not kept by the shop.
+  At sign-in it is merged into the user's
+  cart: the same variant adds up its
+  quantity, up to the stock. A signed-in
+  user always uses the cart the shop keeps.
+  Adding to the cart does not reserve
+  stock; stock is checked at checkout.
+  Placing an order empties the cart.
+  totalQuantity = sum of the items'
+  quantity; subTotal = sum of each item's
+  current price x quantity. Both are
+  updated whenever an item changes or a
+  variant's price changes.
+end note
+
+note bottom of CartItem
+  One CartItem per ProductVariant in a cart.
+  quantity is at least 1.
+end note
+
+note bottom of Order
+  orderNumber is unique.
+  totalAmount is worked out when the order
+  is placed: sum of each item's
+  (unitPrice - discountAmount) x quantity
+  + shippingFee + tax.
+  shippingAddress is a copy of the address
+  entered at checkout; shippingFee and
+  shippingMethodName are copies of the
+  shipping method's price and name.
+  They are taken when the
+  order is placed, so later changes do not
+  change the order.
+  The admin moves shippingStatus by hand.
+end note
+
+note bottom of OrderItem
+  productName and productImage are copied
+  from the product, variantName and
+  unitPrice from the variant, and
+  discountAmount (per unit) is worked out
+  from the variant's discount, when the
+  order is placed. They never change, so
+  OrderItem has no timestamps and does
+  not inherit BaseEntity.
+end note
+
+note bottom of Payment
+  UNPAID: no payment attempt yet.
+  PENDING: an online payment is waiting
+  for the processor's answer.
+  The method can change only while the
+  payment is UNPAID or FAILED. A failed
+  payment can be retried, with the same
+  or another method. failureReason keeps
+  why the last attempt failed; it is
+  cleared when the payment becomes PAID.
+  COD stays UNPAID until the order's
+  shippingStatus is DELIVERED, then
+  becomes PAID.
+  paidAt is set when it becomes PAID.
+  Only a PAID payment can become REFUNDED;
+  refundedAt is set when it does.
+  transactionId is the payment processor's
+  reference; COD has none.
+end note
+
+note bottom of Address
+  A value with no identity, used by
+  User.address and Order.shippingAddress.
+end note
+
 ' ---------------------------------------------------------------
 ' Relationships
 ' ---------------------------------------------------------------
 
-' Inheritance (Generalization): every class is-a BaseEntity.
-BaseEntity <|-- Category
-BaseEntity <|-- Product
-BaseEntity <|-- ProductVariant
-BaseEntity <|-- ProductImage
-BaseEntity <|-- User
+' Inheritance: two abstract bases.
+BaseEntity <|-- AuditableEntity
+BaseEntity <|-- Cart
+BaseEntity <|-- CartItem
+AuditableEntity <|-- Category
+AuditableEntity <|-- Product
+AuditableEntity <|-- ProductVariant
+AuditableEntity <|-- ProductImage
+AuditableEntity <|-- User
+AuditableEntity <|-- Order
+AuditableEntity <|-- Payment
+AuditableEntity <|-- ShippingMethod
 
-note right of BaseEntity
-  Inheritance: every class is-a BaseEntity
-  and takes its identity, timestamps and
-  deleted marker from it. BaseEntity is
-  abstract: it never exists on its own.
-end note
-
-' Association: Product -> Category, navigable one way.
+' Catalog
 Product "0..*" --> "1" Category
 note on link
-  Association, not aggregation: a category
-  classifies products, a product is not part of it.
-  Only a product knows its category, so the
-  arrow points to Category.
-  1: every product belongs to exactly one category.
-  0..*: a category can have no products.
-  A category that still has products cannot be
-  deleted.
+  A category that still has products
+  cannot be deleted.
 end note
 
-' Composition: variants and images belong to one product.
 Product "1" *-- "1..*" ProductVariant
-note on link
-  Composition: a variant belongs to exactly one
-  product. It is created with the product, changed
-  only through it, and never exists on its own.
-  1..*: a product always has at least 1 variant.
-end note
 
 Product "1" *-- "2..6" ProductImage
 note on link
-  Composition: same reasons as variants.
-  2..6: a product must have exactly 1 primary
-  image and at least 1 gallery image, at most 6
-  in total.
+  Exactly 1 primary image and at least
+  1 gallery image, at most 6 in total.
 end note
 
-note bottom of ProductImage
-  Deleting a product archives it (status
-  ARCHIVED). Its variants and images go with it:
-  they exist only as parts of their product.
-end note
+' User and cart
+User "1" *-- "0..1" Cart
+Cart "1" *-- "0..*" CartItem
+CartItem "0..*" --> "1" ProductVariant
+
+' Order
+Order "0..*" --> "1" User
+Order "1" *-- "1..*" OrderItem
+OrderItem "0..*" --> "1" ProductVariant
+Order "1" *-- "1" Payment
+Order "0..*" --> "1" ShippingMethod
 
 note top of User
-  User has no relationship to another class;
-  it is identified by the external sign-in
-  provider (clerkId).
-  Enums are attribute types, so no line is
-  drawn to them.
+  Enums and Address are attribute types,
+  so no line is drawn to them.
 end note
+
+' Layout only (no meaning): keep the enumerations in rows under the classes.
+ProductVariant -[hidden]down- RoastLevel
+OrderItem -[hidden]down- UserRole
+Payment -[hidden]down- PaymentStatus
+RoastLevel -[hidden]right- ProductStatus
+ProductStatus -[hidden]right- ProductUnit
+ProductUnit -[hidden]right- DiscountType
+UserRole -[hidden]right- UserStatus
+UserStatus -[hidden]right- OrderStatus
+OrderStatus -[hidden]right- ShippingStatus
+PaymentStatus -[hidden]right- PaymentMethod
+PaymentMethod -[hidden]right- ShippingMethodStatus
 
 @enduml
