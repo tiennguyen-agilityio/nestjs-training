@@ -360,16 +360,18 @@ note top of User
   so no line is drawn to them.
 end note
 
-' Layout only (no meaning): keep the enumerations in rows under the classes.
+' Layout only (no meaning): every enumeration in one row at the bottom.
+' ProductVariant is the lowest class (Order -> OrderItem -> ProductVariant),
+' so the row hangs under it; the right links keep the enums on one rank.
 ProductVariant -[hidden]down- RoastLevel
-OrderItem -[hidden]down- UserRole
-Payment -[hidden]down- PaymentStatus
 RoastLevel -[hidden]right- ProductStatus
 ProductStatus -[hidden]right- ProductUnit
 ProductUnit -[hidden]right- DiscountType
+DiscountType -[hidden]right- UserRole
 UserRole -[hidden]right- UserStatus
 UserStatus -[hidden]right- OrderStatus
 OrderStatus -[hidden]right- ShippingStatus
+ShippingStatus -[hidden]right- PaymentStatus
 PaymentStatus -[hidden]right- PaymentMethod
 PaymentMethod -[hidden]right- ShippingMethodStatus
 
