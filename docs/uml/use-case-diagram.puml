@@ -1,0 +1,286 @@
+' 1. General use case diagram: the whole system in one view
+@startuml use-case-general
+left to right direction
+actor Guest
+actor Customer <<role USER>>
+actor Admin <<role ADMIN>>
+actor Clerk <<external system>>
+actor "Payment gateway" as Gateway <<external system>>
+Guest <|-- Customer
+Customer <|-- Admin
+
+rectangle "Coffee Shop System" {
+  usecase "View product list" as BP
+  usecase "View product details" as VP
+  usecase "View category list" as BC
+  usecase "View category details" as VC
+  usecase "See hidden items" as Hidden
+  usecase "Manage cart" as Cart
+  usecase "Sign up" as SignUp
+  usecase "Sign in" as SignIn
+  usecase "Sign out" as SignOut
+  usecase "View my profile" as Me
+  usecase "Manage my orders" as MyO
+  usecase "Checkout" as Chk
+  usecase "Pay online" as Pay
+  usecase "Manage users" as MngU
+  usecase "Manage categories" as MngC
+  usecase "Manage products" as MngP
+  usecase "Manage orders" as MngO
+  usecase "Manage shipping methods" as MngS
+  usecase "Authenticate user" as Auth
+  usecase "Sync user accounts" as Sync
+}
+
+Guest -- BP
+Guest -- VP
+Guest -- BC
+Guest -- VC
+Guest -- Cart
+Guest -- SignUp
+Guest -- SignIn
+Customer -- SignOut
+Customer -- Me
+Customer -- MyO
+Customer -- Chk
+Admin -- MngU
+Admin -- MngC
+Admin -- MngP
+Admin -- MngO
+Admin -- MngS
+SignUp -- Clerk
+SignIn -- Clerk
+SignOut -- Clerk
+MngU -- Clerk
+Auth -- Clerk
+Clerk -- Sync
+Pay -- Gateway
+
+Me ..> Auth : <<include>>
+MyO ..> Auth : <<include>>
+Chk ..> Auth : <<include>>
+MngU ..> Auth : <<include>>
+MngC ..> Auth : <<include>>
+MngP ..> Auth : <<include>>
+MngO ..> Auth : <<include>>
+MngS ..> Auth : <<include>>
+
+Hidden ..> BP : <<extend>>
+Hidden ..> VP : <<extend>>
+Hidden ..> BC : <<extend>>
+Hidden ..> VC : <<extend>>
+note right of Hidden
+  condition: {viewer is an active admin}
+  extension point: show hidden items
+end note
+
+Pay ..> Chk : <<extend>>
+note right of Pay
+  condition: {customer pays by card or PayPal}
+end note
+@enduml
+
+' 2. Catalog module
+@startuml use-case-catalog
+left to right direction
+actor Guest
+rectangle Catalog {
+  usecase "View product list" as BP
+  usecase "View product details" as VP
+  usecase "View category details" as VC
+  usecase "View category list" as BC
+  usecase "Search products" as SP
+  usecase "Search categories" as SC
+  usecase "See hidden items" as Hidden
+}
+Guest -- BP
+Guest -- VP
+Guest -- VC
+Guest -- BC
+SP ..> BP : <<extend>>
+SC ..> BC : <<extend>>
+note right of SP : condition: {keyword entered}
+note right of SC : condition: {keyword entered}
+Hidden ..> BP : <<extend>>
+Hidden ..> VP : <<extend>>
+Hidden ..> VC : <<extend>>
+Hidden ..> BC : <<extend>>
+note right of Hidden
+  condition: {viewer is an active admin}
+  extension point: show hidden items
+end note
+@enduml
+
+' 3. Authentication module
+@startuml use-case-authentication
+left to right direction
+actor Guest
+actor Customer <<role USER>>
+actor Clerk <<external system>>
+Guest <|-- Customer
+rectangle Authentication {
+  usecase "Sign up" as SignUp
+  usecase "Verify email" as Verify
+  usecase "Sign in" as SignIn
+  usecase "Sign in with email" as SignInEmail
+  usecase "Sign in with Google or Facebook" as SignInSocial
+  usecase "Sign out" as SignOut
+}
+Guest -- SignUp
+Guest -- SignIn
+Customer -- SignOut
+SignUp ..> Verify : <<include>>
+SignIn <|-- SignInEmail
+SignIn <|-- SignInSocial
+Verify -- Clerk
+SignInEmail -- Clerk
+SignInSocial -- Clerk
+SignOut -- Clerk
+@enduml
+
+' 4. Account module
+@startuml use-case-account
+left to right direction
+actor Customer <<role USER>>
+actor Clerk <<external system>>
+rectangle Account {
+  usecase "View my profile" as Me
+  usecase "Authenticate user" as Auth
+  usecase "Sync user accounts" as Sync
+}
+Customer -- Me
+Clerk -- Sync
+Auth -- Clerk
+Me ..> Auth : <<include>>
+note right of Auth
+  also included by Checkout and
+  Manage my orders (Ordering module)
+  and by every Manage use case
+  (Administration module)
+end note
+@enduml
+
+' 5. Ordering module: cart, checkout, payment and the customer's orders
+@startuml use-case-ordering
+left to right direction
+actor Guest
+actor Customer <<role USER>>
+actor "Payment gateway" as Gateway <<external system>>
+actor "Email service" as Mail <<external system>>
+Guest <|-- Customer
+rectangle Ordering {
+  usecase "Manage cart" as Cart
+  usecase "Add item to cart" as Cart1
+  usecase "Change item quantity" as Cart2
+  usecase "Remove item from cart" as Cart3
+  usecase "Checkout" as Chk
+  usecase "Enter shipping address" as Addr
+  usecase "Choose delivery method" as Dlv
+  usecase "Choose payment method" as PM
+  usecase "Send order confirmation" as Confirm
+  usecase "Pay online" as Pay
+  usecase "Manage my orders" as MyO
+  usecase "View my orders" as O1
+  usecase "View order details" as O2
+  usecase "Cancel order" as O3
+  usecase "Update payment status" as PayStatus
+  usecase "Retry payment" as Retry
+}
+Guest -- Cart
+Customer -- Chk
+Customer -- MyO
+Pay -- Gateway
+Gateway -- PayStatus
+Retry -- Gateway
+Confirm -- Mail
+Cart <|-- Cart1
+Cart <|-- Cart2
+Cart <|-- Cart3
+Chk ..> Addr : <<include>>
+Chk ..> Dlv : <<include>>
+Chk ..> PM : <<include>>
+Chk ..> Confirm : <<include>>
+Pay ..> Chk : <<extend>>
+note bottom of Pay
+  condition: {customer pays by card or PayPal}
+  extension point: payment
+end note
+MyO <|-- O1
+MyO <|-- O2
+MyO <|-- O3
+Retry ..> O2 : <<extend>>
+note right of Retry : condition: {payment failed}
+@enduml
+
+' 6. Administration module: each manage use case split into smaller use cases
+@startuml use-case-administration
+left to right direction
+actor Admin <<role ADMIN>>
+actor Clerk <<external system>>
+rectangle Administration {
+  usecase "Manage categories" as MngC
+  usecase "Create category" as C1
+  usecase "Edit category" as C2
+  usecase "Delete category" as C3
+  usecase "Restore category" as C4
+  usecase "Manage products" as MngP
+  usecase "Create product" as P1
+  usecase "Edit product" as P2
+  usecase "Delete product" as P3
+  usecase "Manage users" as MngU
+  usecase "List users" as U1
+  usecase "View user" as U2
+  usecase "Edit user" as U3
+  usecase "Activate or deactivate user" as U4
+  usecase "Delete user" as U5
+  usecase "Search users" as SU
+  usecase "Manage orders" as MngO
+  usecase "List orders" as O1
+  usecase "View order details" as O2
+  usecase "Update order status" as O3
+  usecase "Update shipping status" as O4
+  usecase "Search orders" as SO
+  usecase "Manage shipping methods" as MngS
+  usecase "Create shipping method" as S1
+  usecase "Edit shipping method" as S2
+  usecase "Activate or deactivate method" as S3
+  usecase "Delete shipping method" as S4
+}
+Admin -- MngC
+Admin -- MngP
+Admin -- MngU
+Admin -- MngO
+Admin -- MngS
+' generalization: each smaller use case is a kind of its manage use case
+MngC <|-- C1
+MngC <|-- C2
+MngC <|-- C3
+MngC <|-- C4
+MngP <|-- P1
+MngP <|-- P2
+MngP <|-- P3
+MngU <|-- U1
+MngU <|-- U2
+MngU <|-- U3
+MngU <|-- U4
+MngU <|-- U5
+MngO <|-- O1
+MngO <|-- O2
+MngO <|-- O3
+MngO <|-- O4
+MngS <|-- S1
+MngS <|-- S2
+MngS <|-- S3
+MngS <|-- S4
+SU ..> U1 : <<extend>>
+SO ..> O1 : <<extend>>
+note right of SU : condition: {keyword entered}
+note right of SO : condition: {keyword entered}
+note right of O4
+  COD order delivered:
+  its payment becomes PAID
+end note
+U3 -- Clerk
+U4 -- Clerk
+U5 -- Clerk
+@enduml
