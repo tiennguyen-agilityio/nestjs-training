@@ -1,0 +1,38 @@
+@startuml activity-update-payment-status
+' Update payment status: the payment gateway sends the result of an online
+' payment (webhook). Pay online (activity 9) may already have updated the
+' payment; then the event changes nothing.
+
+title Update payment status
+
+|Payment gateway|
+|Coffee Shop System|
+|Email service|
+
+|Payment gateway|
+start
+:Send the payment result\n(succeeded or failed);
+|Coffee Shop System|
+:Check the event signature;
+if (Valid?) then ([no])
+  :Reject the event;
+  stop
+else ([yes])
+endif
+:Find the order's payment;
+if (Already up to date?) then ([yes])
+  :Ignore the event;
+  stop
+else ([no])
+endif
+if (Result?) then ([succeeded])
+  :Mark the payment PAID\n(and the order Confirmed);
+  |Email service|
+  :Send the order confirmation;
+else ([failed])
+  |Coffee Shop System|
+  :Mark the payment FAILED\n(keep the reason);
+endif
+stop
+
+@enduml

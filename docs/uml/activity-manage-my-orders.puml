@@ -1,0 +1,47 @@
+@startuml activity-manage-my-orders
+' Manage my orders: View my orders, View order details, Cancel order,
+' Retry payment. A customer can cancel an order only while it is still
+' Pending. Pay now shows only when the order's online payment failed.
+
+title Manage my orders (view, cancel, retry payment)
+
+|Customer|
+|Coffee Shop System|
+
+|Customer|
+start
+:1 · Open My orders;
+|Coffee Shop System|
+:Load my orders\n(newest first);
+:Show my orders;
+|Customer|
+:2 · Open an order;
+|Coffee Shop System|
+:Load the order\n(items, totals, statuses);
+repeat
+  :Show the order details;
+  |Customer|
+  switch (What next?)
+  case ([done])
+    stop
+  case ([retry payment])
+    :4 · Click Pay now\n(payment failed);
+    |Coffee Shop System|
+    :Pay online (activity 9);
+  case ([cancel])
+    |Customer|
+    :3 · Click Cancel order\n(then confirm);
+    |Coffee Shop System|
+    if (Still Pending?) then ([yes])
+      :Set the order Cancelled;
+      :Put the items back in stock;
+      :Show "Order cancelled";
+      stop
+    else ([no])
+      :Show "Cannot be cancelled";
+    endif
+  endswitch
+  |Coffee Shop System|
+repeat while (back to the order)
+
+@enduml

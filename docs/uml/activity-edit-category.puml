@@ -1,0 +1,44 @@
+@startuml activity-edit-category
+' Edit, delete or restore a category (Administration module).
+' A category with products cannot be deleted; only a deleted one can be restored.
+
+title Edit / delete / restore category
+
+|Admin|
+|Coffee Shop System|
+
+|Admin|
+start
+:1 · Open Manage Categories;
+|Coffee Shop System|
+:Show the categories\n(deleted ones marked);
+|Admin|
+switch (What next?)
+case ([edit])
+  repeat
+    :2 · Change the name, then click Save;
+    |Coffee Shop System|
+    :Check the name\n(valid, not used);
+  backward :Show the error\nunder the name field;
+  repeat while (Name OK?) is ([no]) not ([yes])
+  :Save the new name;
+case ([delete])
+  |Admin|
+  :3 · Click Delete, then confirm;
+  |Coffee Shop System|
+  if (Any product in it?) then ([yes])
+    :Show "Category in use";
+  else ([no])
+    :Mark the category deleted;
+  endif
+case ([restore])
+  |Admin|
+  :4 · Click Restore;
+  |Coffee Shop System|
+  :Mark the category active;
+endswitch
+|Coffee Shop System|
+:Show the updated list;
+stop
+
+@enduml

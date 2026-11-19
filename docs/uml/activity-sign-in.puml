@@ -1,0 +1,46 @@
+@startuml activity-sign-in
+' Sign in: a guest signs in with email and password, or with Google
+' or Facebook. PlantUML draws every retry as one repeat loop.
+
+title Sign in
+
+|Guest|
+start
+:1 · Click Sign in;
+repeat
+  if (Sign in with?) then ([email])
+    :2 · Enter Email Address;
+    :3 · Enter Password;
+    :4 · Click Sign In;
+    |Coffee Shop System|
+    :Check the fields\n(email format, password given);
+    if (Fields OK?) then ([yes])
+      |Clerk|
+      :Check email and password;
+      if (Correct?) then ([yes])
+      else ([no])
+      endif
+    else ([no])
+    endif
+  else ([Google or Facebook])
+    |Guest|
+    :2 · Click Google or Facebook;
+    |Clerk|
+    :Send the guest to the provider;
+    |Social provider|
+    :Ask the guest to approve;
+    if (Approved?) then ([yes])
+    else ([no])
+    endif
+  endif
+  |Coffee Shop System|
+backward :Show the error on the sign-in page;
+repeat while (Signed in?) is ([no]) not ([yes])
+
+|Clerk|
+:Start the session;
+|Coffee Shop System|
+:Open the home page;
+stop
+
+@enduml

@@ -1,0 +1,33 @@
+@startuml activity-create-category
+' Create category: an admin adds a category from the dashboard.
+' Precondition: the admin is signed in.
+
+title Create category
+
+|Admin|
+start
+:1 · Open Manage Categories;
+:2 · Click Add category;
+' The repeat start is the merge: step 3 is reached from step 2 or after an error.
+repeat :3 · Enter the category name;
+  :4 · Click Create category;
+
+  |Coffee Shop System|
+  :Check the name\n(required, length rules);
+  if (Name valid?) then ([yes])
+    :Look up the name\n(deleted categories too);
+    if (Name already used?) then ([no])
+      :Save the category;
+    else ([yes])
+    endif
+  else ([no])
+  endif
+
+backward :Show the error\nunder the name field;
+repeat while (Name rejected?) is ([yes]) not ([no])
+
+:Show "Category created";
+:Open the categories list;
+stop
+
+@enduml

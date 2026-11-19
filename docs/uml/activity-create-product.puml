@@ -1,0 +1,55 @@
+@startuml activity-create-product
+' Create product: an admin adds a product from the dashboard.
+' The two kinds of images are stored at the same time: fork and join.
+' Precondition: the admin is signed in.
+
+title Create product
+
+|Admin|
+start
+:1 · Open Manage Products;
+:2 · Click Add product;
+:3 · Upload the Main Hero Shot;
+:4 · Add Gallery Assets;
+:5 · Enter name and description;
+:6 · Pick category and status;
+:7 · Enter the first variant\n(weight, unit, price, quantity);
+:8 · Set roast and sourcing\n(origin, method, ethics, notes);
+' The repeat start is the merge: step 9 is reached from step 8 or after a fix.
+repeat :9 · Click Publish Product;
+
+  |Coffee Shop System|
+  :Check the form\n(fields, hero shot, gallery);
+  if (Form complete?) then ([yes])
+    fork
+      |Image host|
+      :Store the Main Hero Shot;
+    fork again
+      |Image host|
+      :Store the Gallery Assets;
+    end fork
+
+    |Coffee Shop System|
+    if (Images stored?) then ([yes])
+      :Check the name and the category;
+      if (Name already used?) then ([no])
+        if (Category exists?) then ([yes])
+          :Save the product\n(with its variant and images);
+        else ([no])
+        endif
+      else ([yes])
+      endif
+    else ([no])
+    endif
+  else ([no])
+  endif
+
+  |Coffee Shop System|
+backward :Show the errors, then the admin\nfixes the marked fields;
+repeat while (Anything rejected?) is ([yes]) not ([no])
+
+:Show "Product created";
+:Open the products list;
+stop
+
+@enduml

@@ -1,0 +1,36 @@
+@startuml activity-sync-user-accounts
+' Sync user accounts: Clerk sends an account event (webhook) and the shop
+' updates its own copy of the user. Events are checked and handled once.
+
+title Sync user accounts
+
+|Clerk|
+|Coffee Shop System|
+
+|Clerk|
+start
+:Send an account event\n(created, updated or deleted);
+|Coffee Shop System|
+:Check the event signature;
+if (Valid?) then ([no])
+  :Reject the event;
+  stop
+else ([yes])
+endif
+if (Already handled?) then ([yes])
+  :Ignore the event;
+  stop
+else ([no])
+endif
+switch (Event type?)
+case ([created])
+  :Create the user\n(role USER);
+  :Record the role sync\n(sent to Clerk later);
+case ([updated])
+  :Update the user's copy;
+case ([deleted])
+  :Mark the user deleted;
+endswitch
+stop
+
+@enduml

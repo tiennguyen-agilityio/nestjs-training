@@ -1,0 +1,69 @@
+@startuml activity-sign-up
+' Sign up: a guest creates an account with email and password.
+' After the code is verified the flow forks: the guest goes on to the
+' home page while Clerk tells the shop about the new account. Neither
+' branch waits for the other, so each ends in a flow final (end).
+
+title Sign up
+
+|Guest|
+start
+:1 · Click Create an account;
+repeat
+  :2 · Enter first and last name;
+  :3 · Enter Email Address;
+  :4 · Enter a Password;
+  :5 · Click Sign up;
+  |Coffee Shop System|
+  :Check the fields\n(names, email, password);
+  if (Fields OK?) then ([yes])
+    |Clerk|
+    :Create the account;
+    if (Email already used?) then ([no])
+    else ([yes])
+    endif
+  else ([no])
+  endif
+  |Coffee Shop System|
+backward :Show the error under the field;
+repeat while (Rejected?) is ([yes]) not ([no])
+
+|Clerk|
+:Email the code;
+|Guest|
+repeat
+  :6 · Enter the email code;
+  :7 · Click Verify email;
+  |Clerk|
+  :Check the code;
+  |Coffee Shop System|
+backward :Show "wrong code";
+repeat while (Code right?) is ([no]) not ([yes])
+
+|Clerk|
+:Activate the account\nand start the session;
+fork
+  |Coffee Shop System|
+  :Open the home page;
+  end
+fork again
+  |Clerk|
+  :Tell the shop about the new account;
+  |Coffee Shop System|
+  :Check the request\n(really from Clerk?);
+  if (Genuine?) then ([no])
+    end
+  else ([yes])
+  endif
+  if (User already saved?) then ([yes])
+    end
+  else ([no])
+  endif
+  :Save the user\nwith the role USER;
+  :Send the role to Clerk\n(retried until accepted);
+  |Clerk|
+  :Store the role;
+  end
+end fork
+
+@enduml

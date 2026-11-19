@@ -1,0 +1,48 @@
+@startuml activity-manage-users
+' Manage users (Administration module). Edit and Delete are on each row
+' of the user list. Changes and deletions are also made in Clerk.
+' A deleted user cannot be restored.
+
+title Manage users
+
+|Admin|
+|Coffee Shop System|
+|Clerk|
+
+|Admin|
+start
+:1 · Open Manage Users;
+|Coffee Shop System|
+:Show the users\n(Edit and Delete on each row);
+|Admin|
+switch (What next?)
+case ([done])
+  stop
+case ([edit])
+  :2 · Click Edit on a user;
+  |Coffee Shop System|
+  :Show the edit form\n(with the user's details);
+  repeat
+    |Admin|
+    :3 · Change details, role or status, then Save;
+    |Coffee Shop System|
+    :Check the changes;
+  backward :Show the errors;
+  repeat while (Valid?) is ([no]) not ([yes])
+  |Clerk|
+  :Update the account in Clerk;
+  |Coffee Shop System|
+  :Save the user;
+case ([delete])
+  |Admin|
+  :4 · Click Delete on a user, then confirm;
+  |Clerk|
+  :Delete the account in Clerk;
+  |Coffee Shop System|
+  :Mark the user deleted;
+endswitch
+|Coffee Shop System|
+:Show the updated list;
+stop
+
+@enduml

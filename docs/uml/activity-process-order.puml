@@ -1,0 +1,51 @@
+@startuml activity-process-order
+' Process order: the admin moves an order, or its shipping, to the next status.
+' Order: Pending -> Confirmed -> Completed, or Cancelled before it is completed.
+' Shipping: Pending -> Shipping -> Delivered or Returned.
+' The order is closed once it is Completed, Cancelled or Returned.
+
+title Process order
+
+|Admin|
+|Coffee Shop System|
+|Payment gateway|
+|Email service|
+
+|Admin|
+start
+:1 · Open Manage Orders;
+repeat
+  :2 · Open an order;
+  repeat
+    :3 · Pick the next status\n(of the order or its shipping);
+    :4 · Click Update status;
+    |Coffee Shop System|
+    :Check the move\n(allowed from the current status);
+  backward :Show "Not allowed";
+  repeat while (Allowed?) is ([no]) not ([yes])
+  if (New status?) then ([Cancelled or Returned])
+    :Put the items back in stock;
+    if (Paid online?) then ([yes])
+      |Payment gateway|
+      :Refund the payment;
+    else ([no])
+    endif
+  else ([else])
+    if (Delivered, cash on delivery?) then ([yes])
+      :Mark the payment paid;
+    else ([no])
+    endif
+  endif
+  |Coffee Shop System|
+  :Save the new status;
+  fork
+    :Show the new status;
+  fork again
+    |Email service|
+    :Email the customer the new status;
+  end fork
+  |Coffee Shop System|
+repeat while (Order closed?) is ([no]) not ([yes])
+stop
+
+@enduml

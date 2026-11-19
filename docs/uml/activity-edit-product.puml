@@ -1,0 +1,40 @@
+@startuml activity-edit-product
+' Edit or delete a product (Administration module).
+' Deleting archives the product (status ARCHIVED): it is never removed.
+
+title Edit / delete product
+
+|Admin|
+|Coffee Shop System|
+|Image host|
+
+|Admin|
+start
+:1 · Open Manage Products;
+|Coffee Shop System|
+:Show the products;
+|Admin|
+if (What next?) then ([edit])
+  repeat
+    :2 · Change the details, then click Save;
+    |Coffee Shop System|
+    :Check the form\n(fields and images);
+  backward :Show the errors\non the marked fields;
+  repeat while (Valid?) is ([no]) not ([yes])
+  if (New images?) then ([yes])
+    |Image host|
+    :Store the new images;
+  else ([no])
+  endif
+  |Coffee Shop System|
+  :Save the product;
+else ([delete])
+  |Admin|
+  :3 · Click Delete, then confirm;
+  |Coffee Shop System|
+  :Archive the product\n(status ARCHIVED);
+endif
+:Show the updated list;
+stop
+
+@enduml

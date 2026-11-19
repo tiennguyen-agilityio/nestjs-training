@@ -1,0 +1,47 @@
+@startuml activity-manage-shipping-methods
+' Manage shipping methods (Administration module). Add is above the list;
+' Edit, Activate/Deactivate and Delete are on each row. Only ACTIVE
+' methods are offered at checkout. Delete marks the method deleted.
+
+title Manage shipping methods
+
+|Admin|
+|Coffee Shop System|
+
+|Admin|
+start
+:1 · Open Manage Shipping Methods;
+|Coffee Shop System|
+:Show the shipping methods\n(Edit, Activate/Deactivate, Delete);
+|Admin|
+switch (What next?)
+case ([done])
+  stop
+case ([add or edit])
+  :2 · Click Add, or Edit on a method;
+  |Coffee Shop System|
+  :Show the form\n(empty, or the method's details);
+  repeat
+    |Admin|
+    :3 · Enter name, description, price, then click Save;
+    |Coffee Shop System|
+    :Check the form;
+  backward :Show the errors;
+  repeat while (Valid?) is ([no]) not ([yes])
+  :Save the method;
+case ([status])
+  |Admin|
+  :4 · Click Activate or Deactivate;
+  |Coffee Shop System|
+  :Change the status\n(ACTIVE or INACTIVE);
+case ([delete])
+  |Admin|
+  :5 · Click Delete, then confirm;
+  |Coffee Shop System|
+  :Mark the method deleted;
+endswitch
+|Coffee Shop System|
+:Show the updated list;
+stop
+
+@enduml
