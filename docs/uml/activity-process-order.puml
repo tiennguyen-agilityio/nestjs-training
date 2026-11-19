@@ -1,74 +1,51 @@
 @startuml activity-process-order
-' Process order: the admin confirms an order, ships it with GHN or cancels it.
-' Order: Pending -> Confirmed -> Completed, or Cancelled before it leaves.
-' Shipping: Pending -> Shipping -> Delivered or Returned, reported by GHN
-' (activity 20, Update shipping status).
+' Process order: the admin moves an order, or its shipping, to the next status.
+' Order: Pending -> Confirmed -> Completed, or Cancelled before it is completed.
+' Shipping: Pending -> Shipping -> Delivered or Returned.
+' The order is closed once it is Completed, Cancelled or Returned.
 
 title Process order
 
 |Admin|
 |Coffee Shop System|
-|GHN|
 |Payment gateway|
 |Email service|
 
 |Admin|
 start
 :1 · Open Manage Orders;
-|Coffee Shop System|
-:Show the orders;
-|Admin|
-:2 · Open an order;
-|Coffee Shop System|
-:Load the order;
-:Show the order details;
-|Admin|
-switch (What next?)
-case ([done])
-  stop
-case ([confirm])
-  :3 · Click Confirm\n(Pending order);
-  |Coffee Shop System|
-  :Set the order Confirmed;
-  |Email service|
-  :Email the customer\n(order confirmed);
-  stop
-case ([ship])
-  |Admin|
-  :4 · Click Ship with GHN\n(Confirmed order);
-  |Coffee Shop System|
-  :Send the shipment to GHN\n(address, items, COD amount);
-  |GHN|
-  :Create the shipment\n(returns the tracking code);
-  |Coffee Shop System|
-  :Save the tracking number;
-  |Email service|
-  :Email the customer\n(tracking number);
-  stop
-case ([cancel])
-  |Admin|
-  :5 · Click Cancel order, then confirm;
-  |Coffee Shop System|
-  if (Not left with GHN?) then ([no])
-    :Show "Not allowed";
-    stop
-  else ([yes])
-  endif
-  if (Shipment created?) then ([yes])
-    |GHN|
-    :Cancel the shipment;
-  else ([no])
+repeat
+  :2 · Open an order;
+  repeat
+    :3 · Pick the next status\n(of the order or its shipping);
+    :4 · Click Update status;
+    |Coffee Shop System|
+    :Check the move\n(allowed from the current status);
+  backward :Show "Not allowed";
+  repeat while (Allowed?) is ([no]) not ([yes])
+  if (New status?) then ([Cancelled or Returned])
+    :Put the items back in stock;
+    if (Paid online?) then ([yes])
+      |Payment gateway|
+      :Refund the payment;
+    else ([no])
+    endif
+  else ([else])
+    if (Delivered, cash on delivery?) then ([yes])
+      :Mark the payment paid;
+    else ([no])
+    endif
   endif
   |Coffee Shop System|
-  :Set the order Cancelled\n(items back in stock);
-  if (Paid online?) then ([yes])
-    |Payment gateway|
-    :Refund the payment;
-  else ([no])
-  endif
-  |Email service|
-  :Email the customer\n(order cancelled);
-  stop
-endswitch
+  :Save the new status;
+  fork
+    :Show the new status;
+  fork again
+    |Email service|
+    :Email the customer the new status;
+  end fork
+  |Coffee Shop System|
+repeat while (Order closed?) is ([no]) not ([yes])
+stop
 
 @enduml

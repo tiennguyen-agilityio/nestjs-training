@@ -1,13 +1,12 @@
 @startuml activity-checkout
 ' Checkout: from the cart to a valid order form. Signing in is asked here,
-' and the device cart is merged into the user cart. GHN works out the
-' shipping fee. Placing the order is its own activity (Place order).
+' and the device cart is merged into the user cart. Placing the order is
+' its own activity (Place order).
 
 title Checkout
 
 |Customer|
 |Coffee Shop System|
-|GHN|
 
 |Coffee Shop System|
 start
@@ -16,16 +15,12 @@ if (Signed in?) then ([no])
   :Merge the device cart\ninto the user cart;
 else ([yes])
 endif
-:Open the checkout page\n(saved address, delivery methods);
+:Open the checkout page\n(saved address, delivery methods, totals);
 
 |Customer|
 repeat
   :1 · Enter the shipping address\n(name, phone, address, city);
   :2 · Choose a delivery method;
-  |Coffee Shop System|
-  :Ask GHN for the fee\n(address, parcel weight);
-  |GHN|
-  :Calculate the shipping fee;
   |Coffee Shop System|
   :Update the totals\n(shipping fee and tax);
   |Customer|
