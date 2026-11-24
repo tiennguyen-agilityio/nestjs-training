@@ -14,8 +14,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/constants/routes'
 import { useCartStore } from '@/store/useCartStore'
-import type { OrderItem } from '@/types/order'
+import type { PlacedOrderItem } from '@/types/order'
 import { formatPrice } from '@/utils/common'
+import { isPlacedOrder } from '@/utils/order'
 
 const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
 const dayFormatter = new Intl.DateTimeFormat('en-US', { day: '2-digit' })
@@ -25,7 +26,8 @@ const OrderSuccessPageContent = () => {
   const router = useRouter()
   const { itemSnapshots: snapshot, clearItemSnapshots } = useCartStore()
 
-  if (!snapshot) {
+  // A snapshot saved before the page read the API's order is not shown.
+  if (!isPlacedOrder(snapshot)) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center md:px-6">
         <h1 className="text-4xl font-semibold text-on-surface">
@@ -46,30 +48,26 @@ const OrderSuccessPageContent = () => {
   }
 
   const {
-    orderNumber = '',
-    addressSnapshot,
-    shippingMethodName = '',
-    shippingFee = 0,
-    subTotal = 0,
-    totalAmount = 0,
+    orderNumber,
+    recipientName,
+    addressLine,
+    ward,
+    district,
+    city,
+    postalCode,
+    shippingMethodName,
+    shippingFee,
+    subTotal,
+    totalAmount,
     createdAt,
-    items = [],
-    tax = 0,
+    items,
+    tax,
   } = snapshot
 
-  const {
-    firstName = '',
-    lastName = '',
-    addressLine = '',
-    ward = '',
-    city = '',
-    postalCode = '',
-  } = addressSnapshot ?? {}
-  const recipientName =
-    [firstName, lastName].filter(Boolean).join(' ').trim() ?? 'Guest'
-
-  const addressLines = [addressLine, ward, city, postalCode].filter(Boolean)
-  const orderDate = new Date(createdAt ?? new Date().toISOString())
+  const addressLines = [addressLine, ward, district, city, postalCode].filter(
+    Boolean,
+  )
+  const orderDate = new Date(createdAt)
   const monthLabel = monthFormatter.format(orderDate)
   const dayLabel = dayFormatter.format(orderDate)
   const weekdayLabel = weekdayFormatter.format(orderDate).toUpperCase()
@@ -104,7 +102,7 @@ const OrderSuccessPageContent = () => {
             </h2>
           </div>
           <div className="mt-7 space-y-5">
-            {items.map((item: OrderItem) => (
+            {items.map((item: PlacedOrderItem) => (
               <article
                 key={item.id}
                 className="flex items-center justify-between gap-4"
@@ -130,7 +128,7 @@ const OrderSuccessPageContent = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-semibold text-on-surface">
-                    {formatPrice(item.subTotal)}
+                    {formatPrice(item.lineTotal)}
                   </p>
                   <p className="text-xs text-on-surface-variant">
                     Qty: {item.quantity}

@@ -1,6 +1,7 @@
 import { EMPTY_IMAGE } from '@/constants/images'
 import { useCartStore } from '@/store/useCartStore'
 import type { CartItem } from '@/types/cart'
+import type { PlacedOrder } from '@/types/order'
 
 const CART_STORAGE_KEY = 'coffeehub-cart'
 
@@ -114,5 +115,25 @@ describe('useCartStore', () => {
     expect(Object.keys(useCartStore.getState().mergeKeys ?? {})).toEqual([
       JSON.stringify(second),
     ])
+  })
+
+  it('persists a PlacedOrder snapshot', async () => {
+    const order = {
+      id: 'order-1',
+      orderNumber: 'NB-000123',
+      recipientName: 'Ada Lovelace',
+      items: [{ id: 'item-1', lineTotal: 24 }],
+      totalAmount: 26.4,
+    } as PlacedOrder
+
+    useCartStore.getState().setItemSnapshots(order)
+    const saved = localStorage.getItem(CART_STORAGE_KEY) ?? '{}'
+    // setState writes to storage itself, so the saved value is put back after it.
+    useCartStore.setState({ itemSnapshots: null })
+    localStorage.setItem(CART_STORAGE_KEY, saved)
+    await useCartStore.persist.rehydrate()
+
+    expect(JSON.parse(saved).state.itemSnapshots).toEqual(order)
+    expect(useCartStore.getState().itemSnapshots).toEqual(order)
   })
 })

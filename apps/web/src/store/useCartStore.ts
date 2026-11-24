@@ -8,7 +8,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { EMPTY_IMAGE } from '@/constants/images'
 import type { CartAddItemInput, CartItem, CartTotals } from '@/types/cart'
 import { buildCartTotals, clampQuantity } from '@/utils/cart'
-import type { Order } from '@/types/order'
+import type { PlacedOrder } from '@/types/order'
 
 const CART_STORAGE_KEY = 'coffeehub-cart'
 
@@ -39,7 +39,7 @@ interface CartStoreState {
   isLoading: boolean
   isError: boolean
   errorMessage: string | null
-  itemSnapshots: Order | null
+  itemSnapshots: PlacedOrder | null
   mergeKeys: MergeKeys | null
   mergeNotice: string | null
   isMerging: boolean
@@ -47,7 +47,7 @@ interface CartStoreState {
   changeQuantity: (itemId: string, amount: number) => void
   removeItem: (itemId: string) => void
   clearCart: () => void
-  setItemSnapshots: (snapshot: Order) => void
+  setItemSnapshots: (snapshot: PlacedOrder) => void
   clearItemSnapshots: () => void
   refetch: () => void
   /** A chunk unchanged since the last call keeps its key; any other gets a new uuid v4. */

@@ -5,4 +5,7 @@ describe('order constants', () => {
     // Checkout reads the shipping methods from the API instead.
     expect(order).not.toHaveProperty('DELIVERY_SPEED')
   })
+  it('order constants no longer export the ORDERS mock', () => {
+    expect('ORDERS' in order).toBe(false)
+  })
 })

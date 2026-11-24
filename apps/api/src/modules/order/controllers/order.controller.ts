@@ -2,20 +2,33 @@ import {
   applyDecorators,
   Body,
   Controller,
+  Get,
   HttpStatus,
+  Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OrderService } from '../services/order.service.js';
-import { placeOrderSchema, type PlaceOrderInput } from '../dto/order.schema.js';
+import {
+  orderParamSchema,
+  orderQuerySchema,
+  placeOrderSchema,
+  type OrderParam,
+  type OrderQueryInput,
+  type PlaceOrderInput,
+} from '../dto/order.schema.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
+import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
+import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import { AuthGuard } from '../../../common/guards/auth.guard.js';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator.js';
 import { IdempotentCreate } from '../../../common/decorators/idempotent-create.decorator.js';
 import {
   ApiDataResponse,
   ApiErrorResponse,
+  ApiPaginatedResponse,
 } from '../../../common/decorators/api-response.decorator.js';
 import { User } from '../../user/entities/user.entity.js';
 import {
@@ -44,6 +57,45 @@ const ApiAuthErrors = (): MethodDecorator =>
 @ApiBearerAuth()
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
+
+  @Get()
+  @ApiAuthErrors()
+  @ApiOperation({
+    summary: "List the signed-in user's orders",
+    description:
+      'Every role sees only its own orders. Newest first by default; `paymentStatus` filters on the value the rows show.',
+  })
+  @ApiPaginatedResponse(ResponseOrderRowDto)
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    ERROR_MESSAGES.EXCEPTION.VALIDATION_FAILED,
+  )
+  list(
+    @AuthUser() user: User,
+    @Query({ schema: orderQuerySchema }) query: OrderQueryInput,
+  ): Promise<PaginatedResult<ResponseOrderRowDto>> {
+    return this.orderService.findMine(user.id, query);
+  }
+
+  @Get(':idOrOrderNumber')
+  @ApiAuthErrors()
+  @ApiOperation({
+    summary: "Get one of the signed-in user's orders by id or order number",
+    description:
+      "A UUID looks up by id, anything else by orderNumber. Another user's order returns 404.",
+  })
+  @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
+  @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.ORDER.NOT_FOUND, {
+    errCode: ERROR_CODES.ORDER.NOT_FOUND,
+    field: 'idOrOrderNumber',
+    description: ERROR_DESCRIPTIONS.ORDER.NOT_FOUND,
+  })
+  findOne(
+    @AuthUser() user: User,
+    @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
+  ): Promise<ResponseOrderDto> {
+    return this.orderService.findMineOne(user.id, idOrOrderNumber);
+  }
 
   @Post()
   @ApiAuthErrors()

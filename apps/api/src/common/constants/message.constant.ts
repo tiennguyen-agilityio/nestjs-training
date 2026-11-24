@@ -170,7 +170,8 @@ export const ERROR_DESCRIPTIONS = {
     NOT_FOUND: 'The item might have been removed, or the id is incorrect.',
   },
   ORDER: {
-    NOT_FOUND: 'The order might not exist, or it belongs to another user.',
+    NOT_FOUND:
+      'The order might not exist, or the id or order number is incorrect.',
     CART_EMPTY: 'Add an item before checking out.',
     SHIPPING_METHOD_UNAVAILABLE:
       'The method does not exist or is not ACTIVE. Pick another method.',

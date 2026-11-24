@@ -1,3 +1,6 @@
+import type { PlaceOrderPayload } from '@repo/schemas'
+
+import { IDEMPOTENCY } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { API_ROUTES } from '@/constants/routes'
 import { apiClient } from '@/services/api'
@@ -6,10 +9,13 @@ import type {
   Response as ApiResponse,
   ResponseMeta,
 } from '@/types/api'
+import type { OrderStatus } from '@repo/constants'
 import type {
   Order,
-  OrderPayload,
+  OrderDetail,
+  OrderSummary,
   ORDER_STATUS,
+  PlacedOrder,
   SHIPPING_STATUS,
 } from '@/types/order'
 
@@ -33,27 +39,41 @@ const toApiErrorResponse = (input: {
     errors: [],
   }
 
+/**
+ * `POST /orders`: the API places the order from the signed-in user's cart.
+ * The `Idempotency-Key` makes a retry of the same values replay the first result.
+ */
 export async function createOrder(
-  body: OrderPayload,
-  options: { getToken?: () => Promise<string | null> } = {},
+  body: PlaceOrderPayload,
+  options: {
+    getToken?: () => Promise<string | null>
+    idempotencyKey: string
+  },
 ): Promise<
-  { ok: true; order: Order } | { ok: false; error: ApiErrorResponse }
+  | { ok: true; order: PlacedOrder }
+  | {
+      ok: false
+      error: string
+      status?: number
+      errorResponse?: ApiErrorResponse
+    }
 > {
-  const result = await apiClient.post<Order>(API_ROUTES.ORDERS, body, {
-    getToken: options.getToken,
+  const { getToken, idempotencyKey } = options
+  // `post` unwraps the `{ data }` envelope.
+  const result = await apiClient.post<PlacedOrder>(API_ROUTES.ORDERS, body, {
+    getToken,
     fallbackError: API_FALLBACK_ERRORS.ORDER_CREATE,
+    headers: { [IDEMPOTENCY.HEADER]: idempotencyKey },
   })
   if (!result.ok) {
-    return {
-      ok: false,
-      error: toApiErrorResponse(result),
-    }
+    // No status: the request never got an answer (network); the browser's
+    // own message ("Failed to fetch") is not shown to the shopper.
+    return result.status === undefined
+      ? { ...result, error: API_FALLBACK_ERRORS.ORDER_CREATE }
+      : result
   }
 
-  return {
-    ok: true,
-    order: result.data,
-  }
+  return { ok: true, order: result.data }
 }
 
 export async function fetchOrders(
@@ -152,4 +172,52 @@ export async function updateOrderShippingStatus(
   if (!result.ok) return result
 
   return { ok: true }
+}
+
+export interface FetchMyOrdersOptions {
+  getToken: () => Promise<string | null>
+  page?: number
+  limit?: number
+  status?: OrderStatus
+}
+
+/** The signed-in shopper's own orders (`GET /orders`), newest first. */
+export async function fetchMyOrders(
+  options: FetchMyOrdersOptions,
+): Promise<
+  | { ok: true; orders: OrderSummary[]; meta?: ResponseMeta }
+  | { ok: false; error: ApiErrorResponse }
+> {
+  const { getToken, page, limit, status } = options
+  const result = await apiClient.get<ApiResponse<OrderSummary[]>>(
+    API_ROUTES.ORDERS,
+    {
+      getToken,
+      query: { page, limit, status },
+      fallbackError: API_FALLBACK_ERRORS.ORDERS_LOAD,
+    },
+  )
+  if (!result.ok) return { ok: false, error: toApiErrorResponse(result) }
+
+  const { data, meta } = result.data
+  return { ok: true, orders: data, meta }
+}
+
+/** One of the signed-in shopper's orders, by order number. */
+export async function fetchOrderDetail(
+  orderNumber: string,
+  options: { getToken: () => Promise<string | null> },
+): Promise<
+  { ok: true; order: OrderDetail } | { ok: false; error: ApiErrorResponse }
+> {
+  const result = await apiClient.get<ApiResponse<OrderDetail>>(
+    `${API_ROUTES.ORDERS}/${encodeURIComponent(orderNumber)}`,
+    {
+      getToken: options.getToken,
+      fallbackError: API_FALLBACK_ERRORS.ORDER_LOAD,
+    },
+  )
+  if (!result.ok) return { ok: false, error: toApiErrorResponse(result) }
+
+  return { ok: true, order: result.data.data }
 }

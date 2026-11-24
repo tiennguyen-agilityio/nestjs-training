@@ -1,13 +1,33 @@
+import { PaymentMethod } from '@repo/constants'
+import type { PlaceOrderPayload } from '@repo/schemas'
 import { Banknote, Package, Truck } from 'lucide-react'
 
 import type { StatCardItem } from '@/components/StatsCards'
+import { ERROR_MESSAGES } from '@/constants/messages'
 import type { ApiErrorResponse, ErrorDetail, ResponseMeta } from '@/types/api'
-import { ORDER_STATUS, SHIPPING_STATUS, type Order } from '@/types/order'
+import {
+  PAYMENT_METHOD,
+  type CheckoutCardFormValues,
+  type CheckoutFormValues,
+} from '@/types/checkout'
+import {
+  ORDER_STATUS,
+  SHIPPING_STATUS,
+  type Order,
+  type PlacedOrder,
+} from '@/types/order'
+
+import {
+  OrderPaymentStatus,
+  type OrderStatus,
+  type ShippingStatus,
+} from '@repo/constants'
 
 import { formatPrice } from './common'
 
 export function formatOrderCustomerName(order: Order): string {
-  const { firstName, lastName } = order.addressSnapshot
+  // A `GET /orders` list row (OROW) has no addressSnapshot.
+  const { firstName, lastName } = order.addressSnapshot ?? {}
   const full = [firstName, lastName].map((s) => s?.trim()).filter(Boolean)
   return full.length > 0 ? full.join(' ') : '—'
 }
@@ -22,7 +42,21 @@ export function formatOrderListDate(iso: string): string {
   }).format(d)
 }
 
-export function getOrderStatusPresentation(status: ORDER_STATUS): {
+/** Day, short month and time, e.g. "17 Nov, 16:00". */
+export function formatOrderDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d)
+}
+
+export function getOrderStatusPresentation(
+  status: ORDER_STATUS | OrderStatus,
+): {
   label: string
   badgeClassName: string
 } {
@@ -58,7 +92,9 @@ export function getOrderStatusPresentation(status: ORDER_STATUS): {
   }
 }
 
-export function getShippingStatusPresentation(status: SHIPPING_STATUS): {
+export function getShippingStatusPresentation(
+  status: SHIPPING_STATUS | ShippingStatus,
+): {
   label: string
   badgeClassName: string
 } {
@@ -93,6 +129,49 @@ export function getShippingStatusPresentation(status: SHIPPING_STATUS): {
         badgeClassName: 'bg-muted text-muted-foreground',
       }
   }
+}
+
+const PAYMENT_STATUS_PRESENTATION: Record<
+  OrderPaymentStatus,
+  { label: string; badgeClassName: string }
+> = {
+  [OrderPaymentStatus.UNPAID]: {
+    label: 'Unpaid',
+    badgeClassName: 'bg-muted text-muted-foreground',
+  },
+  [OrderPaymentStatus.PENDING]: {
+    label: 'Pending',
+    badgeClassName:
+      'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200',
+  },
+  [OrderPaymentStatus.PAID]: {
+    label: 'Paid',
+    badgeClassName:
+      'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',
+  },
+  [OrderPaymentStatus.FAILED]: {
+    label: 'Failed',
+    badgeClassName:
+      'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200',
+  },
+  [OrderPaymentStatus.PARTIALLY_REFUNDED]: {
+    label: 'Partially refunded',
+    badgeClassName:
+      'bg-orange-100 text-orange-900 dark:bg-orange-950/40 dark:text-orange-200',
+  },
+  [OrderPaymentStatus.REFUNDED]: {
+    label: 'Refunded',
+    badgeClassName:
+      'bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200',
+  },
+}
+
+/** Badge label and colours of an order's payment status. */
+export function getPaymentStatusPresentation(status: OrderPaymentStatus): {
+  label: string
+  badgeClassName: string
+} {
+  return PAYMENT_STATUS_PRESENTATION[status]
 }
 
 export function buildOrderDashboardStats(
@@ -152,9 +231,46 @@ export function buildOrderDashboardStats(
   ]
 }
 
-// --- Place-order API: line errors keyed to cart rows (checkout) ---
+// --- Place-order API: payload and line errors keyed to cart rows (checkout) ---
 
-const ITEM_FIELD_PATTERN = /^items\[(\d+)]/
+/** The `errCode`s `POST /orders` answers with (400, nothing saved). */
+export const PLACE_ORDER_ERR_CODES = {
+  CART_EMPTY: 'cartEmpty',
+  SHIPPING_METHOD_UNAVAILABLE: 'shippingMethodUnavailable',
+  ITEM_UNAVAILABLE: 'itemUnavailable',
+  OUT_OF_STOCK: 'outOfStock',
+} as const
+
+const API_PAYMENT_METHOD: Record<PAYMENT_METHOD, PaymentMethod> = {
+  [PAYMENT_METHOD.STRIPE]: PaymentMethod.CARD,
+  [PAYMENT_METHOD.PAYPAL]: PaymentMethod.PAYPAL,
+  [PAYMENT_METHOD.COD]: PaymentMethod.COD,
+}
+
+/** The `POST /orders` body: the API takes the lines from the server cart. */
+export const buildPlaceOrderPayload = (
+  // The card fields are not sent (online payment is #33).
+  values: Omit<CheckoutFormValues, keyof CheckoutCardFormValues>,
+  shippingMethodId: string,
+): PlaceOrderPayload => ({
+  shippingMethodId,
+  paymentMethod: API_PAYMENT_METHOD[values.paymentMethod],
+  recipientName: [values.firstName.trim(), values.lastName.trim()]
+    .filter(Boolean)
+    .join(' '),
+  recipientPhone: values.phoneNumber.trim(),
+  addressLine: values.addressLine.trim(),
+  ward: values.ward.trim(),
+  district: values.district.trim(),
+  city: values.city.trim(),
+  postalCode: values.postalCode.trim(),
+})
+
+/** `items[<i>]…` (older format) or the API's `items.<i>.productVariantId`. */
+const ITEM_FIELD_PATTERN = /^items(?:\[(\d+)]|\.(\d+))/
+
+const itemIndexOf = (match: RegExpExecArray): number =>
+  Number.parseInt(match[1] ?? match[2] ?? '', 10)
 
 type ItemFieldErrorWithLineContext = ErrorDetail & {
   submitLineId?: string
@@ -185,7 +301,7 @@ export const tagItemErrorsWithLineRefs = (
       return error
     }
 
-    const apiIndex = Number.parseInt(match[1] ?? '', 10)
+    const apiIndex = itemIndexOf(match)
     if (
       !Number.isFinite(apiIndex) ||
       apiIndex < 0 ||
@@ -231,15 +347,13 @@ export const mapItemFieldErrorsToLineMessages = (
       continue
     }
 
-    const apiIndex = Number.parseInt(match[1] ?? '', 10)
+    const apiIndex = itemIndexOf(match)
     if (!Number.isFinite(apiIndex)) {
       continue
     }
 
-    const message = error.message ?? error.description
-    if (!message) {
-      continue
-    }
+    // The shopper sees the API's `description`, never its developer `message`.
+    const message = error.description ?? ERROR_MESSAGES.ORDER_LINE_ERROR
 
     const row = error as ItemFieldErrorWithLineContext
     if (row.submitLineId !== undefined) {
@@ -309,4 +423,19 @@ export const omitSubmitErrorsForRemovedLine = (
     ...response,
     errors: filtered,
   }
+}
+
+/**
+ * True for the API's order (`POST /orders`); false for an Order success
+ * snapshot saved in the browser before the page read the API's order.
+ */
+export const isPlacedOrder = (value: unknown): value is PlacedOrder => {
+  if (!value || typeof value !== 'object') return false
+  const order = value as Partial<PlacedOrder>
+  return (
+    typeof order.orderNumber === 'string' &&
+    typeof order.recipientName === 'string' &&
+    Array.isArray(order.items) &&
+    order.items.every((item) => typeof item?.lineTotal === 'number')
+  )
 }

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import type { Mock } from 'vitest';
 import {
   DiscountType,
+  OrderStatus,
   PaymentMethod,
   ProductStatus,
   ProductUnit,
@@ -13,11 +14,13 @@ import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
+import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
 import type { PlaceOrderInput } from '../dto/order.schema.js';
 import type { Cart } from '../../cart/entities/cart.entity.js';
 import type { Order } from '../entities/order.entity.js';
 import {
   type DomainException,
+  ItemNotFoundException,
   ValidationException,
 } from '../../../common/exceptions/base.exception.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
@@ -102,7 +105,11 @@ const method = (overrides: Record<string, unknown> = {}) => ({
 describe('OrderService', () => {
   let service: OrderService;
   let orderRepository: Record<
-    'transactional' | 'create' | 'existsByNumber',
+    | 'transactional'
+    | 'create'
+    | 'existsByNumber'
+    | 'findMine'
+    | 'findMineByIdOrNumber',
     Mock
   >;
   let cartService: Record<'lockForCheckout' | 'clearItems', Mock>;
@@ -127,6 +134,8 @@ describe('OrderService', () => {
       transactional: vi.fn((work: () => Promise<unknown>) => work()),
       create: vi.fn().mockResolvedValue(created),
       existsByNumber: vi.fn().mockResolvedValue(false),
+      findMine: vi.fn(),
+      findMineByIdOrNumber: vi.fn(),
     };
     cartService = {
       lockForCheckout: vi.fn().mockResolvedValue(cartWith(lineOf())),
@@ -448,5 +457,71 @@ describe('OrderService', () => {
     );
     expect(fromEntity).toHaveBeenCalledWith(created);
     expect(orderRepository.transactional).toHaveBeenCalledTimes(1);
+  });
+
+  describe('findMine', () => {
+    it('maps the page through ResponseOrderRowDto', async () => {
+      const order = { id: 'order-1' } as Order;
+      const row = { id: 'order-1' } as ResponseOrderRowDto;
+      const meta = { limit: 10, currentPage: 1, pageCount: 1, totalCount: 1 };
+      orderRepository.findMine.mockResolvedValue({ data: [order], meta });
+      const rowOf = vi
+        .spyOn(ResponseOrderRowDto, 'fromEntity')
+        .mockReturnValue(row);
+
+      const result = await service.findMine(USER_ID, {
+        page: 1,
+        limit: 10,
+        status: OrderStatus.PENDING,
+        sort: 'createdAt',
+        order: 'DESC',
+      });
+
+      expect(result).toEqual({ data: [row], meta });
+      expect(rowOf).toHaveBeenCalledWith(order);
+      expect(orderRepository.findMine).toHaveBeenCalledWith(
+        USER_ID,
+        { page: 1, limit: 10 },
+        { status: OrderStatus.PENDING, sort: 'createdAt', order: 'DESC' },
+      );
+    });
+  });
+
+  describe('findMineOne', () => {
+    const ORDER_ID = '8b0c6f2e-4d1a-4c3b-9e5f-6a7b8c9d0e1f';
+
+    it('looks up by id for a UUID and by orderNumber otherwise', async () => {
+      const order = { id: ORDER_ID } as Order;
+      orderRepository.findMineByIdOrNumber.mockResolvedValue(order);
+
+      await expect(service.findMineOne(USER_ID, ORDER_ID)).resolves.toBe(
+        response,
+      );
+      await service.findMineOne(USER_ID, 'CH-261124-0001');
+
+      expect(orderRepository.findMineByIdOrNumber).toHaveBeenNthCalledWith(
+        1,
+        USER_ID,
+        { id: ORDER_ID },
+      );
+      expect(orderRepository.findMineByIdOrNumber).toHaveBeenNthCalledWith(
+        2,
+        USER_ID,
+        { orderNumber: 'CH-261124-0001' },
+      );
+      expect(fromEntity).toHaveBeenCalledWith(order);
+    });
+
+    it('throws ItemNotFoundException when nothing matches', async () => {
+      orderRepository.findMineByIdOrNumber.mockResolvedValue(null);
+
+      const error = await errorOf(service.findMineOne(USER_ID, 'CH-0'));
+
+      expect(error).toBeInstanceOf(ItemNotFoundException);
+      expect(error.getErrors()[0]).toMatchObject({
+        errCode: ERROR_CODES.ORDER.NOT_FOUND,
+        field: 'idOrOrderNumber',
+      });
+    });
   });
 });

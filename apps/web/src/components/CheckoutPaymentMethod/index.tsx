@@ -60,9 +60,11 @@ export const CheckoutPaymentMethod = ({
             aria-checked={isActive}
             className={cn(
               'h-auto min-h-19 flex-col rounded-3xl border px-4 py-4 text-sm',
+              // The outline variant carries dark: colours of its own, so both
+              // states set theirs too, or dark mode shows them identical.
               isActive
-                ? 'border-primary bg-surface-container text-on-surface'
-                : 'border-outline-variant bg-surface-container-low text-on-surface-variant',
+                ? 'border-primary bg-surface-container text-on-surface dark:border-primary dark:bg-surface-container-high dark:text-on-surface'
+                : 'border-outline-variant bg-surface-container-low text-on-surface-variant dark:border-border dark:bg-surface-container dark:text-on-surface-variant',
             )}
           >
             <Icon className="size-5" aria-hidden />

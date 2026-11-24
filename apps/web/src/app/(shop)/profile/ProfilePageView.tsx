@@ -1,47 +1,64 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Coffee, Pencil } from 'lucide-react'
 import { useUser as useClerkUser } from '@clerk/nextjs'
+import { OrderStatus } from '@repo/constants'
 
 // Types
 import type { ClerkUser } from '@/types/user'
 
 // Constants
 import { DEFAULT_AVATAR } from '@/constants/images'
+import { ROUTES, profileOrderPath } from '@/constants/routes'
+import { API_FALLBACK_ERRORS } from '@/constants/messages'
+import {
+  ALL_ORDER_STATUSES_VALUE,
+  ORDER_STATUS_FILTER_OPTIONS,
+  ORDERS_HISTORY_TABLE_COLUMNS,
+} from '@/constants/order'
 
 // Hooks
 import { useAuth } from '@/hooks/useAuth'
+import { useMyOrders } from '@/hooks/useOrder'
 
 // Utils
 import { resolveProfilePresentation } from '@/utils/api'
 
 // Components
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Avatar } from '@/components/Avatar'
 import { EditProfileForm } from '@/sections/EditProfileForm'
+import Table from '@/components/Table'
+import Loading from '@/components/Loading'
+import { Select } from '@/components/Select'
+import { PaginationBar } from '@/components/Pagination'
+import { ProfileOrderTableRow } from '@/sections/ProfileOrderTableRow'
 import { ProfileAccountDialogs } from './ProfileAccountDialogs'
 
-// Order history is disabled: order feature not implemented on backend yet
-// import { useState } from 'react'
-// import { Filter } from 'lucide-react'
-// import { type Order } from '@/types/order'
-// import { ORDERS_HISTORY_TABLE_COLUMNS } from '@/constants/order'
-// import { useOrders } from '@/hooks/useOrder'
-// import Table from '@/components/Table'
-// import { OrderDetailModal } from '@/sections/OrderDetailModal'
-// import { ProfileOrderTableRow } from '@/sections/ProfileOrderTableRow/index'
-// import Loading from '@/components/Loading'
+const ORDER_STATUS_VALUES = new Set<string>(Object.values(OrderStatus))
+
+const toOrderStatus = (value: unknown): OrderStatus | undefined =>
+  typeof value === 'string' && ORDER_STATUS_VALUES.has(value)
+    ? (value as OrderStatus)
+    : undefined
 
 export function ProfilePageView() {
   const { user: apiUser, error, isSignedIn, isAuthLoaded } = useAuth()
   const { user: clerkUser, isLoaded: clerkLoaded } = useClerkUser()
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
-  // const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  // const { orders, isLoading, isError, errorMessage, refetch } = useOrders({
-  //   page: 1,
-  //   limit: 10,
-  // })
+  const [page, setPage] = useState(1)
+  const [status, setStatus] = useState<OrderStatus | undefined>(undefined)
+  const router = useRouter()
+  const { orders, meta, isLoading, isError, errorMessage, refetch } =
+    useMyOrders(status ? { page, status } : { page })
+
+  const handleStatusChange = (value: unknown) => {
+    setStatus(toOrderStatus(value))
+    setPage(1)
+  }
 
   const { displayName, email, imageSrc } = resolveProfilePresentation(
     apiUser,
@@ -52,17 +69,6 @@ export function ProfilePageView() {
   return (
     <div className="bg-background text-on-background">
       <div className="mx-auto max-w-7xl px-8 pb-24 pt-16 md:pt-20">
-        {/* Order history is disabled: order feature not implemented on backend yet */}
-        {/* <OrderDetailModal
-          order={selectedOrder}
-          open={selectedOrder !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setSelectedOrder(null)
-            }
-          }}
-        /> */}
-
         <section className="mb-16 grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="flex flex-col items-center gap-12 rounded-xl bg-surface-container-low p-8 md:flex-row md:items-start md:p-12 lg:col-span-8">
             <div className="relative shrink-0">
@@ -153,32 +159,31 @@ export function ProfilePageView() {
           onOpenChange={setIsEditProfileOpen}
         />
 
-        {/* Order history is disabled: order feature not implemented on backend yet */}
-        {/* <section className="space-y-8">
+        <section className="space-y-8">
           <div className="flex items-center justify-between gap-4">
             <h2 className="font-headline text-3xl text-on-surface">
               Order History
             </h2>
-            <Button
-              disabled
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="w-auto gap-2 rounded-full border-0 bg-surface-container-low px-4 py-2 font-sans text-sm font-normal text-on-surface-variant hover:bg-surface-container-low/80"
-            >
-              <Filter className="size-4" aria-hidden />
-              Filter
-            </Button>
+            <div className="w-56">
+              <Select
+                ariaLabel="Filter by order status"
+                options={ORDER_STATUS_FILTER_OPTIONS}
+                selected={status ?? ALL_ORDER_STATUSES_VALUE}
+                onValueChange={handleStatusChange}
+              />
+            </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl bg-surface-container-lowest">
+          <div className="overflow-x-auto rounded-xl bg-surface-container-lowest">
             {isLoading ? (
               <Loading size="lg" label="Loading orders" />
             ) : isError ? (
               <div className="px-8 py-8 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <p className="text-sm text-destructive" role="alert">
-                    {errorMessage ?? 'Unable to load order history.'}
+                    {errorMessage?.trim()
+                      ? errorMessage
+                      : API_FALLBACK_ERRORS.ORDERS_LOAD}
                   </p>
                   <Button
                     type="button"
@@ -190,6 +195,13 @@ export function ProfilePageView() {
                   </Button>
                 </div>
               </div>
+            ) : orders.length === 0 && !status ? (
+              <div className="flex flex-col items-center gap-4 px-8 py-12 text-center text-on-surface-variant">
+                <p>No orders yet.</p>
+                <Link href={ROUTES.ROASTS} className={buttonVariants()}>
+                  Find your first bag
+                </Link>
+              </div>
             ) : (
               <Table
                 columns={ORDERS_HISTORY_TABLE_COLUMNS}
@@ -198,17 +210,33 @@ export function ProfilePageView() {
                 renderRow={(order) => (
                   <ProfileOrderTableRow
                     order={order}
-                    onRequestView={(nextOrder) => setSelectedOrder(nextOrder)}
+                    onOpen={(nextOrder) =>
+                      router.push(profileOrderPath(nextOrder.orderNumber))
+                    }
                   />
                 )}
                 emptyMessage="No orders found."
                 tableClassName="w-full border-collapse text-left"
+                resolveRowClassName={() =>
+                  'cursor-pointer hover:bg-surface-container-low'
+                }
                 headerClassName="bg-surface-container-low"
                 emptyRowClassName="px-8 py-8 text-center text-on-surface-variant"
               />
             )}
           </div>
-        </section> */}
+
+          {meta && meta.pageCount > 1 && (
+            <PaginationBar
+              currentPage={page}
+              totalPages={meta.pageCount}
+              onPageChange={setPage}
+              showingCount={orders.length}
+              totalCount={meta.totalCount}
+              entityLabel="orders"
+            />
+          )}
+        </section>
       </div>
     </div>
   )

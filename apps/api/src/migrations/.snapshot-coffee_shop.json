@@ -1,8 +1,6 @@
 {
   "name": "public",
-  "namespaces": [
-    "public"
-  ],
+  "namespaces": ["public"],
   "tables": [
     {
       "name": "cart_items",
@@ -130,10 +128,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "cart_id",
-            "product_variant_id"
-          ],
+          "columnNames": ["cart_id", "product_variant_id"],
           "composite": true,
           "constraint": true,
           "keyName": "cart_items_cart_id_product_variant_id_unique",
@@ -141,9 +136,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "cart_items_pkey",
@@ -161,27 +154,19 @@
       "triggers": [],
       "foreignKeys": {
         "cart_items_cart_id_foreign": {
-          "columnNames": [
-            "cart_id"
-          ],
+          "columnNames": ["cart_id"],
           "constraintName": "cart_items_cart_id_foreign",
           "localTableName": "public.cart_items",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.carts",
           "updateRule": "cascade",
           "deleteRule": "cascade"
         },
         "cart_items_product_variant_id_foreign": {
-          "columnNames": [
-            "product_variant_id"
-          ],
+          "columnNames": ["product_variant_id"],
           "constraintName": "cart_items_product_variant_id_foreign",
           "localTableName": "public.cart_items",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.product_variants",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -281,9 +266,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "carts_pkey",
@@ -291,9 +274,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "composite": false,
           "constraint": true,
           "keyName": "carts_user_id_unique",
@@ -305,14 +286,10 @@
       "triggers": [],
       "foreignKeys": {
         "carts_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "constraintName": "carts_user_id_foreign",
           "localTableName": "public.carts",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.users",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -480,9 +457,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "name"
-          ],
+          "columnNames": ["name"],
           "composite": false,
           "constraint": true,
           "keyName": "categories_name_unique",
@@ -490,9 +465,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "categories_pkey",
@@ -614,9 +587,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "expires_at"
-          ],
+          "columnNames": ["expires_at"],
           "composite": false,
           "constraint": false,
           "keyName": "idempotency_keys_expires_at_index",
@@ -624,9 +595,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "key_hash"
-          ],
+          "columnNames": ["key_hash"],
           "composite": false,
           "constraint": true,
           "keyName": "idempotency_keys_pkey",
@@ -776,21 +745,13 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "RESERVE",
-            "RELEASE",
-            "SALE",
-            "RESTOCK",
-            "ADJUSTMENT"
-          ],
+          "enumItems": ["RESERVE", "RELEASE", "SALE", "RESTOCK", "ADJUSTMENT"],
           "mappedType": "enum"
         }
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "inventory_movements_pkey",
@@ -809,26 +770,18 @@
       "triggers": [],
       "foreignKeys": {
         "inventory_movements_order_id_foreign": {
-          "columnNames": [
-            "order_id"
-          ],
+          "columnNames": ["order_id"],
           "constraintName": "inventory_movements_order_id_foreign",
           "localTableName": "public.inventory_movements",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.orders",
           "deleteRule": "restrict"
         },
         "inventory_movements_product_variant_id_foreign": {
-          "columnNames": [
-            "product_variant_id"
-          ],
+          "columnNames": ["product_variant_id"],
           "constraintName": "inventory_movements_product_variant_id_foreign",
           "localTableName": "public.inventory_movements",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.product_variants",
           "deleteRule": "restrict"
         }
@@ -995,10 +948,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "order_id",
-            "product_variant_id"
-          ],
+          "columnNames": ["order_id", "product_variant_id"],
           "composite": true,
           "constraint": true,
           "keyName": "order_items_order_id_product_variant_id_unique",
@@ -1006,9 +956,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "order_items_pkey",
@@ -1026,26 +974,18 @@
       "triggers": [],
       "foreignKeys": {
         "order_items_order_id_foreign": {
-          "columnNames": [
-            "order_id"
-          ],
+          "columnNames": ["order_id"],
           "constraintName": "order_items_order_id_foreign",
           "localTableName": "public.order_items",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.orders",
           "deleteRule": "restrict"
         },
         "order_items_product_variant_id_foreign": {
-          "columnNames": [
-            "product_variant_id"
-          ],
+          "columnNames": ["product_variant_id"],
           "constraintName": "order_items_product_variant_id_foreign",
           "localTableName": "public.order_items",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.product_variants",
           "deleteRule": "restrict"
         }
@@ -1359,12 +1299,7 @@
           "default": "'PENDING'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "PENDING",
-            "SHIPPING",
-            "DELIVERED",
-            "RETURNED"
-          ],
+          "enumItems": ["PENDING", "SHIPPING", "DELIVERED", "RETURNED"],
           "mappedType": "enum"
         },
         "status": {
@@ -1381,12 +1316,7 @@
           "default": "'PENDING'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "PENDING",
-            "CONFIRMED",
-            "COMPLETED",
-            "CANCELLED"
-          ],
+          "enumItems": ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"],
           "mappedType": "enum"
         },
         "tax": {
@@ -1494,9 +1424,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "order_number"
-          ],
+          "columnNames": ["order_number"],
           "composite": false,
           "constraint": true,
           "keyName": "orders_order_number_unique",
@@ -1504,9 +1432,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "orders_pkey",
@@ -1531,26 +1457,18 @@
       "triggers": [],
       "foreignKeys": {
         "orders_shipping_method_id_foreign": {
-          "columnNames": [
-            "shipping_method_id"
-          ],
+          "columnNames": ["shipping_method_id"],
           "constraintName": "orders_shipping_method_id_foreign",
           "localTableName": "public.orders",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.shipping_methods",
           "deleteRule": "restrict"
         },
         "orders_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "constraintName": "orders_user_id_foreign",
           "localTableName": "public.orders",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.users",
           "deleteRule": "restrict"
         }
@@ -1745,11 +1663,7 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "COD",
-            "CARD",
-            "PAYPAL"
-          ],
+          "enumItems": ["COD", "CARD", "PAYPAL"],
           "mappedType": "enum"
         },
         "order_id": {
@@ -1783,11 +1697,7 @@
           "default": "'PENDING'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "PENDING",
-            "PAID",
-            "FAILED"
-          ],
+          "enumItems": ["PENDING", "PAID", "FAILED"],
           "mappedType": "enum"
         },
         "transaction_id": {
@@ -1821,10 +1731,7 @@
           "default": "'CHARGE'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "CHARGE",
-            "REFUND"
-          ],
+          "enumItems": ["CHARGE", "REFUND"],
           "mappedType": "enum"
         },
         "updated_at": {
@@ -1873,10 +1780,7 @@
           "expression": "create unique index \"payments_checkout_session_id_unique\" on \"payments\" (\"checkout_session_id\") where \"checkout_session_id\" is not null;"
         },
         {
-          "columnNames": [
-            "order_id",
-            "created_at"
-          ],
+          "columnNames": ["order_id", "created_at"],
           "composite": true,
           "constraint": false,
           "keyName": "payments_order_id_created_at_index",
@@ -1902,9 +1806,7 @@
           "expression": "create unique index \"payments_order_id_pending_charge_unique\" on \"payments\" (\"order_id\") where \"type\" = 'CHARGE' and \"status\" = 'PENDING';"
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "payments_pkey",
@@ -1949,14 +1851,10 @@
       "triggers": [],
       "foreignKeys": {
         "payments_order_id_foreign": {
-          "columnNames": [
-            "order_id"
-          ],
+          "columnNames": ["order_id"],
           "constraintName": "payments_order_id_foreign",
           "localTableName": "public.payments",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.orders",
           "deleteRule": "restrict"
         }
@@ -2157,9 +2055,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "product_images_pkey",
@@ -2167,10 +2063,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "product_id",
-            "sort_order"
-          ],
+          "columnNames": ["product_id", "sort_order"],
           "composite": true,
           "constraint": true,
           "keyName": "product_images_product_id_sort_order_unique",
@@ -2183,14 +2076,10 @@
       "triggers": [],
       "foreignKeys": {
         "product_images_product_id_foreign": {
-          "columnNames": [
-            "product_id"
-          ],
+          "columnNames": ["product_id"],
           "constraintName": "product_images_product_id_foreign",
           "localTableName": "public.product_images",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.products",
           "updateRule": "cascade"
         }
@@ -2283,10 +2172,7 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "PERCENT",
-            "FIXED"
-          ],
+          "enumItems": ["PERCENT", "FIXED"],
           "mappedType": "enum"
         },
         "discount_value": {
@@ -2439,12 +2325,7 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "KG",
-            "G",
-            "ML",
-            "L"
-          ],
+          "enumItems": ["KG", "G", "ML", "L"],
           "mappedType": "enum"
         },
         "updated_at": {
@@ -2484,9 +2365,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "product_variants_pkey",
@@ -2494,9 +2373,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "sku"
-          ],
+          "columnNames": ["sku"],
           "composite": false,
           "constraint": true,
           "keyName": "product_variants_sku_unique",
@@ -2531,14 +2408,10 @@
       "triggers": [],
       "foreignKeys": {
         "product_variants_product_id_foreign": {
-          "columnNames": [
-            "product_id"
-          ],
+          "columnNames": ["product_id"],
           "constraintName": "product_variants_product_id_foreign",
           "localTableName": "public.product_variants",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.products",
           "updateRule": "cascade"
         }
@@ -2767,11 +2640,7 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "LIGHT",
-            "MEDIUM",
-            "DARK"
-          ],
+          "enumItems": ["LIGHT", "MEDIUM", "DARK"],
           "mappedType": "enum"
         },
         "slug": {
@@ -2805,12 +2674,7 @@
           "default": "'DRAFT'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "DRAFT",
-            "ACTIVE",
-            "INACTIVE",
-            "ARCHIVED"
-          ],
+          "enumItems": ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"],
           "mappedType": "enum"
         },
         "tasting_notes": {
@@ -2867,9 +2731,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "name"
-          ],
+          "columnNames": ["name"],
           "composite": false,
           "constraint": true,
           "keyName": "products_name_unique",
@@ -2877,9 +2739,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "products_pkey",
@@ -2904,14 +2764,10 @@
       "triggers": [],
       "foreignKeys": {
         "products_category_id_foreign": {
-          "columnNames": [
-            "category_id"
-          ],
+          "columnNames": ["category_id"],
           "constraintName": "products_category_id_foreign",
           "localTableName": "public.products",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.categories",
           "updateRule": "cascade"
         }
@@ -3072,10 +2928,7 @@
           "default": "'ACTIVE'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "ACTIVE",
-            "INACTIVE"
-          ],
+          "enumItems": ["ACTIVE", "INACTIVE"],
           "mappedType": "enum"
         },
         "updated_at": {
@@ -3124,9 +2977,7 @@
           "expression": "create unique index \"shipping_methods_name_lower_unique\" on \"shipping_methods\" (lower(\"name\"));"
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "shipping_methods_pkey",
@@ -3351,10 +3202,7 @@
           "default": "'USER'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "ADMIN",
-            "USER"
-          ],
+          "enumItems": ["ADMIN", "USER"],
           "mappedType": "enum"
         },
         "status": {
@@ -3371,10 +3219,7 @@
           "default": "'ACTIVE'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "ACTIVE",
-            "INACTIVE"
-          ],
+          "enumItems": ["ACTIVE", "INACTIVE"],
           "mappedType": "enum"
         },
         "updated_at": {
@@ -3414,9 +3259,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "clerk_id"
-          ],
+          "columnNames": ["clerk_id"],
           "composite": false,
           "constraint": true,
           "keyName": "users_clerk_id_unique",
@@ -3424,9 +3267,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "email"
-          ],
+          "columnNames": ["email"],
           "composite": false,
           "constraint": true,
           "keyName": "users_email_unique",
@@ -3434,9 +3275,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "users_pkey",
@@ -3548,11 +3387,7 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "CLERK",
-            "STRIPE",
-            "PAYPAL"
-          ],
+          "enumItems": ["CLERK", "STRIPE", "PAYPAL"],
           "mappedType": "enum"
         },
         "status": {
@@ -3569,10 +3404,7 @@
           "default": "'PROCESSED'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "PROCESSED",
-            "IGNORED"
-          ],
+          "enumItems": ["PROCESSED", "IGNORED"],
           "mappedType": "enum"
         },
         "type": {
@@ -3612,9 +3444,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "webhook_events_pkey",
@@ -3622,10 +3452,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "provider",
-            "event_id"
-          ],
+          "columnNames": ["provider", "event_id"],
           "composite": true,
           "constraint": true,
           "keyName": "webhook_events_provider_event_id_unique",

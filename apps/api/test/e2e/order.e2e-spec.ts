@@ -50,6 +50,28 @@ interface ErrorBody {
   errors: { errCode: string; field: string; message: string }[];
 }
 
+interface RowBody {
+  id: string;
+  orderNumber: string;
+  customer: { firstName: string; lastName: string; email: string };
+  status: string;
+  shippingStatus: string;
+  paymentStatus: string;
+  paymentMethod: string | null;
+  itemCount: number;
+  totalAmount: number;
+}
+
+interface ListBody {
+  data: RowBody[];
+  meta: {
+    limit: number;
+    currentPage: number;
+    pageCount: number;
+    totalCount: number;
+  };
+}
+
 describe('OrderController (e2e)', () => {
   let app: INestApplication<App>;
   let orm: MikroORM;
@@ -444,5 +466,268 @@ describe('OrderController (e2e)', () => {
     const methodId = await createMethod();
 
     await place(methodId).expect(401);
+  });
+
+  describe('GET /orders', () => {
+    const list = (query = '') =>
+      request(app.getHttpServer()).get(`${ORDERS}${query}`);
+
+    const ids = (response: { body: unknown }): string[] =>
+      (response.body as ListBody).data.map((row) => row.id);
+
+    /** Places one COD order for the signed-in user, with `quantity` units. */
+    const placeOne = async (
+      methodId: string,
+      quantity = 1,
+    ): Promise<OrderBody> => {
+      const { variantId } = await createProduct(10);
+      await addToCart(variantId, quantity);
+      return orderOf(await place(methodId).expect(201));
+    };
+
+    const setCharge = (
+      orderId: string,
+      method: string,
+      status: string,
+      minutesAgo = 0,
+    ) =>
+      execute(
+        `update payments set method = ?, status = ?, created_at = now() - (? * interval '1 minute') where order_id = ? and type = 'CHARGE'`,
+        [method, status, minutesAgo, orderId],
+      );
+
+    const addPayment = (
+      orderId: string,
+      type: string,
+      method: string,
+      status: string,
+      amount: number,
+      checkoutSessionId: string | null = null,
+    ) =>
+      execute(
+        `insert into payments (id, created_at, updated_at, order_id, type, method, status, amount, checkout_session_id) values (gen_random_uuid(), now() + interval '1 minute', now(), ?, ?, ?, ?, ?, ?)`,
+        [orderId, type, method, status, amount, checkoutSessionId],
+      );
+
+    it("GET /orders lists only the caller's orders, newest first (AC1)", async () => {
+      const methodId = await createMethod();
+      const u1 = await createUser();
+      const u2 = await createUser();
+
+      signIn(u1.clerkId);
+      const o1 = await placeOne(methodId, 2);
+      const o2 = await placeOne(methodId, 2);
+      signIn(u2.clerkId);
+      const o3 = await placeOne(methodId);
+
+      signIn(u1.clerkId);
+      const response = await list().expect(200);
+
+      expect(ids(response)).toEqual([o2.id, o1.id]);
+      expect(ids(response)).not.toContain(o3.id);
+      const [row] = (response.body as ListBody).data;
+      expect(row).toMatchObject({
+        orderNumber: o2.orderNumber,
+        customer: {
+          firstName: 'Order',
+          lastName: 'Shopper',
+          email: `${u1.clerkId}@example.com`,
+        },
+        itemCount: 2,
+        paymentMethod: 'COD',
+        paymentStatus: 'UNPAID',
+        totalAmount: o2.totalAmount,
+      });
+    });
+
+    it('GET /orders pages with meta', async () => {
+      const methodId = await createMethod();
+      const user = await createUser();
+      signIn(user.clerkId);
+      const oldest = await placeOne(methodId);
+      await placeOne(methodId);
+      await placeOne(methodId);
+
+      const first = await list('?limit=2').expect(200);
+      expect((first.body as ListBody).data).toHaveLength(2);
+      expect((first.body as ListBody).meta).toEqual({
+        limit: 2,
+        currentPage: 1,
+        pageCount: 2,
+        totalCount: 3,
+      });
+
+      const second = await list('?limit=2&page=2').expect(200);
+      expect(ids(second)).toEqual([oldest.id]);
+    });
+
+    it('GET /orders past the last page returns no rows', async () => {
+      const methodId = await createMethod();
+      const user = await createUser();
+      signIn(user.clerkId);
+      await placeOne(methodId);
+
+      const response = await list('?page=5').expect(200);
+
+      expect((response.body as ListBody).data).toEqual([]);
+      expect((response.body as ListBody).meta.totalCount).toBe(1);
+    });
+
+    it('GET /orders sorts by totalAmount ASC', async () => {
+      const methodId = await createMethod();
+      const user = await createUser();
+      signIn(user.clerkId);
+      const big = await placeOne(methodId, 3);
+      const small = await placeOne(methodId, 1);
+
+      expect(
+        ids(await list('?sort=totalAmount&order=ASC').expect(200)),
+      ).toEqual([small.id, big.id]);
+      expect(ids(await list('?sort=totalAmount').expect(200))).toEqual([
+        big.id,
+        small.id,
+      ]);
+    });
+
+    it('GET /orders filters by status, shippingStatus and paymentStatus', async () => {
+      const methodId = await createMethod();
+      const user = await createUser();
+      signIn(user.clerkId);
+      const unpaid = await placeOne(methodId);
+      const unpaidCard = await placeOne(methodId);
+      const pending = await placeOne(methodId);
+      const paid = await placeOne(methodId);
+      const failed = await placeOne(methodId);
+      const refunded = await placeOne(methodId);
+      const partial = await placeOne(methodId);
+
+      // A CARD charge whose payment has not started (no Checkout Session) is UNPAID.
+      await setCharge(unpaidCard.id, 'CARD', 'PENDING');
+      // A FAILED CARD charge, then a newer started CARD charge: the newest wins.
+      await setCharge(pending.id, 'CARD', 'FAILED', 5);
+      await addPayment(
+        pending.id,
+        'CHARGE',
+        'CARD',
+        'PENDING',
+        10,
+        `cs_test_filter_${pending.id}`,
+      );
+      await setCharge(paid.id, 'CARD', 'PAID');
+      await setCharge(failed.id, 'CARD', 'FAILED');
+      await execute(
+        `update payments set amount = 10 where order_id in (?, ?)`,
+        [refunded.id, partial.id],
+      );
+      await setCharge(refunded.id, 'CARD', 'PAID');
+      await addPayment(refunded.id, 'REFUND', 'CARD', 'PAID', 10);
+      await setCharge(partial.id, 'CARD', 'PAID');
+      await addPayment(partial.id, 'REFUND', 'CARD', 'PAID', 4);
+      await execute(`update orders set status = 'CANCELLED' where id = ?`, [
+        failed.id,
+      ]);
+      await execute(
+        `update orders set shipping_status = 'SHIPPING' where id = ?`,
+        [paid.id],
+      );
+
+      const expected: [string, string[]][] = [
+        ['UNPAID', [unpaidCard.id, unpaid.id]],
+        ['PENDING', [pending.id]],
+        ['PAID', [paid.id]],
+        ['FAILED', [failed.id]],
+        ['REFUNDED', [refunded.id]],
+        ['PARTIALLY_REFUNDED', [partial.id]],
+      ];
+      for (const [paymentStatus, orderIds] of expected) {
+        const response = await list(`?paymentStatus=${paymentStatus}`).expect(
+          200,
+        );
+        expect(ids(response)).toEqual(orderIds);
+        for (const order of (response.body as ListBody).data) {
+          expect(order.paymentStatus).toBe(paymentStatus);
+        }
+      }
+      expect(ids(await list('?status=CANCELLED').expect(200))).toEqual([
+        failed.id,
+      ]);
+      expect(ids(await list('?shippingStatus=SHIPPING').expect(200))).toEqual([
+        paid.id,
+      ]);
+    });
+
+    it('GET /orders with an invalid status returns 400', async () => {
+      const user = await createUser();
+      signIn(user.clerkId);
+
+      const response = await list('?status=SHIPPED').expect(400);
+
+      expect((response.body as ErrorBody).errors[0].field).toBe('status');
+    });
+
+    it('GET /orders without a session returns 401', async () => {
+      await list().expect(401);
+    });
+  });
+
+  describe('GET /orders/:idOrOrderNumber', () => {
+    const read = (value: string) =>
+      request(app.getHttpServer()).get(
+        `${ORDERS}/${encodeURIComponent(value)}`,
+      );
+
+    const placeFor = async (clerkId: string): Promise<OrderBody> => {
+      const methodId = await createMethod();
+      const { variantId } = await createProduct(10);
+      signIn(clerkId);
+      await addToCart(variantId, 2);
+      return orderOf(await place(methodId).expect(201));
+    };
+
+    it('GET /orders/:idOrOrderNumber reads an own order by id and by orderNumber', async () => {
+      const u1 = await createUser();
+      const o1 = await placeFor(u1.clerkId);
+
+      for (const value of [o1.id, o1.orderNumber]) {
+        const response = await read(value).expect(200);
+        const data = orderOf(response) as OrderBody & Record<string, unknown>;
+        expect(data.id).toBe(o1.id);
+        expect(data.items).toHaveLength(1);
+        expect(data.payments[0].method).toBe('COD');
+        expect(data.paymentStatus).toBe('UNPAID');
+        expect(data).not.toHaveProperty('customer');
+      }
+    });
+
+    it("GET /orders/:idOrOrderNumber of another user's order returns 404 (AC2)", async () => {
+      const u1 = await createUser();
+      const u2 = await createUser();
+      const o1 = await placeFor(u1.clerkId);
+
+      signIn(u2.clerkId);
+      for (const value of [o1.id, o1.orderNumber]) {
+        const response = await read(value).expect(404);
+        expect((response.body as ErrorBody).errors[0]).toMatchObject({
+          errCode: 'orderNotFound',
+          field: 'idOrOrderNumber',
+        });
+      }
+    });
+
+    it('GET /orders/:idOrOrderNumber of an unknown value returns 404', async () => {
+      const user = await createUser();
+      signIn(user.clerkId);
+
+      for (const value of [randomUUID(), 'CH-000000-0000']) {
+        const response = await read(value).expect(404);
+        expect((response.body as ErrorBody).errors[0].errCode).toBe(
+          'orderNotFound',
+        );
+      }
+    });
+
+    it('GET /orders/:idOrOrderNumber without a session returns 401', async () => {
+      await read(randomUUID()).expect(401);
+    });
   });
 });

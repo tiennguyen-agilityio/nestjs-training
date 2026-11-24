@@ -8,6 +8,8 @@ export interface CartItem {
   meta: string
   imageUrl: string
   unitPrice: number
+  /** The list price before the discount; `unitPrice` is the sale price. */
+  listPrice?: number
   quantity: number
   maxQuantity?: number
   /** Server cart only: the line cannot be bought (not ACTIVE, deleted, or no stock left). */
@@ -83,6 +85,8 @@ export interface CartAddItemInput {
   meta: string
   imageUrl: string
   unitPrice: number
+  /** The list price before the discount; `unitPrice` is the sale price. */
+  listPrice?: number
   quantity: number
   maxQuantity?: number
 }

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { z } from 'zod';
 import { PaymentMethod, VALIDATION_RULES } from '@repo/constants';
 import {
   OrderRepository,
@@ -8,7 +9,10 @@ import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
-import type { PlaceOrderInput } from '../dto/order.schema.js';
+import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
+import type { OrderQueryInput, PlaceOrderInput } from '../dto/order.schema.js';
+import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
+import { mapPaginatedResult } from '../../../common/utils/pagination.util.js';
 import type { CartItem } from '../../cart/entities/cart-item.entity.js';
 import type { ProductVariant } from '../../product-variant/entities/product-variant.entity.js';
 import { isPurchasable } from '../../product-variant/utils/purchasable.util.js';
@@ -17,7 +21,10 @@ import { variantNameFrom } from '../../product-variant/utils/variant-name.util.j
 import { pricingOf } from '../../cart/utils/cart-pricing.util.js';
 import { orderTotalsOf } from '../utils/order-pricing.util.js';
 import { generateOrderNumber } from '../utils/order-number.util.js';
-import { ValidationException } from '../../../common/exceptions/base.exception.js';
+import {
+  ItemNotFoundException,
+  ValidationException,
+} from '../../../common/exceptions/base.exception.js';
 import type { ErrorDetailDto } from '../../../common/dto/error.dto.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 import {
@@ -43,6 +50,49 @@ export class OrderService {
     private readonly productVariantService: ProductVariantService,
     private readonly shippingMethodService: ShippingMethodService,
   ) {}
+
+  /** The caller's own orders only, whatever their role (#31 adds ADMIN-wide). */
+  async findMine(
+    userId: string,
+    { page, limit, ...filters }: OrderQueryInput,
+  ): Promise<PaginatedResult<ResponseOrderRowDto>> {
+    const result = await this.orderRepository.findMine(
+      userId,
+      { page, limit },
+      filters,
+    );
+
+    return mapPaginatedResult(result, (order) =>
+      ResponseOrderRowDto.fromEntity(order),
+    );
+  }
+
+  /**
+   * One of the caller's orders: a UUID is an id, anything else an
+   * orderNumber (never UUID-shaped). Another user's order is not found.
+   */
+  async findMineOne(
+    userId: string,
+    idOrOrderNumber: string,
+  ): Promise<ResponseOrderDto> {
+    const where = z.uuid().safeParse(idOrOrderNumber).success
+      ? { id: idOrOrderNumber }
+      : { orderNumber: idOrOrderNumber };
+    const order = await this.orderRepository.findMineByIdOrNumber(
+      userId,
+      where,
+    );
+    if (!order) {
+      throw new ItemNotFoundException({
+        errCode: ERROR_CODES.ORDER.NOT_FOUND,
+        field: 'idOrOrderNumber',
+        message: ERROR_MESSAGES.ORDER.NOT_FOUND,
+        description: ERROR_DESCRIPTIONS.ORDER.NOT_FOUND,
+      });
+    }
+
+    return ResponseOrderDto.fromEntity(order);
+  }
 
   place(userId: string, input: PlaceOrderInput): Promise<ResponseOrderDto> {
     return this.orderRepository.transactional(async () => {
