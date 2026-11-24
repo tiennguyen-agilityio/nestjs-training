@@ -1,7 +1,6 @@
 import {
   INestApplication,
   NestApplicationOptions,
-  RequestMethod,
   VersioningType,
 } from '@nestjs/common';
 import { TestingModule } from '@nestjs/testing';
@@ -11,6 +10,7 @@ import {
   DEFAULT_API_VERSION,
   ROUTE_CONFLICT_POLICY,
   HEALTH_ROUTES,
+  WEBHOOK_ROUTES,
 } from './../../src/common/constants/env.constant.js';
 
 /**
@@ -26,10 +26,7 @@ export async function initTestApp<
     ...options,
   });
   app.setGlobalPrefix(API_PREFIX, {
-    exclude: [
-      { path: 'webhooks/clerk', method: RequestMethod.POST },
-      ...HEALTH_ROUTES,
-    ],
+    exclude: [...WEBHOOK_ROUTES, ...HEALTH_ROUTES],
   });
   app.enableVersioning({
     type: VersioningType.URI,

@@ -131,6 +131,25 @@ describe('order tables migration (e2e)', () => {
     ).rejects.toMatchObject({ code: '23514' });
   });
 
+  it('payments.checkout_session_id is nullable and unique when set', async () => {
+    const insertWithSession = async (sessionId: string | null) => {
+      const { orderId } = await seedOrder();
+      return execute(
+        `insert into payments (id, order_id, type, method, status, amount, checkout_session_id, created_at, updated_at)
+         values (?, ?, 'CHARGE', 'CARD', 'PENDING', 34, ?, now(), now())`,
+        [randomUUID(), orderId, sessionId],
+      );
+    };
+    const sessionId = `cs_test_dup_${suffix()}`;
+
+    await insertWithSession(null);
+    await insertWithSession(null);
+    await insertWithSession(sessionId);
+    await expect(insertWithSession(sessionId)).rejects.toMatchObject({
+      code: '23505',
+    });
+  });
+
   it('order_number is unique', async () => {
     const { orderNumber } = await seedOrder();
 

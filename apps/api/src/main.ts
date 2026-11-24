@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { RequestMethod, VersioningType } from '@nestjs/common';
+import { VersioningType } from '@nestjs/common';
 import helmet from 'helmet';
 
 import { AppModule } from './app.module.js';
@@ -10,6 +10,7 @@ import {
   API_PREFIX,
   ROUTE_CONFLICT_POLICY,
   HEALTH_ROUTES,
+  WEBHOOK_ROUTES,
 } from './common/constants/env.constant.js';
 import { corsConfig } from './configs/cors.config.js';
 import { setupSwagger } from './configs/swagger.config.js';
@@ -29,10 +30,7 @@ async function bootstrap() {
   app.use(helmet());
   app.enableCors(corsConfig(configService));
   app.setGlobalPrefix(API_PREFIX, {
-    exclude: [
-      { path: 'webhooks/clerk', method: RequestMethod.POST },
-      ...HEALTH_ROUTES,
-    ],
+    exclude: [...WEBHOOK_ROUTES, ...HEALTH_ROUTES],
   });
   app.enableVersioning({
     type: VersioningType.URI,

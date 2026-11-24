@@ -50,11 +50,21 @@ export const ERROR_MESSAGES = {
     NOT_FOUND: 'Cart item not found',
   },
   ORDER: {
+    NOT_FOUND: 'Order not found',
     CART_EMPTY: 'Cart is empty',
     SHIPPING_METHOD_UNAVAILABLE: 'Shipping method is not available',
     ITEM_UNAVAILABLE: 'This item can no longer be bought',
     OUT_OF_STOCK: (available: number, sku: string) =>
       `Only ${available} left for ${sku}`,
+  },
+  PAYMENT: {
+    METHOD_NOT_ONLINE: 'This order is paid on delivery, not online',
+    METHOD_UNAVAILABLE: 'Online payment is not available for this method yet',
+    NOT_PAYABLE: 'This order cannot be paid now',
+    ORDER_EXPIRED: 'The time to pay for this order has passed',
+    GATEWAY_UNAVAILABLE: 'The payment provider cannot be reached',
+    GATEWAY_REJECTED: 'The payment provider refused this payment',
+    INVALID_SIGNATURE: 'Webhook signature is invalid',
   },
   SHIPPING_METHOD: {
     NOT_FOUND: 'Shipping method not found',
@@ -160,11 +170,22 @@ export const ERROR_DESCRIPTIONS = {
     NOT_FOUND: 'The item might have been removed, or the id is incorrect.',
   },
   ORDER: {
+    NOT_FOUND: 'The order might not exist, or it belongs to another user.',
     CART_EMPTY: 'Add an item before checking out.',
     SHIPPING_METHOD_UNAVAILABLE:
       'The method does not exist or is not ACTIVE. Pick another method.',
     ITEM_UNAVAILABLE: 'Remove it from the cart and try again.',
     OUT_OF_STOCK: 'Update your cart and try again.',
+  },
+  PAYMENT: {
+    METHOD_NOT_ONLINE: 'Only CARD and PAYPAL orders are paid online.',
+    METHOD_UNAVAILABLE: 'Pick another payment method for new orders.',
+    NOT_PAYABLE:
+      'The order is already paid, no longer pending, or its payment session has closed.',
+    ORDER_EXPIRED: 'Place a new order.',
+    GATEWAY_UNAVAILABLE: 'Try again in a moment.',
+    GATEWAY_REJECTED: 'Check the order total: Stripe charges at least $0.50.',
+    INVALID_SIGNATURE: 'The request was not signed with the endpoint secret.',
   },
   SHIPPING_METHOD: {
     NOT_FOUND:

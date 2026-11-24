@@ -13,6 +13,7 @@ const payment = (
     status: PaymentStatus;
     amount: string;
     createdAt: Date;
+    checkoutSessionId: string | null;
   }> = {},
 ) => ({
   type: PaymentType.CHARGE,
@@ -20,6 +21,7 @@ const payment = (
   status: PaymentStatus.PENDING,
   amount: '34.00',
   createdAt: new Date('2026-11-24T10:00:00Z'),
+  checkoutSessionId: 'cs_test_1',
   ...overrides,
 });
 
@@ -28,11 +30,20 @@ describe('paymentStatusOf', () => {
     expect(paymentStatusOf([payment()])).toBe(OrderPaymentStatus.UNPAID);
   });
 
-  it('paymentStatusOf shows a pending CARD charge as PENDING', () => {
+  it('paymentStatusOf shows an online charge with a checkout session as PENDING', () => {
     expect(paymentStatusOf([payment({ method: PaymentMethod.CARD })])).toBe(
       OrderPaymentStatus.PENDING,
     );
   });
+
+  it.each([PaymentMethod.CARD, PaymentMethod.PAYPAL])(
+    'paymentStatusOf shows an online charge without a checkout session as UNPAID (%s)',
+    (method) => {
+      expect(
+        paymentStatusOf([payment({ method, checkoutSessionId: null })]),
+      ).toBe(OrderPaymentStatus.UNPAID);
+    },
+  );
 
   it('paymentStatusOf uses the newest CHARGE', () => {
     expect(

@@ -30,7 +30,7 @@ describe('VALIDATION_RULES', () => {
       CLERK_ID: { REGEX: /^user_[a-zA-Z0-9]+$/ },
       ORDER: {
         TAX_PERCENT: 10,
-        PAYMENT_EXPIRY_MINUTES: 30,
+        PAYMENT_EXPIRY_MINUTES: 1440,
         ADDRESS_MAX_LENGTH: 255,
         POSTAL_CODE_MAX_LENGTH: 20,
         NOTE_MAX_LENGTH: 1000,

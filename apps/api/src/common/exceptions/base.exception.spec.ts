@@ -8,6 +8,7 @@ import {
   InvalidStateException,
   DependencyTimeoutException,
   DependencyUnavailableException,
+  UnauthenticatedException,
 } from './base.exception.js';
 import { ErrorDetailDto } from '../dto/error.dto.js';
 import {
@@ -187,5 +188,21 @@ describe('dependency exceptions', () => {
     );
     expect(exception.getErrors()).toEqual([unavailableError]);
     expect(exception.retryAfterSeconds).toBe(30);
+  });
+});
+
+describe('UnauthenticatedException', () => {
+  it('UnauthenticatedException answers 401 with its error', () => {
+    const error: ErrorDetailDto = {
+      errCode: ERROR_CODES.PAYMENT.INVALID_SIGNATURE,
+      field: 'stripe-signature',
+      message: ERROR_MESSAGES.PAYMENT.INVALID_SIGNATURE,
+      description: ERROR_DESCRIPTIONS.PAYMENT.INVALID_SIGNATURE,
+    };
+    const exception = new UnauthenticatedException(error);
+
+    expect(exception.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+    expect(exception.message).toBe(ERROR_MESSAGES.EXCEPTION.UNAUTHORIZED);
+    expect(exception.getErrors()).toEqual([error]);
   });
 });

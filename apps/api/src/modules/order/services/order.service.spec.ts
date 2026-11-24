@@ -394,7 +394,7 @@ describe('OrderService', () => {
         orderRepository.create.mockClear();
         await service.place(USER_ID, input({ paymentMethod }));
         expect(createdData().expiresAt).toEqual(
-          new Date('2026-11-24T10:30:00Z'),
+          new Date('2026-11-25T10:00:00Z'),
         );
       }
       orderRepository.create.mockClear();

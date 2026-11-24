@@ -1,9 +1,4 @@
-import {
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  RequestMethod,
-} from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
@@ -22,6 +17,7 @@ import { ProductModule } from './modules/product/product.module.js';
 import { CartModule } from './modules/cart/cart.module.js';
 import { ShippingMethodModule } from './modules/shipping-method/shipping-method.module.js';
 import { OrderModule } from './modules/order/order.module.js';
+import { PaymentModule } from './modules/payment/payment.module.js';
 import { IdempotencyStoreModule } from './modules/idempotency/idempotency.module.js';
 import { OutboxStoreModule } from './modules/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -31,7 +27,10 @@ import { createStandardSchemaValidationPipe } from './configs/validation-pipe.co
 import { ClerkAuthMiddleware } from './common/middlewares/clerk-auth.middleware.js';
 import { UserResolutionMiddleware } from './common/middlewares/user-resolution.middleware.js';
 import { AuthProviderModule } from './common/providers/auth-provider.module.js';
-import { HEALTH_ROUTES } from './common/constants/env.constant.js';
+import {
+  HEALTH_ROUTES,
+  WEBHOOK_ROUTES,
+} from './common/constants/env.constant.js';
 
 @Module({
   imports: [
@@ -54,6 +53,7 @@ import { HEALTH_ROUTES } from './common/constants/env.constant.js';
     CartModule,
     ShippingMethodModule,
     OrderModule,
+    PaymentModule,
     HealthModule,
     ...(process.env.NODE_ENV !== 'production'
       ? [
@@ -88,10 +88,7 @@ export class AppModule implements NestModule {
     consumer
       .apply(ClerkAuthMiddleware, UserResolutionMiddleware)
       // Health probes are public and must answer even when Clerk or the users table cannot.
-      .exclude(
-        { path: 'webhooks/clerk', method: RequestMethod.POST },
-        ...HEALTH_ROUTES,
-      )
+      .exclude(...WEBHOOK_ROUTES, ...HEALTH_ROUTES)
       .forRoutes('*');
   }
 }

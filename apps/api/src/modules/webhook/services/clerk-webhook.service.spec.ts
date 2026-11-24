@@ -193,9 +193,7 @@ describe('ClerkWebhookService', () => {
           }),
         );
 
-        await expect(
-          service.handleEvent(createdEvent),
-        ).resolves.toBeUndefined();
+        await expect(service.handleEvent(createdEvent)).resolves.toBe(false);
         expect(authProvider.syncUserRole).not.toHaveBeenCalled();
       });
 
@@ -327,9 +325,7 @@ describe('ClerkWebhookService', () => {
           }),
         );
 
-        await expect(
-          service.handleEvent(updatedEvent),
-        ).resolves.toBeUndefined();
+        await expect(service.handleEvent(updatedEvent)).resolves.toBe(false);
         expect(userService.update).not.toHaveBeenCalled();
       });
     });
@@ -359,9 +355,7 @@ describe('ClerkWebhookService', () => {
           }),
         );
 
-        await expect(
-          service.handleEvent(deletedEvent),
-        ).resolves.toBeUndefined();
+        await expect(service.handleEvent(deletedEvent)).resolves.toBe(false);
         expect(userService.remove).not.toHaveBeenCalled();
       });
 
@@ -371,18 +365,46 @@ describe('ClerkWebhookService', () => {
           data: { id: undefined },
         } as never;
 
-        await expect(
-          service.handleEvent(eventWithoutId),
-        ).resolves.toBeUndefined();
+        await expect(service.handleEvent(eventWithoutId)).resolves.toBe(false);
         expect(userService.findByClerkId).not.toHaveBeenCalled();
       });
+    });
+
+    it('handleEvent returns whether it wrote a user', async () => {
+      const data = {
+        id: 'clerk-1',
+        email_addresses: [{ id: 'email-1', email_address: 'jane@example.com' }],
+        primary_email_address_id: 'email-1',
+        first_name: 'Jane',
+        last_name: 'Doe',
+        phone_numbers: [],
+        primary_phone_number_id: null,
+        image_url: null,
+        public_metadata: {},
+      };
+      userService.createFromAuthProvider.mockResolvedValue(buildUser());
+      userService.findByClerkId.mockResolvedValue(buildUser());
+      userService.update.mockResolvedValue(buildUser());
+
+      for (const type of ['user.created', 'user.updated', 'user.deleted']) {
+        await expect(service.handleEvent({ type, data })).resolves.toBe(true);
+      }
+      await expect(
+        service.handleEvent({
+          type: 'user.created',
+          data: { ...data, primary_email_address_id: 'missing' },
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        service.handleEvent({ type: 'email.created', data: {} }),
+      ).resolves.toBe(false);
     });
 
     describe('unhandled event type', () => {
       it('does not throw and calls none of the UserService methods', async () => {
         const otherEvent = { type: 'session.created', data: {} } as never;
 
-        await expect(service.handleEvent(otherEvent)).resolves.toBeUndefined();
+        await expect(service.handleEvent(otherEvent)).resolves.toBe(false);
         expect(userService.create).not.toHaveBeenCalled();
         expect(userService.findByClerkId).not.toHaveBeenCalled();
         expect(userService.update).not.toHaveBeenCalled();

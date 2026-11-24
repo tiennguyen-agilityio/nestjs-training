@@ -48,10 +48,20 @@ export const ERROR_CODES = {
     NOT_FOUND: 'cartItemNotFound',
   },
   ORDER: {
+    NOT_FOUND: 'orderNotFound',
     CART_EMPTY: 'cartEmpty',
     SHIPPING_METHOD_UNAVAILABLE: 'shippingMethodUnavailable',
     ITEM_UNAVAILABLE: 'itemUnavailable',
     OUT_OF_STOCK: 'outOfStock',
+  },
+  PAYMENT: {
+    METHOD_NOT_ONLINE: 'paymentMethodNotOnline',
+    METHOD_UNAVAILABLE: 'paymentMethodUnavailable',
+    NOT_PAYABLE: 'paymentNotPayable',
+    ORDER_EXPIRED: 'paymentOrderExpired',
+    GATEWAY_UNAVAILABLE: 'paymentGatewayUnavailable',
+    GATEWAY_REJECTED: 'paymentGatewayRejected',
+    INVALID_SIGNATURE: 'invalidWebhookSignature',
   },
   SHIPPING_METHOD: {
     NOT_FOUND: 'shippingMethodNotFound',

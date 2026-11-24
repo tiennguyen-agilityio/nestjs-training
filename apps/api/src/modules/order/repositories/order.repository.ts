@@ -44,6 +44,10 @@ export class OrderRepository extends BaseRepository<Order> {
     );
   }
 
+  reload(order: Order): Promise<Order | null> {
+    return this.reloadEntity(order);
+  }
+
   create(
     {
       userId,
