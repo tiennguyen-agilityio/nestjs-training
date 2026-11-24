@@ -32,6 +32,10 @@ describe('routes', () => {
     ).toBe(true)
   })
 
+  it('API_ROUTES.CART ends with /api/v1/cart', () => {
+    expect(API_ROUTES.CART.endsWith('/api/v1/cart')).toBe(true)
+  })
+
   it('exports no per-entity edit route helpers', () => {
     expect(routes).not.toHaveProperty('dashboardCategoryEditRoute')
     expect(routes).not.toHaveProperty('dashboardProductEditPath')

@@ -32,6 +32,12 @@ export const ERROR_MESSAGES = {
   CVC_INVALID: 'Enter a valid CVC',
   PROFILE_SYNC_DELAYED:
     'Saved, but syncing your profile is taking longer than expected. Refresh in a moment to confirm.',
+  CART_MERGE_ADJUSTED: 'Some items changed when your cart was merged: ',
+  CART_MERGE_LOWERED: (name: string, quantity: number) =>
+    `${name} (only ${quantity} left)`,
+  CART_MERGE_SKIPPED: (name: string) => `${name} (out of stock)`,
+  CART_LINE_EXCEEDS_STOCK: (left: number, have: number) =>
+    `Only ${left} left · you have ${have}`,
 } as const
 
 // Form validation copy shown by the web forms, in place of the packages'
@@ -80,6 +86,11 @@ export const API_FALLBACK_ERRORS = {
   SHIPPING_METHOD_CREATE: 'Could not create shipping method',
   SHIPPING_METHOD_UPDATE: 'Could not update shipping method',
   SHIPPING_METHOD_DELETE: 'Could not delete shipping method',
+  CART_LOAD: 'Could not load your cart',
+  CART_ADD: 'Could not add to cart',
+  CART_UPDATE: 'Could not update the cart',
+  CART_REMOVE: 'Could not remove the item',
+  CART_MERGE: 'Could not merge your cart',
 } as const
 
 export const SUCCESS_MESSAGES = {
@@ -103,6 +114,8 @@ export const SUCCESS_MESSAGES = {
   SHIPPING_METHOD_DELETED: 'Shipping method removed',
   SHIPPING_METHOD_ACTIVATED: 'Shipping method activated',
   SHIPPING_METHOD_DEACTIVATED: 'Shipping method deactivated',
+  CART_MERGED: (count: number) =>
+    `Your device cart was merged into your account cart (${count} item${count === 1 ? '' : 's'})`,
 }
 
 // Notices shown in place of a page's content.

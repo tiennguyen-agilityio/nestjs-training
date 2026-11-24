@@ -8,7 +8,8 @@ import { toast } from 'sonner'
 import { Quantity } from '@/components/Quantity'
 import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/constants/routes'
-import { useCartStore } from '@/store/useCartStore'
+import { API_FALLBACK_ERRORS } from '@/constants/messages'
+import { useCart, type CartActionResult } from '@/hooks/useCart'
 import type { Product } from '@/types/product'
 import {
   getPrimaryVariantQuantity,
@@ -26,14 +27,15 @@ export function ProductPurchasePanel({
   className,
 }: ProductPurchasePanelProps) {
   const router = useRouter()
-  const { addItem } = useCartStore()
+  const { addItem } = useCart()
   const productName = product.name
   const maxQuantity = getPrimaryVariantQuantity(product)
   const isOutOfStock = isProductOutOfStock(product)
   const [quantity, setQuantity] = useState(1)
+  const [isAdding, setIsAdding] = useState(false)
 
-  const handleAddToCart = () => {
-    if (isOutOfStock) {
+  const handleAddToCart = async () => {
+    if (isOutOfStock || isAdding) {
       return
     }
 
@@ -45,16 +47,29 @@ export function ProductPurchasePanel({
       .filter(Boolean)
       .join(' • ')
 
-    addItem({
-      variantId: product.variants[0]?.id ?? '',
-      productId: product.id,
-      name: productName,
-      meta,
-      imageUrl: primaryImage?.url ?? '',
-      unitPrice,
-      quantity,
-      maxQuantity: maxQuantity,
-    })
+    setIsAdding(true)
+    let result: CartActionResult
+    try {
+      result = await addItem({
+        variantId: product.variants[0]?.id ?? '',
+        productId: product.id,
+        name: productName,
+        meta,
+        imageUrl: primaryImage?.url ?? '',
+        unitPrice,
+        quantity,
+        maxQuantity: maxQuantity,
+      })
+    } catch {
+      result = { ok: false, error: API_FALLBACK_ERRORS.CART_ADD }
+    } finally {
+      setIsAdding(false)
+    }
+
+    if (!result.ok) {
+      toast.error(result.error)
+      return
+    }
 
     toast.success('Added to cart', {
       description: `${quantity} × ${productName}`,
@@ -85,8 +100,8 @@ export function ProductPurchasePanel({
         <Button
           type="button"
           className="flex-1 h-14 w-auto w-max-content rounded-2xl text-base font-bold shadow-md"
-          onClick={handleAddToCart}
-          disabled={isOutOfStock}
+          onClick={() => void handleAddToCart()}
+          disabled={isOutOfStock || isAdding}
         >
           <ShoppingCart className="size-4" aria-hidden />
           Add to Cart

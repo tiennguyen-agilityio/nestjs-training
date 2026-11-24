@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ROUTES } from '@/constants/routes'
 import { AuthTokenBridge } from '@/providers/AuthTokenBridge'
+import { CartMergeBridge } from '@/providers/CartMergeBridge'
 import { QueryProvider } from '@/providers/QueryProvider'
 import { ThemeProvider } from '@/theme/ThemeProvider'
 
@@ -42,6 +43,7 @@ export default function RootLayout({
         <ClerkProvider signInUrl={ROUTES.SIGN_IN} signUpUrl={ROUTES.SIGN_UP}>
           <AuthTokenBridge />
           <QueryProvider>
+            <CartMergeBridge />
             <ThemeProvider>
               <TooltipProvider delay={0}>
                 {children}

@@ -12,4 +12,9 @@ export const isProductOutOfStock = (product: Product): boolean =>
   getPrimaryVariantQuantity(product) <= 0
 
 export const isCartItemOutOfStock = (item: CartItem): boolean =>
-  item.maxQuantity !== undefined && item.maxQuantity <= 0
+  item.isUnavailable === true ||
+  (item.maxQuantity !== undefined && item.maxQuantity <= 0)
+
+/** A line that blocks checkout: out of stock, or above the stock it has left. */
+export const isCartItemBlocked = (item: CartItem): boolean =>
+  isCartItemOutOfStock(item) || item.exceedsStock === true

@@ -23,9 +23,9 @@ import { buttonVariants } from '@/components/ui/button'
 
 // Hooks
 import { useAuth } from '@/hooks/useAuth'
+import { useCart } from '@/hooks/useCart'
 
 // Store
-import { useCartStore } from '@/store/useCartStore'
 
 // Utils
 import { getSessionPublicRole } from '@/utils/session'
@@ -41,7 +41,7 @@ const Header = ({ className, menu = MENU }: ShopHeaderProps) => {
   useAuth()
   const { sessionClaims } = useClerkAuth()
   const isAdmin = getSessionPublicRole(sessionClaims) === UserRole.ADMIN
-  const cartItemCount = useCartStore((s) => s.items?.length ?? 0)
+  const { itemCount: cartItemCount } = useCart()
   const cartAriaLabel =
     cartItemCount > 0
       ? `Shopping cart, ${cartItemCount} items`

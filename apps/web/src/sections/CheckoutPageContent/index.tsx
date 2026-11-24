@@ -20,9 +20,11 @@ import { Input } from '@/components/Input'
 import { Button } from '@/components/ui/button'
 // import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
 // import { ERROR_MESSAGES } from '@/constants/messages'
+import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
+import { useCart } from '@/hooks/useCart'
 import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
 // import { useCreateOrder } from '@/hooks/useOrder'
 import { parseCheckoutValues } from '@/schemas/checkout'
@@ -54,7 +56,7 @@ import {
   omitSubmitErrorsForRemovedLine,
   // tagItemErrorsWithLineRefs,
 } from '@/utils/order'
-import { isCartItemOutOfStock } from '@/utils/inventory'
+import { isCartItemBlocked } from '@/utils/inventory'
 
 type CheckoutFieldErrors = Partial<Record<keyof CheckoutFormValues, string>>
 
@@ -96,6 +98,7 @@ const CheckoutPageContent = () => {
   const formRef = useRef<HTMLFormElement | null>(null)
   const selectedSuggestionRef = useRef<string | null>(null)
 
+  // The shopper is always signed in here (middleware), so this is the server cart.
   const {
     items,
     totals,
@@ -103,10 +106,10 @@ const CheckoutPageContent = () => {
     isError,
     errorMessage,
     refetch,
-    clearCart,
-    setItemSnapshots,
     removeItem,
-  } = useCartStore()
+  } = useCart()
+  // The mocked Place Order keeps writing the browser store only (#28).
+  const { clearCart, setItemSnapshots } = useCartStore()
   // const { mutate: createOrder } = useCreateOrder()
   const {
     shippingMethods,
@@ -117,7 +120,7 @@ const CheckoutPageContent = () => {
   } = useActiveShippingMethods()
 
   const hasItems = items.length > 0
-  const hasOutOfStockItems = items.some(isCartItemOutOfStock)
+  const hasOutOfStockItems = items.some(isCartItemBlocked)
   // const showCardFields = values.paymentMethod === PAYMENT_METHOD.STRIPE
   // The shopper's pick while it is still listed; otherwise the first method.
   const selectedShippingMethod =
@@ -483,8 +486,18 @@ const CheckoutPageContent = () => {
   const hasBlockingItemErrors =
     hasVisibleLineSubmitErrors || hasRootSubmissionError
 
+  // One removal at a time per line: a second DELETE would answer 404.
+  const removingLineIds = useRef(new Set<string>())
+
   const handleRemoveCheckoutLine = (lineId: string, productId: string) => {
-    removeItem(lineId)
+    if (removingLineIds.current.has(lineId)) return
+    removingLineIds.current.add(lineId)
+    void removeItem(lineId)
+      .then((result) => {
+        if (!result.ok) toast.error(result.error)
+      })
+      .catch(() => toast.error(API_FALLBACK_ERRORS.CART_REMOVE))
+      .finally(() => removingLineIds.current.delete(lineId))
     setSubmitErrors((previous) => {
       if (!previous) {
         return null

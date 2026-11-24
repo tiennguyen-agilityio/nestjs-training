@@ -37,4 +37,5 @@ export const API_ROUTES = {
   PRODUCTS: `${API_BASE_URL}/api/v1/products`,
   ORDERS: `${API_BASE_URL}/api/v1/orders`,
   SHIPPING_METHODS: `${API_BASE_URL}/api/v1/shipping-methods`,
+  CART: `${API_BASE_URL}/api/v1/cart`,
 }

@@ -1,7 +1,22 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import type React from 'react'
 import { useRouter } from 'next/navigation'
 
+import {
+  CART_CHECKOUT_BLOCKED_MESSAGE,
+  OUT_OF_STOCK_LABEL,
+} from '@/constants/order'
+import { API_FALLBACK_ERRORS } from '@/constants/messages'
+import { useCart, type UseCartResult } from '@/hooks/useCart'
 import CartPageContent from '@/sections/CartPageContent'
 import { useCartStore } from '@/store/useCartStore'
 
@@ -9,8 +24,8 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }))
 
-jest.mock('@/store/useCartStore', () => ({
-  useCartStore: jest.fn(),
+jest.mock('@/hooks/useCart', () => ({
+  useCart: jest.fn(),
 }))
 
 jest.mock('next/image', () => ({
@@ -25,12 +40,13 @@ jest.mock('next/image', () => ({
 }))
 
 const mockUseRouter = jest.mocked(useRouter)
-const mockUseCart = jest.mocked(useCartStore)
+const mockUseCart = jest.mocked(useCart)
 
-const baseUseCartResult = {
+const baseUseCartResult: UseCartResult = {
   items: [
     {
       id: 'line-1',
+      variantId: 'variant-1',
       productId: 'product-1',
       name: 'Ethiopian Yirgacheffe',
       meta: 'Light Roast • Floral & Citrus Notes',
@@ -41,6 +57,7 @@ const baseUseCartResult = {
     },
     {
       id: 'line-2',
+      variantId: 'variant-2',
       productId: 'product-2',
       name: 'Precision Gooseneck Kettle',
       meta: 'Matte Black • Variable Temp Control',
@@ -56,14 +73,14 @@ const baseUseCartResult = {
     tax: 0,
     total: 169,
   },
-  hasHydrated: true,
+  itemCount: 2,
+  isServerCart: true,
   isLoading: false,
   isError: false,
   errorMessage: null,
-  addItem: jest.fn(),
-  changeQuantity: jest.fn(),
-  removeItem: jest.fn(),
-  clearCart: jest.fn(),
+  addItem: jest.fn(async () => ({ ok: true as const })),
+  changeQuantity: jest.fn(async () => ({ ok: true as const })),
+  removeItem: jest.fn(async () => ({ ok: true as const })),
   refetch: jest.fn(),
 }
 
@@ -73,6 +90,7 @@ describe('CartPageContent', () => {
       push: jest.fn(),
     } as unknown as ReturnType<typeof useRouter>)
     mockUseCart.mockReturnValue(baseUseCartResult)
+    useCartStore.setState({ mergeNotice: null })
   })
 
   it('renders heading and line items in success state', () => {
@@ -121,6 +139,7 @@ describe('CartPageContent', () => {
     mockUseCart.mockReturnValue({
       ...baseUseCartResult,
       items: [],
+      itemCount: 0,
       totals: {
         subtotal: 0,
         shipping: null,
@@ -160,5 +179,195 @@ describe('CartPageContent', () => {
 
     fireEvent.click(within(modal).getByRole('button', { name: 'Remove' }))
     expect(baseUseCartResult.removeItem).toHaveBeenCalledWith('line-1')
+  })
+
+  it('shows the total quantity in the subtitle', () => {
+    mockUseCart.mockReturnValue({ ...baseUseCartResult, itemCount: 3 })
+
+    render(<CartPageContent />)
+
+    expect(
+      screen.getByText('3 items selected for your next brewing experience.'),
+    ).toBeInTheDocument()
+  })
+
+  it('flags an unavailable line and blocks checkout', () => {
+    mockUseCart.mockReturnValue({
+      ...baseUseCartResult,
+      items: [
+        ...baseUseCartResult.items.map((item, index) =>
+          index === 0 ? { ...item, isUnavailable: true } : item,
+        ),
+      ],
+    })
+
+    render(<CartPageContent />)
+
+    expect(screen.getByText(OUT_OF_STOCK_LABEL)).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      CART_CHECKOUT_BLOCKED_MESSAGE,
+    )
+    expect(
+      screen.getByRole('button', { name: 'Proceed to Checkout' }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
+    ).toBeEnabled()
+  })
+
+  it('signed in: changes and removes lines through the API', async () => {
+    const user = userEvent.setup()
+    render(<CartPageContent />)
+
+    const [firstLineIncrease] = screen.getAllByRole('button', {
+      name: 'Increase quantity',
+    })
+    await user.click(firstLineIncrease)
+    expect(baseUseCartResult.changeQuantity).toHaveBeenCalledWith('line-1', 2)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
+    )
+    const modal = screen.getByTestId('modal-confirm-remove-cart-item')
+    await user.click(within(modal).getByRole('button', { name: 'Remove' }))
+    expect(baseUseCartResult.removeItem).toHaveBeenCalledWith('line-1')
+  })
+
+  it('signed in: shows the API error in a banner', async () => {
+    const user = userEvent.setup()
+    mockUseCart.mockReturnValue({
+      ...baseUseCartResult,
+      changeQuantity: jest.fn(async () => ({
+        ok: false as const,
+        error: 'Only 3 left for this variant',
+      })),
+    })
+    render(<CartPageContent />)
+
+    const [firstLineIncrease] = screen.getAllByRole('button', {
+      name: 'Increase quantity',
+    })
+    await user.click(firstLineIncrease)
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Only 3 left for this variant',
+      ),
+    )
+  })
+
+  it('shows the merge notice', async () => {
+    act(() => {
+      useCartStore.setState({ mergeNotice: 'Some items changed' })
+    })
+
+    const { unmount } = render(<CartPageContent />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Some items changed')
+    unmount()
+    await waitFor(() => expect(useCartStore.getState().mergeNotice).toBeNull())
+  })
+
+  it('keeps the merge notice under Strict Mode', async () => {
+    act(() => {
+      useCartStore.setState({ mergeNotice: 'Some items changed' })
+    })
+
+    render(
+      <StrictMode>
+        <CartPageContent />
+      </StrictMode>,
+    )
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.getByRole('alert')).toHaveTextContent('Some items changed')
+  })
+
+  it('shows the merge notice when every line was skipped', () => {
+    mockUseCart.mockReturnValue({
+      ...baseUseCartResult,
+      items: [],
+      itemCount: 0,
+    })
+    act(() => {
+      useCartStore.setState({ mergeNotice: 'Some items changed' })
+    })
+
+    render(<CartPageContent />)
+
+    expect(screen.getByText('Your cart is empty.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Some items changed')
+  })
+
+  it('blocks checkout for a line above the stock', () => {
+    mockUseCart.mockReturnValue({
+      ...baseUseCartResult,
+      items: baseUseCartResult.items.map((item, index) =>
+        index === 0
+          ? { ...item, quantity: 5, maxQuantity: 3, exceedsStock: true }
+          : item,
+      ),
+    })
+
+    render(<CartPageContent />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      CART_CHECKOUT_BLOCKED_MESSAGE,
+    )
+    expect(
+      screen.getByRole('button', { name: 'Proceed to Checkout' }),
+    ).toBeDisabled()
+  })
+
+  it('sends one change at a time for a line', async () => {
+    const user = userEvent.setup()
+    let settle: (value: { ok: true }) => void = () => undefined
+    const changeQuantity = jest.fn(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          settle = resolve
+        }),
+    )
+    mockUseCart.mockReturnValue({ ...baseUseCartResult, changeQuantity })
+    render(<CartPageContent />)
+
+    const [firstLineIncrease] = screen.getAllByRole('button', {
+      name: 'Increase quantity',
+    })
+    await user.click(firstLineIncrease)
+    await user.click(firstLineIncrease)
+    expect(changeQuantity).toHaveBeenCalledTimes(1)
+    expect(
+      screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
+    ).toBeDisabled()
+
+    await act(async () => {
+      settle({ ok: true })
+    })
+    expect(
+      screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
+    ).toBeEnabled()
+  })
+
+  it('shows the fallback error when a cart action throws', async () => {
+    const user = userEvent.setup()
+    mockUseCart.mockReturnValue({
+      ...baseUseCartResult,
+      changeQuantity: jest.fn(async () => {
+        throw new Error('token failed')
+      }),
+    })
+    render(<CartPageContent />)
+
+    const [firstLineIncrease] = screen.getAllByRole('button', {
+      name: 'Increase quantity',
+    })
+    await user.click(firstLineIncrease)
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        API_FALLBACK_ERRORS.CART_UPDATE,
+      ),
+    )
   })
 })
