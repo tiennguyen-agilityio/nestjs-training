@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiNoContentResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ShippingMethodStatus } from '@repo/constants';
 import { ShippingMethodService } from '../services/shipping-method.service.js';
 import {
   createShippingMethodSchema,
@@ -21,7 +22,6 @@ import {
   type UpdateShippingMethodInput,
 } from '../dto/shipping-method.schema.js';
 import { ResponseShippingMethodDto } from '../dto/response-shipping-method.dto.js';
-import { ShippingMethodStatusFilter } from '../enums/shipping-method-status-filter.enum.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import {
   idParamSchema,
@@ -81,9 +81,7 @@ export class ShippingMethodController {
     // Shoppers only ever see ACTIVE, non-deleted methods, whatever they ask for.
     const result = await this.shippingMethodService.findAll(
       { page, limit, search },
-      asAdmin
-        ? filters
-        : { ...filters, status: ShippingMethodStatusFilter.ACTIVE },
+      asAdmin ? filters : { ...filters, status: ShippingMethodStatus.ACTIVE },
       { includeDeleted: asAdmin },
     );
 

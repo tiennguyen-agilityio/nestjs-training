@@ -88,7 +88,7 @@ export const ERROR_MESSAGES = {
 export const ERROR_DESCRIPTIONS = {
   IDEMPOTENCY: {
     HEADER:
-      'Required. A client-generated key (1–255 printable ASCII, e.g. a UUID): a new one for each create, the same one when retrying it. A repeat after success replays the original 201 with `Idempotent-Replayed: true` instead of creating a second record. A missing or malformed key gets 400 `invalidRequest`; the same key while the first request still runs gets 409 `duplicateResource` with `Retry-After`.',
+      'A new UUID for each create; reuse it only to retry the same request (the retry returns the first 201). Same key while the first request runs: 409.',
   },
   AUTH_PROVIDER: {
     TIMEOUT:

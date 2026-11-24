@@ -1,5 +1,5 @@
 import * as routes from '@/constants/routes'
-import { ROUTES, dashboardEditPath } from '@/constants/routes'
+import { API_ROUTES, ROUTES, dashboardEditPath } from '@/constants/routes'
 
 describe('routes', () => {
   it('dashboardEditPath builds the edit route under a base', () => {
@@ -15,6 +15,21 @@ describe('routes', () => {
     expect(dashboardEditPath(ROUTES.DASHBOARD_CATEGORIES, 'a/b')).toBe(
       '/dashboard/categories/a%2Fb/edit',
     )
+  })
+
+  it('builds the shipping method edit path', () => {
+    expect(ROUTES.DASHBOARD_SHIPPING_METHODS).toBe(
+      '/dashboard/shipping-methods',
+    )
+    expect(ROUTES.DASHBOARD_SHIPPING_METHODS_ADD).toBe(
+      '/dashboard/shipping-methods/add',
+    )
+    expect(dashboardEditPath(ROUTES.DASHBOARD_SHIPPING_METHODS, 'sm-1')).toBe(
+      '/dashboard/shipping-methods/sm-1/edit',
+    )
+    expect(
+      API_ROUTES.SHIPPING_METHODS.endsWith('/api/v1/shipping-methods'),
+    ).toBe(true)
   })
 
   it('exports no per-entity edit route helpers', () => {

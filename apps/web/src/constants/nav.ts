@@ -9,6 +9,7 @@ import {
   Settings,
   Home,
   Tags,
+  Truck,
 } from 'lucide-react'
 
 import { type DashboardMenuItem, type MenuItem } from '@/types/menu'
@@ -87,6 +88,12 @@ export const DASHBOARD_MENU: DashboardMenuItem[] = [
     label: 'Products',
     href: ROUTES.DASHBOARD_PRODUCTS,
     icon: Coffee,
+    match: 'prefix',
+  },
+  {
+    label: 'Shipping methods',
+    href: ROUTES.DASHBOARD_SHIPPING_METHODS,
+    icon: Truck,
     match: 'prefix',
   },
   {

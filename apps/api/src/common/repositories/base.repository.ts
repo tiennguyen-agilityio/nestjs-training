@@ -177,8 +177,11 @@ export abstract class BaseRepository<T extends BaseEntity> {
         limit,
         offset: (page - 1) * limit,
         ...this.buildFindOptions(options),
-        orderBy: this.buildOrderBy(options).orderBy ?? { createdAt: 'DESC' },
-      } as never,
+        orderBy: [
+          this.buildOrderBy(options).orderBy ?? { createdAt: 'DESC' },
+          { id: 'ASC' },
+        ] as never,
+      },
     );
 
     return this.toPaginatedResult(data, totalCount, query);

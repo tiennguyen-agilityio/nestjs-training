@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { ProductSortBy, ShippingMethodStatus } from '@repo/constants';
 import { ShippingMethod } from '../entities/shipping-method.entity.js';
 import type { ShippingMethodFilters } from '../dto/shipping-method.schema.js';
-import { ShippingMethodStatusFilter } from '../enums/shipping-method-status-filter.enum.js';
 import { BaseRepository } from '../../../common/repositories/base.repository.js';
 import type {
   FindOptions,
@@ -42,9 +41,7 @@ export class ShippingMethodRepository extends BaseRepository<ShippingMethod> {
     options?: FindOptions,
   ): Promise<PaginatedResult<ShippingMethod>> {
     const where: ListOptions<ShippingMethod>['where'] = {};
-    if (status === ShippingMethodStatusFilter.DELETED) {
-      where.deletedAt = { $ne: null };
-    } else if (status) {
+    if (status) {
       where.status = status;
       where.deletedAt = null;
     }

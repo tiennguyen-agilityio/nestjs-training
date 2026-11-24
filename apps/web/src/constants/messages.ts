@@ -14,6 +14,7 @@ export const ERROR_MESSAGES = {
   UNEXPECTED_PROFILE_RESPONSE: 'Unexpected profile response',
   NETWORK_ERROR: 'Network error',
   FIELD_REQUIRED: 'This field is required',
+  SHIPPING_METHOD_ID_MISSING: 'Missing shipping method id.',
   IMAGE_UPLOAD_NOT_CONFIGURED: 'Image upload is not configured',
   PRODUCT_AVATAR_REQUIRED: 'Main hero image is required',
   PRODUCT_GALLERY_REQUIRED: 'At least one gallery image is required',
@@ -46,6 +47,8 @@ export const FORM_MESSAGES = {
   max: (label: string, maximum: number | string) =>
     `${label} must be at most ${maximum}`,
   isInt: (label: string) => `${label} must be a whole number`,
+  maxDecimals: (label: string, places: number) =>
+    `${label} must have at most ${places} decimal places`,
   DISCOUNT_PERCENT: `Discount must be less than ${VALIDATION_RULES.DISCOUNT.PERCENT_MAX}%`,
   DISCOUNT_FIXED: 'Discount must be less than the base price',
 } as const
@@ -72,6 +75,11 @@ export const API_FALLBACK_ERRORS = {
   ORDER_STATUS_UPDATE: 'Could not update order status',
   ORDER_SHIPPING_STATUS_UPDATE: 'Could not update shipping status',
   ORDERS_LOAD: 'Could not load orders',
+  SHIPPING_METHODS_LOAD: 'Could not load shipping methods',
+  SHIPPING_METHOD_LOAD: 'Could not load shipping method',
+  SHIPPING_METHOD_CREATE: 'Could not create shipping method',
+  SHIPPING_METHOD_UPDATE: 'Could not update shipping method',
+  SHIPPING_METHOD_DELETE: 'Could not delete shipping method',
 } as const
 
 export const SUCCESS_MESSAGES = {
@@ -90,6 +98,11 @@ export const SUCCESS_MESSAGES = {
   USER_DELETED: 'User removed',
   PROFILE_UPDATED: 'Profile updated',
   DRAFT_DISCARDED: 'Draft discarded',
+  SHIPPING_METHOD_CREATED: 'Shipping method created',
+  SHIPPING_METHOD_UPDATED: 'Shipping method updated',
+  SHIPPING_METHOD_DELETED: 'Shipping method removed',
+  SHIPPING_METHOD_ACTIVATED: 'Shipping method activated',
+  SHIPPING_METHOD_DEACTIVATED: 'Shipping method deactivated',
 }
 
 // Notices shown in place of a page's content.
@@ -98,6 +111,7 @@ export const NOTICE_MESSAGES = {
     MESSAGE: 'This product has been deleted, so it can no longer be edited.',
     ACTION: 'Back to products',
   },
+  SHIPPING_METHOD_DELETED_LOCKED: 'Deleted shipping methods cannot be modified',
 }
 
 export const DIALOG_MESSAGES = {
@@ -119,6 +133,12 @@ export const DIALOG_MESSAGES = {
       ACTION: 'Delete order',
       DESCRIPTION: (orderLabel: string) =>
         `Are you sure you want to delete order ${orderLabel}? This action cannot be undone.`,
+    },
+  },
+  SHIPPING_METHOD: {
+    DELETE: {
+      TITLE: 'Remove this shipping method?',
+      ACTION: 'Delete',
     },
   },
   USER: {

@@ -156,9 +156,9 @@ describe('ShippingMethodController (e2e)', () => {
       expect(all.find(({ id }) => id === s3.id)?.deletedAt).not.toBeNull();
       expect(all.find(({ id }) => id === s1.id)?.deletedAt).toBeNull();
 
-      expect(idsOf(await list(`search=${tag}&status=DELETED`))).toEqual([
-        s3.id,
-      ]);
+      await request(app.getHttpServer())
+        .get(`${path}?search=${tag}&status=DELETED`)
+        .expect(400);
       expect(idsOf(await list(`search=${tag}&status=ACTIVE`))).toEqual([s1.id]);
       expect(idsOf(await list(`search=${tag}&status=INACTIVE`))).toEqual([
         s2.id,
@@ -181,6 +181,53 @@ describe('ShippingMethodController (e2e)', () => {
         s2.id,
         s1.id,
       ]);
+    });
+
+    it('methods created at the same time keep one order, by id, after an update', async () => {
+      const tag = uniqueTag();
+      const methods: ShippingMethod[] = [];
+      for (const name of ['A', 'B', 'C', 'D']) {
+        methods.push(await createMethod(`${name} ${tag}`, 10));
+      }
+      const ids = methods.map(({ id }) => id);
+      await orm.em
+        .fork()
+        .getConnection()
+        .execute(
+          'update shipping_methods set created_at = ? where id in (?, ?, ?, ?)',
+          [new Date('2026-01-01T00:00:00.000Z'), ...ids],
+        );
+      const admin = await createTestUser(UserRole.ADMIN);
+      mockSessionFor(admin.clerkId);
+      const byId = [...ids].sort();
+
+      expect(idsOf(await list(`search=${tag}`))).toEqual(byId);
+
+      for (const id of [byId[0], byId[2]]) {
+        await request(app.getHttpServer())
+          .patch(`${path}/${id}`)
+          .send({ status: 'INACTIVE', price: 11 })
+          .expect(200);
+      }
+
+      expect(idsOf(await list(`search=${tag}`))).toEqual(byId);
+    });
+
+    it('sortBy=PRICE_ASC breaks a price tie by id', async () => {
+      const tag = uniqueTag();
+      const methods: ShippingMethod[] = [];
+      for (const name of ['A', 'B', 'C']) {
+        methods.push(await createMethod(`${name} ${tag}`, 7));
+      }
+      const byId = methods.map(({ id }) => id).sort();
+      const admin = await createTestUser(UserRole.ADMIN);
+      mockSessionFor(admin.clerkId);
+      await request(app.getHttpServer())
+        .patch(`${path}/${byId[0]}`)
+        .send({ description: 'Changed' })
+        .expect(200);
+
+      expect(idsOf(await list(`search=${tag}&sortBy=PRICE_ASC`))).toEqual(byId);
     });
 
     it('GET ?search=_ matches "_" literally', async () => {

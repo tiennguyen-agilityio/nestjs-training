@@ -10,7 +10,6 @@ import { ShippingMethodController } from './shipping-method.controller.js';
 import { ShippingMethodService } from '../services/shipping-method.service.js';
 import { ShippingMethod } from '../entities/shipping-method.entity.js';
 import { ResponseShippingMethodDto } from '../dto/response-shipping-method.dto.js';
-import { ShippingMethodStatusFilter } from '../enums/shipping-method-status-filter.enum.js';
 import { User } from '../../user/entities/user.entity.js';
 
 describe('ShippingMethodController', () => {
@@ -83,14 +82,14 @@ describe('ShippingMethodController', () => {
           {
             page: 1,
             limit: 10,
-            status: ShippingMethodStatusFilter.INACTIVE,
+            status: ShippingMethodStatus.INACTIVE,
           },
           user,
         );
 
         expect(service.findAll).toHaveBeenCalledWith(
           { page: 1, limit: 10, search: undefined },
-          { status: ShippingMethodStatusFilter.ACTIVE },
+          { status: ShippingMethodStatus.ACTIVE },
           { includeDeleted: false },
         );
       },
@@ -107,7 +106,7 @@ describe('ShippingMethodController', () => {
         { page: 1, limit: 10, search: undefined },
         {
           sortBy: ProductSortBy.PRICE_ASC,
-          status: ShippingMethodStatusFilter.ACTIVE,
+          status: ShippingMethodStatus.ACTIVE,
         },
         { includeDeleted: false },
       );
@@ -119,7 +118,7 @@ describe('ShippingMethodController', () => {
           page: 2,
           limit: 5,
           search: 'express',
-          status: ShippingMethodStatusFilter.DELETED,
+          status: ShippingMethodStatus.INACTIVE,
           sortBy: ProductSortBy.PRICE_ASC,
         },
         activeAdmin,
@@ -128,7 +127,7 @@ describe('ShippingMethodController', () => {
       expect(service.findAll).toHaveBeenCalledWith(
         { page: 2, limit: 5, search: 'express' },
         {
-          status: ShippingMethodStatusFilter.DELETED,
+          status: ShippingMethodStatus.INACTIVE,
           sortBy: ProductSortBy.PRICE_ASC,
         },
         { includeDeleted: true },
@@ -167,13 +166,13 @@ describe('ShippingMethodController', () => {
 
     it('findAll treats an inactive admin as a shopper', async () => {
       await controller.findAll(
-        { page: 1, limit: 10, status: ShippingMethodStatusFilter.DELETED },
+        { page: 1, limit: 10, status: ShippingMethodStatus.INACTIVE },
         inactiveAdmin,
       );
 
       expect(service.findAll).toHaveBeenCalledWith(
         { page: 1, limit: 10, search: undefined },
-        { status: ShippingMethodStatusFilter.ACTIVE },
+        { status: ShippingMethodStatus.ACTIVE },
         { includeDeleted: false },
       );
     });

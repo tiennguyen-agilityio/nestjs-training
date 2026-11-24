@@ -408,7 +408,7 @@ The signed-in user's own cart; every success returns the whole cart.
 
 | Method   | Path                    | Auth | Description                                                                                                                                 |
 | :------- | :---------------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`    | `/shipping-methods`     | 🔓   | List shipping methods (search, sort by name/price, pagination; guests and users see ACTIVE only; admins can filter by status incl. DELETED) |
+| `GET`    | `/shipping-methods`     | 🔓   | List shipping methods (search, filter, sort, pagination) |
 | `GET`    | `/shipping-methods/:id` | 👑   | Get shipping method by ID                                                                                                                   |
 | `POST`   | `/shipping-methods`     | 👑   | Create shipping method                                                                                                                      |
 | `PATCH`  | `/shipping-methods/:id` | 👑   | Update shipping method (name, description, price, status)                                                                                   |
