@@ -1,12 +1,12 @@
 {
   "source": "https://github.com/Tiennd0502/claude-turbo-workflow",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "mode": "copy",
   "tracker": "trello",
   "files": {
     ".claude/agents/plan-reviewer.md": "08704917662e539936c16a6497416b54740d69adf5beb1fc17a1e5e833f01081",
-    ".claude/agents/pr-writer.md": "0668a48e790506b5928fe9b673e10cd98f6c2ad08ed063590b83a00b7bd8a634",
-    ".claude/agents/trello-manager.md": "be32c0185be5e88db99d159f30e8d63f515bada266f91f53d9eb829260c63d83",
+    ".claude/agents/pr-writer.md": "b0ba30a508d5a06eb49a82b2eeb8970d792283770f76d2e31c0d6e42889d73fe",
+    ".claude/agents/trello-manager.md": "58e1b4a47212e145b3b1878e481998ed8d3b5ee6aa2837dc5f2f6ac4662a3907",
     ".claude/agents/uat-tester.md": "6958a71c7c6b31e50a9274c06353e7ab314edf007f83ca54dd1f2a0293690875",
     ".claude/agents/ui-screenshotter.md": "93cad35af0874eddce6f4c5d263e56c13aaa3f690927b79825b27e08412c860c",
     ".claude/hooks/block-forbidden-command.mjs": "8e8102b02e57e6085081e8622badcad24df9a5db164b5cf66befc354e09c4bf7",
@@ -22,7 +22,7 @@
     ".claude/skills/uat/SKILL.md": "cd6e5c17a6e7d4bd2a5dfd1fb37508f49f1aa59a0b7a60899d5558ec666a0c52",
     ".claude/skills/ui-screenshot/SKILL.md": "362009730b4912f2c94fef1f22d48140ba43af3b615b97ffcbdd515fbc50f478",
     ".claude/skills/work-ticket/SKILL.md": "475fc2edd4b9106cb1ab3045b95a5c735b4a7ad65fd3187efb4a7a5671a84de2",
-    ".claude/templates/pr-description.md": "863b922f32b652f8d26768b852ca079f13c21dd5dcd7d0d978a981f4bb01677c",
+    ".claude/templates/pr-description.md": "c2cc95e72338dd4df67de2fd69c6c4da5c6d969b2f7d0936bd19a304644c890c",
     ".claude/templates/test-report.md": "a37ec4a5a9f629387f7c168120f4a6c288b437c6ef5d3c11f792c59f36ebd0ae",
     ".claude/trackers/trello/adapter.md": "00316cd9963c03ade4c897da61d061588dde26d247bd0531d4971bf96f9fb5e2"
   }
