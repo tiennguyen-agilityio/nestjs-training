@@ -38,6 +38,18 @@ export class ProductVariantRepository extends BaseRepository<ProductVariant> {
     );
   }
 
+  /** Gives back `quantity` held units; false when fewer are held. */
+  release(id: string, quantity: number, actorId: ActorId): Promise<boolean> {
+    return this.incrementGuarded(
+      id,
+      'reservedQuantity',
+      -quantity,
+      'reserved_quantity >= ?',
+      [quantity],
+      actorId,
+    );
+  }
+
   reload(variant: ProductVariant): Promise<ProductVariant | null> {
     return this.reloadEntity(variant);
   }

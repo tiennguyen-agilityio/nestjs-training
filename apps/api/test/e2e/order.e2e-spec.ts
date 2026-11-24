@@ -730,4 +730,149 @@ describe('OrderController (e2e)', () => {
       await read(randomUUID()).expect(401);
     });
   });
+  describe('POST /orders/:idOrOrderNumber/cancel', () => {
+    const cancel = (value: string) =>
+      request(app.getHttpServer()).post(
+        `${ORDERS}/${encodeURIComponent(value)}/cancel`,
+      );
+
+    const releaseRows = async (orderId: string) =>
+      execute<{ quantity: number; created_by: string | null }[]>(
+        `select quantity, created_by from inventory_movements
+         where order_id = ? and type = 'RELEASE'`,
+        [orderId],
+      );
+
+    const placeWith = async (
+      clerkId: string,
+      stock = 5,
+      quantity = 2,
+    ): Promise<{ order: OrderBody; variantId: string }> => {
+      const methodId = await createMethod();
+      const { variantId } = await createProduct(stock);
+      signIn(clerkId);
+      await addToCart(variantId, quantity);
+      return { order: orderOf(await place(methodId).expect(201)), variantId };
+    };
+
+    it("POST /orders/:idOrOrderNumber/cancel cancels a PENDING order and V's available stock goes 3 → 5 (AC1)", async () => {
+      const user = await createUser();
+      const { order, variantId } = await placeWith(user.clerkId);
+      const before = await variantRow(variantId);
+      expect(before.stock_quantity - before.reserved_quantity).toBe(3);
+
+      const response = await cancel(order.orderNumber).expect(200);
+
+      const data = orderOf(response) as OrderBody & {
+        payments: { status: string; failureReason: string | null }[];
+      };
+      expect(data.id).toBe(order.id);
+      expect(data.status).toBe('CANCELLED');
+      expect(data.payments[0]).toMatchObject({
+        status: 'FAILED',
+        failureReason: 'Cancelled',
+      });
+      const after = await variantRow(variantId);
+      expect(after).toEqual({ stock_quantity: 5, reserved_quantity: 0 });
+      expect(after.stock_quantity - after.reserved_quantity).toBe(5);
+      expect(await releaseRows(order.id)).toEqual([
+        { quantity: 2, created_by: null },
+      ]);
+    });
+
+    it('POST /orders/:idOrOrderNumber/cancel of a CONFIRMED order returns 409 statusNotAllowed and it stays CONFIRMED (AC2)', async () => {
+      const user = await createUser();
+      const { order, variantId } = await placeWith(user.clerkId);
+      await execute(`update orders set status = 'CONFIRMED' where id = ?`, [
+        order.id,
+      ]);
+
+      const response = await cancel(order.id).expect(409);
+
+      expect((response.body as ErrorBody).errors[0]).toMatchObject({
+        errCode: 'statusNotAllowed',
+        field: 'status',
+      });
+      const [row] = await execute<{ status: string }[]>(
+        'select status from orders where id = ?',
+        [order.id],
+      );
+      expect(row.status).toBe('CONFIRMED');
+      expect((await variantRow(variantId)).reserved_quantity).toBe(2);
+      expect(await releaseRows(order.id)).toEqual([]);
+    });
+
+    it('two concurrent cancels of one order: one 200, one 409, the stock released once', async () => {
+      const user = await createUser();
+      const { order, variantId } = await placeWith(user.clerkId);
+
+      const statuses = (
+        await Promise.all([cancel(order.id), cancel(order.orderNumber)])
+      )
+        .map((response) => response.status)
+        .sort();
+
+      expect(statuses).toEqual([200, 409]);
+      expect((await variantRow(variantId)).reserved_quantity).toBe(0);
+      expect(await releaseRows(order.id)).toHaveLength(1);
+    });
+
+    it('cancelling an order whose variant was soft-deleted still releases its reservation', async () => {
+      const user = await createUser();
+      const { order, variantId } = await placeWith(user.clerkId);
+      await execute(
+        'update product_variants set deleted_at = now() where id = ?',
+        [variantId],
+      );
+
+      await cancel(order.id).expect(200);
+
+      expect((await variantRow(variantId)).reserved_quantity).toBe(0);
+      expect(await releaseRows(order.id)).toHaveLength(1);
+    });
+
+    it('cancel ignores a soft-deleted charge: no 409, untouched, not in the response', async () => {
+      const user = await createUser();
+      const { order, variantId } = await placeWith(user.clerkId);
+      const deletedId = randomUUID();
+      await execute(
+        `insert into payments (id, order_id, type, method, status, amount,
+           created_at, updated_at, deleted_at)
+         values (?, ?, 'CHARGE', 'CARD', 'PAID', 34, now(), now(), now())`,
+        [deletedId, order.id],
+      );
+
+      const response = await cancel(order.id).expect(200);
+
+      const data = orderOf(response);
+      expect(data.payments.map((payment) => payment.status)).toEqual([
+        'FAILED',
+      ]);
+      const [deleted] = await execute<{ status: string }[]>(
+        'select status from payments where id = ?',
+        [deletedId],
+      );
+      expect(deleted.status).toBe('PAID');
+      expect((await variantRow(variantId)).reserved_quantity).toBe(0);
+    });
+
+    it("POST /orders/:idOrOrderNumber/cancel of another user's order returns 404", async () => {
+      const u1 = await createUser();
+      const u2 = await createUser();
+      const { order, variantId } = await placeWith(u1.clerkId);
+
+      signIn(u2.clerkId);
+      const response = await cancel(order.id).expect(404);
+
+      expect((response.body as ErrorBody).errors[0]).toMatchObject({
+        errCode: 'orderNotFound',
+        field: 'idOrOrderNumber',
+      });
+      expect((await variantRow(variantId)).reserved_quantity).toBe(2);
+    });
+
+    it('POST /orders/:idOrOrderNumber/cancel without a session returns 401', async () => {
+      await cancel(randomUUID()).expect(401);
+    });
+  });
 });

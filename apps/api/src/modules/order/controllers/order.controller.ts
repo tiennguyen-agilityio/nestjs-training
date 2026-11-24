@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpStatus,
   Param,
   Post,
@@ -122,5 +123,35 @@ export class OrderController {
     @Body({ schema: placeOrderSchema }) dto: PlaceOrderInput,
   ): Promise<ResponseOrderDto> {
     return this.orderService.place(user.id, dto);
+  }
+
+  @Post(':idOrOrderNumber/cancel')
+  @HttpCode(HttpStatus.OK)
+  @ApiAuthErrors()
+  @ApiOperation({
+    summary: "Cancel one of the signed-in user's PENDING orders",
+    description:
+      "A UUID looks up by id, anything else by orderNumber. In one transaction the order becomes CANCELLED, each item's held stock is released (RELEASE) and its PENDING charge becomes FAILED; an open checkout session is expired through the outbox. Another user's order returns 404; a non-PENDING or paid order returns 409.",
+  })
+  @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
+  @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.ORDER.NOT_FOUND, {
+    errCode: ERROR_CODES.ORDER.NOT_FOUND,
+    field: 'idOrOrderNumber',
+    description: ERROR_DESCRIPTIONS.ORDER.NOT_FOUND,
+  })
+  @ApiErrorResponse(
+    HttpStatus.CONFLICT,
+    ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('confirmed'),
+    {
+      errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
+      field: 'status',
+      description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE,
+    },
+  )
+  cancel(
+    @AuthUser() user: User,
+    @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
+  ): Promise<ResponseOrderDto> {
+    return this.orderService.cancel(user.id, idOrOrderNumber);
   }
 }
