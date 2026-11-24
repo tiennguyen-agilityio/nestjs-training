@@ -358,6 +358,28 @@ describe('CartController (e2e)', () => {
       expect(cart.totalQuantity).toBe(5);
       expect(cart.subTotal).toBe(50);
     });
+
+    it('GET /cart shows the available quantity after a reservation', async () => {
+      const user = await createUser();
+      const held = await createProduct({ stockQuantity: 5 });
+      await orm.em
+        .getConnection()
+        .execute(
+          'update product_variants set reserved_quantity = 3 where id = ?',
+          [held.variantId],
+        );
+      signIn(user.clerkId);
+
+      await add(held.variantId, 3).expect(409);
+      await add(held.variantId, 2).expect(201);
+
+      const [item] = (await readCart()).items;
+      expect(item).toMatchObject({
+        quantity: 2,
+        inStock: true,
+        variant: { availableQuantity: 2 },
+      });
+    });
   });
 
   describe('auth', () => {

@@ -126,6 +126,9 @@ export class ProductService {
     actorId: ActorId,
   ): Promise<Product> {
     return this.productRepository.transactional(async () => {
+      await this.productVariantService.lockByIds(
+        (data.updateVariants ?? []).map((patch) => patch.id),
+      );
       const product = await this.findOne(id);
 
       if (data.name !== undefined && data.name !== product.name) {
@@ -224,6 +227,20 @@ export class ProductService {
         stockQuantity: patch.stockQuantity ?? variant.stockQuantity,
       };
 
+      if (next.stockQuantity < variant.reservedQuantity) {
+        throw new ValidationException([
+          {
+            errCode: ERROR_CODES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED,
+            field: `updateVariants.${index}.stockQuantity`,
+            message: ERROR_MESSAGES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED(
+              variant.reservedQuantity,
+            ),
+            description:
+              ERROR_DESCRIPTIONS.PRODUCT_VARIANT.STOCK_BELOW_RESERVED,
+          },
+        ]);
+      }
+
       const violation = findDiscountRuleViolation(next);
       if (violation) {
         throw new ValidationException([
@@ -295,6 +312,21 @@ export class ProductService {
       })),
       ...addImages.map((data) => ({ isPrimary: data.isPrimary })),
     ];
+
+    const minCount = VALIDATION_RULES.IMAGE.MIN_COUNT;
+    if (
+      (removeImageIds.length > 0 || addImages.length > 0) &&
+      finalImages.length < minCount
+    ) {
+      throw new ValidationException([
+        {
+          errCode: ERROR_CODES.PRODUCT.TOO_FEW_IMAGES,
+          field: removeImageIds.length > 0 ? 'removeImageIds' : 'addImages',
+          message: ERROR_MESSAGES.PRODUCT.TOO_FEW_IMAGES(minCount),
+          description: ERROR_DESCRIPTIONS.PRODUCT.TOO_FEW_IMAGES,
+        },
+      ]);
+    }
 
     this.assertExactlyOnePrimary(finalImages);
     this.assertUniqueSortOrders(remaining, patchById, addImages);

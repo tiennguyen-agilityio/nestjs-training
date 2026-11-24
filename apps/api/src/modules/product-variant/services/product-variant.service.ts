@@ -57,6 +57,21 @@ export class ProductVariantService {
     return this.productVariantRepository.findManyWithProduct(ids);
   }
 
+  reserve(id: string, quantity: number, actorId: ActorId): Promise<boolean> {
+    return this.productVariantRepository.reserve(id, quantity, actorId);
+  }
+
+  reload(variant: ProductVariant): Promise<ProductVariant | null> {
+    return this.productVariantRepository.reload(variant);
+  }
+
+  lockByIds(ids: string[]): Promise<ProductVariant[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.productVariantRepository.lockByIds(ids);
+  }
+
   async findOne(id: string): Promise<ProductVariant> {
     const variant = await this.productVariantRepository.findById(id);
     if (!variant) {

@@ -42,7 +42,7 @@ describe('ProductService', () => {
   };
   let categoryService: { findOne: Mock };
   let productImageService: { create: Mock };
-  let productVariantService: { create: Mock };
+  let productVariantService: { create: Mock; lockByIds: Mock };
 
   const buildProduct = (overrides: Partial<Product> = {}): Product =>
     ({
@@ -76,7 +76,10 @@ describe('ProductService', () => {
     };
     categoryService = { findOne: vi.fn() };
     productImageService = { create: vi.fn() };
-    productVariantService = { create: vi.fn() };
+    productVariantService = {
+      create: vi.fn(),
+      lockByIds: vi.fn().mockResolvedValue([]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -520,10 +523,38 @@ describe('ProductService', () => {
         return { product, images, add };
       };
 
+      it('update rejects removing images below 2', async () => {
+        productWithImages([
+          buildImage(idA, { sortOrder: 0 }),
+          buildImage(idB, { isPrimary: true, sortOrder: 1 }),
+        ]);
+
+        const error = (await service
+          .update('product-id-1', { removeImageIds: [idA] }, ACTOR)
+          .catch((caught: unknown) => caught)) as ValidationException;
+
+        expect(error).toBeInstanceOf(ValidationException);
+        expect(error.getErrors()[0]).toMatchObject({
+          errCode: ERROR_CODES.PRODUCT.TOO_FEW_IMAGES,
+          field: 'removeImageIds',
+          message: 'A product needs at least 2 images',
+        });
+        expect(productRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('update without image changes ignores the image floor', async () => {
+        const { product } = productWithImages([]);
+
+        await service.update('product-id-1', { description: 'Updated' }, ACTOR);
+
+        expect(productRepository.save).toHaveBeenCalledWith(product, ACTOR);
+      });
+
       it('soft-deletes the removed images, clears their sortOrder and saves once', async () => {
         const { images } = productWithImages([
           buildImage(idA, { sortOrder: 0 }),
           buildImage(idB, { isPrimary: true, sortOrder: 1 }),
+          buildImage(idC, { sortOrder: 2 }),
         ]);
 
         await service.update('product-id-1', { removeImageIds: [idA] }, ACTOR);
@@ -797,6 +828,7 @@ describe('ProductService', () => {
         productWithImages([
           buildImage(idA, { isPrimary: true }),
           buildImage(idB),
+          buildImage(idC),
         ]);
 
         await expect(
@@ -826,7 +858,8 @@ describe('ProductService', () => {
       it('allows removing the primary image when another is promoted via updateImages', async () => {
         const { images } = productWithImages([
           buildImage(idA, { isPrimary: true }),
-          buildImage(idB),
+          buildImage(idB, { sortOrder: 1 }),
+          buildImage(idC, { sortOrder: 2 }),
         ]);
 
         await service.update(
@@ -846,6 +879,7 @@ describe('ProductService', () => {
       it('allows removing the primary image when a new primary is added', async () => {
         const { images, add } = productWithImages([
           buildImage(idA, { isPrimary: true }),
+          buildImage(idB, { sortOrder: 1 }),
         ]);
 
         await service.update(
@@ -910,6 +944,51 @@ describe('ProductService', () => {
         expect(error).toBeInstanceOf(ValidationException);
         return error as ValidationException;
       };
+
+      it('update rejects stock below reserved', async () => {
+        const { variants } = productWithVariants([
+          buildVariant(idA, { stockQuantity: 5, reservedQuantity: 2 }),
+        ]);
+
+        const error = await rejection(
+          service.update(
+            'product-id-1',
+            { updateVariants: [{ id: idA, stockQuantity: 1 }] },
+            ACTOR,
+          ),
+        );
+
+        expect(error.getErrors()[0]).toMatchObject({
+          errCode: ERROR_CODES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED,
+          field: 'updateVariants.0.stockQuantity',
+          message: 'Stock cannot be below the 2 units held for orders',
+        });
+        expect(variants[0].stockQuantity).toBe(5);
+        expect(productRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('update locks the variants it changes', async () => {
+        productWithVariants([buildVariant(idA), buildVariant(idB)]);
+        const calls: string[] = [];
+        productVariantService.lockByIds.mockImplementation(() => {
+          calls.push('lock');
+          return Promise.resolve([]);
+        });
+        const findById = productRepository.findById.getMockImplementation();
+        productRepository.findById.mockImplementation((...args: unknown[]) => {
+          calls.push('find');
+          return findById?.(...args) as Promise<unknown>;
+        });
+
+        await service.update(
+          'product-id-1',
+          { updateVariants: [{ id: idB, stockQuantity: 3 }] },
+          ACTOR,
+        );
+
+        expect(productVariantService.lockByIds).toHaveBeenCalledWith([idB]);
+        expect(calls).toEqual(['lock', 'find']);
+      });
 
       it('applies size and unit from updateVariants', async () => {
         const { variants } = productWithVariants([

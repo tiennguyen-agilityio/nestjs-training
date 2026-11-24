@@ -12,5 +12,6 @@ import { ProductVariantModule } from '../product-variant/product-variant.module.
   imports: [MikroOrmModule.forFeature([Cart, CartItem]), ProductVariantModule],
   providers: [CartService, CartRepository, CartItemRepository],
   controllers: [CartController],
+  exports: [CartService],
 })
 export class CartModule {}

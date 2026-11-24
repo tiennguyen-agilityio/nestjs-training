@@ -8,7 +8,9 @@ import {
   DomainException,
   DuplicateResourceException,
   ItemNotFoundException,
+  ResourceInUseException,
 } from '../../../common/exceptions/base.exception.js';
+import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 
 const errorsOf = (promise: Promise<unknown>) =>
   promise.then(
@@ -27,6 +29,10 @@ describe('ShippingMethodService', () => {
     create: Mock;
     save: Mock;
     softDelete: Mock;
+    countOrders: Mock;
+    findByIdForShare: Mock;
+    findByIdForUpdate: Mock;
+    transactional: Mock;
   };
 
   const buildMethod = (overrides: Partial<ShippingMethod> = {}) => ({
@@ -52,7 +58,14 @@ describe('ShippingMethodService', () => {
       create: vi.fn(),
       save: vi.fn(),
       softDelete: vi.fn(),
+      countOrders: vi.fn().mockResolvedValue(0),
+      findByIdForShare: vi.fn(),
+      findByIdForUpdate: vi.fn(),
+      transactional: vi.fn((work: () => Promise<unknown>) => work()),
     };
+    repository.findByIdForUpdate.mockImplementation(
+      (id: string) => repository.findById(id) as Promise<unknown>,
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -239,7 +252,85 @@ describe('ShippingMethodService', () => {
     });
   });
 
+  describe('findForOrder', () => {
+    it('findForOrder returns only a live ACTIVE method', async () => {
+      const active = buildMethod();
+      repository.findByIdForShare.mockResolvedValueOnce(active);
+      await expect(service.findForOrder('method-1')).resolves.toBe(active);
+      expect(repository.findByIdForShare).toHaveBeenCalledWith('method-1');
+
+      repository.findByIdForShare.mockResolvedValueOnce(
+        buildMethod({ status: ShippingMethodStatus.INACTIVE }),
+      );
+      await expect(service.findForOrder('method-1')).resolves.toBeNull();
+
+      repository.findByIdForShare.mockResolvedValueOnce(null);
+      await expect(service.findForOrder('missing')).resolves.toBeNull();
+      expect(repository.findById).not.toHaveBeenCalled();
+    });
+  });
+
   describe('remove', () => {
+    it('remove rejects a method used by orders', async () => {
+      repository.findById.mockResolvedValue(buildMethod());
+      repository.countOrders.mockResolvedValue(1);
+
+      const error = await service
+        .remove('method-1', ACTOR)
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(ResourceInUseException);
+      expect((error as DomainException).getErrors()[0]).toEqual({
+        errCode: ERROR_CODES.SHIPPING_METHOD.IN_USE,
+        field: 'id',
+        message: 'Shipping method is used by orders',
+        description: 'Set its status to INACTIVE instead.',
+      });
+      expect(repository.countOrders).toHaveBeenCalledWith('method-1');
+      expect(repository.softDelete).not.toHaveBeenCalled();
+    });
+
+    it('remove locks the method in a transaction before counting its orders', async () => {
+      const method = buildMethod();
+      repository.findById.mockResolvedValue(method);
+      repository.findByIdForUpdate.mockResolvedValue(method);
+
+      await service.remove('method-1', ACTOR);
+
+      expect(repository.transactional).toHaveBeenCalledTimes(1);
+      expect(repository.findByIdForUpdate).toHaveBeenCalledWith('method-1');
+      expect(
+        repository.findByIdForUpdate.mock.invocationCallOrder[0],
+      ).toBeLessThan(repository.countOrders.mock.invocationCallOrder[0]);
+    });
+
+    it('remove soft-deletes the locked method and 404s when another remove won', async () => {
+      const stale = buildMethod();
+      const locked = buildMethod();
+      repository.findById.mockResolvedValue(stale);
+      repository.findByIdForUpdate.mockResolvedValueOnce(locked);
+
+      await service.remove('method-1', ACTOR);
+      expect(repository.softDelete).toHaveBeenCalledWith(locked, ACTOR);
+
+      repository.softDelete.mockClear();
+      repository.findByIdForUpdate.mockResolvedValueOnce(null);
+      await expect(service.remove('method-1', ACTOR)).rejects.toBeInstanceOf(
+        ItemNotFoundException,
+      );
+      expect(repository.softDelete).not.toHaveBeenCalled();
+    });
+
+    it('remove soft-deletes a method no order uses', async () => {
+      const method = buildMethod();
+      repository.findById.mockResolvedValue(method);
+
+      await service.remove('method-1', ACTOR);
+
+      expect(repository.countOrders).toHaveBeenCalledWith('method-1');
+      expect(repository.softDelete).toHaveBeenCalledWith(method, ACTOR);
+    });
+
     it('remove soft-deletes the method', async () => {
       const method = buildMethod();
       repository.findById.mockResolvedValue(method);

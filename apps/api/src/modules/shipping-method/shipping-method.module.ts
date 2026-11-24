@@ -9,5 +9,6 @@ import { ShippingMethodController } from './controllers/shipping-method.controll
   imports: [MikroOrmModule.forFeature([ShippingMethod])],
   providers: [ShippingMethodService, ShippingMethodRepository],
   controllers: [ShippingMethodController],
+  exports: [ShippingMethodService],
 })
 export class ShippingMethodModule {}

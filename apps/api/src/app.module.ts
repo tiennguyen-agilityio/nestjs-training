@@ -21,6 +21,7 @@ import { CategoryModule } from './modules/category/category.module.js';
 import { ProductModule } from './modules/product/product.module.js';
 import { CartModule } from './modules/cart/cart.module.js';
 import { ShippingMethodModule } from './modules/shipping-method/shipping-method.module.js';
+import { OrderModule } from './modules/order/order.module.js';
 import { IdempotencyStoreModule } from './modules/idempotency/idempotency.module.js';
 import { OutboxStoreModule } from './modules/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -52,6 +53,7 @@ import { HEALTH_ROUTES } from './common/constants/env.constant.js';
     ProductModule,
     CartModule,
     ShippingMethodModule,
+    OrderModule,
     HealthModule,
     ...(process.env.NODE_ENV !== 'production'
       ? [

@@ -18,6 +18,9 @@ describe('ProductVariantService', () => {
     findById: Mock;
     findWithProduct: Mock;
     findManyWithProduct: Mock;
+    reserve: Mock;
+    reload: Mock;
+    lockByIds: Mock;
     findBySku: Mock;
     findAllByProduct: Mock;
     create: Mock;
@@ -48,6 +51,9 @@ describe('ProductVariantService', () => {
       findById: vi.fn(),
       findWithProduct: vi.fn(),
       findManyWithProduct: vi.fn(),
+      reserve: vi.fn(),
+      reload: vi.fn(),
+      lockByIds: vi.fn(),
       findBySku: vi.fn(),
       findAllByProduct: vi.fn(),
       create: vi.fn(),
@@ -320,6 +326,58 @@ describe('ProductVariantService', () => {
       expect(
         productVariantRepository.findManyWithProduct,
       ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reserve', () => {
+    it('reserve forwards to the repository and returns its result', async () => {
+      productVariantRepository.reserve.mockResolvedValueOnce(true);
+      productVariantRepository.reserve.mockResolvedValueOnce(false);
+
+      await expect(service.reserve('v1', 2, ACTOR)).resolves.toBe(true);
+      await expect(service.reserve('v1', 9, null)).resolves.toBe(false);
+      expect(productVariantRepository.reserve).toHaveBeenNthCalledWith(
+        1,
+        'v1',
+        2,
+        ACTOR,
+      );
+      expect(productVariantRepository.reserve).toHaveBeenNthCalledWith(
+        2,
+        'v1',
+        9,
+        null,
+      );
+    });
+
+    it('reload returns null when the row is gone', async () => {
+      productVariantRepository.reload.mockResolvedValue(null);
+
+      await expect(service.reload(buildVariant())).resolves.toBeNull();
+    });
+
+    it('reload returns the variant read again from the database', async () => {
+      const stale = buildVariant({ reservedQuantity: 0 });
+      const fresh = buildVariant({ reservedQuantity: 3 });
+      productVariantRepository.reload.mockResolvedValue(fresh);
+
+      await expect(service.reload(stale)).resolves.toBe(fresh);
+      expect(productVariantRepository.reload).toHaveBeenCalledWith(stale);
+    });
+  });
+
+  describe('lockByIds', () => {
+    it('lockByIds forwards the ids and returns the locked variants', async () => {
+      const variants = [buildVariant({ id: 'v1' })];
+      productVariantRepository.lockByIds.mockResolvedValue(variants);
+
+      await expect(service.lockByIds(['v1'])).resolves.toBe(variants);
+      expect(productVariantRepository.lockByIds).toHaveBeenCalledWith(['v1']);
+    });
+
+    it('lockByIds returns [] for no ids without a query', async () => {
+      await expect(service.lockByIds([])).resolves.toEqual([]);
+      expect(productVariantRepository.lockByIds).not.toHaveBeenCalled();
     });
   });
 

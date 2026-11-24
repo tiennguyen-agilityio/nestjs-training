@@ -1,6 +1,7 @@
 import { Opt } from '@mikro-orm/core';
 import type { Rel } from '@mikro-orm/core';
 import {
+  Check,
   Entity,
   Enum,
   ManyToOne,
@@ -12,6 +13,14 @@ import { Product } from '../../product/entities/product.entity.js';
 import { DiscountType, ProductUnit } from '@repo/constants';
 
 @Entity({ tableName: 'product_variants' })
+@Check({
+  name: 'product_variants_stock_quantity_check',
+  expression: 'stock_quantity >= 0',
+})
+@Check({
+  name: 'product_variants_reserved_quantity_check',
+  expression: 'reserved_quantity >= 0 and reserved_quantity <= stock_quantity',
+})
 export class ProductVariant extends AuditableEntity {
   @ManyToOne(() => Product, { updateRule: 'cascade' })
   product!: Rel<Product>;
@@ -47,4 +56,7 @@ export class ProductVariant extends AuditableEntity {
 
   @Property({ type: 'number', fieldName: 'stock_quantity' })
   stockQuantity: number & Opt = 0;
+
+  @Property({ type: 'number', fieldName: 'reserved_quantity' })
+  reservedQuantity: number & Opt = 0;
 }

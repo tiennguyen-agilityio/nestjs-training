@@ -1,8 +1,6 @@
 {
   "name": "public",
-  "namespaces": [
-    "public"
-  ],
+  "namespaces": ["public"],
   "tables": [
     {
       "name": "cart_items",
@@ -130,10 +128,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "cart_id",
-            "product_variant_id"
-          ],
+          "columnNames": ["cart_id", "product_variant_id"],
           "composite": true,
           "constraint": true,
           "keyName": "cart_items_cart_id_product_variant_id_unique",
@@ -141,9 +136,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "cart_items_pkey",
@@ -161,27 +154,19 @@
       "triggers": [],
       "foreignKeys": {
         "cart_items_cart_id_foreign": {
-          "columnNames": [
-            "cart_id"
-          ],
+          "columnNames": ["cart_id"],
           "constraintName": "cart_items_cart_id_foreign",
           "localTableName": "public.cart_items",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.carts",
           "updateRule": "cascade",
           "deleteRule": "cascade"
         },
         "cart_items_product_variant_id_foreign": {
-          "columnNames": [
-            "product_variant_id"
-          ],
+          "columnNames": ["product_variant_id"],
           "constraintName": "cart_items_product_variant_id_foreign",
           "localTableName": "public.cart_items",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.product_variants",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -281,9 +266,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "carts_pkey",
@@ -291,9 +274,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "composite": false,
           "constraint": true,
           "keyName": "carts_user_id_unique",
@@ -305,14 +286,10 @@
       "triggers": [],
       "foreignKeys": {
         "carts_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "constraintName": "carts_user_id_foreign",
           "localTableName": "public.carts",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.users",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -480,9 +457,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "name"
-          ],
+          "columnNames": ["name"],
           "composite": false,
           "constraint": true,
           "keyName": "categories_name_unique",
@@ -490,9 +465,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "categories_pkey",
@@ -614,9 +587,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "expires_at"
-          ],
+          "columnNames": ["expires_at"],
           "composite": false,
           "constraint": false,
           "keyName": "idempotency_keys_expires_at_index",
@@ -624,9 +595,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "key_hash"
-          ],
+          "columnNames": ["key_hash"],
           "composite": false,
           "constraint": true,
           "keyName": "idempotency_keys_pkey",
@@ -637,6 +606,1233 @@
       "checks": [],
       "triggers": [],
       "foreignKeys": {},
+      "comment": null
+    },
+    {
+      "name": "inventory_movements",
+      "schema": "public",
+      "columns": {
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "product_variant_id": {
+          "name": "product_variant_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": ["RESERVE", "RELEASE", "SALE", "RESTOCK", "ADJUSTMENT"],
+          "mappedType": "enum"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": ["id"],
+          "composite": false,
+          "constraint": true,
+          "keyName": "inventory_movements_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "inventory_movements_type_check",
+          "expression": "\"type\" in ('RESERVE', 'RELEASE', 'SALE', 'RESTOCK', 'ADJUSTMENT')",
+          "definition": "check (\"type\" in ('RESERVE', 'RELEASE', 'SALE', 'RESTOCK', 'ADJUSTMENT'))",
+          "columnName": "type"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "inventory_movements_order_id_foreign": {
+          "columnNames": ["order_id"],
+          "constraintName": "inventory_movements_order_id_foreign",
+          "localTableName": "public.inventory_movements",
+          "referencedColumnNames": ["id"],
+          "referencedTableName": "public.orders",
+          "deleteRule": "restrict"
+        },
+        "inventory_movements_product_variant_id_foreign": {
+          "columnNames": ["product_variant_id"],
+          "constraintName": "inventory_movements_product_variant_id_foreign",
+          "localTableName": "public.inventory_movements",
+          "referencedColumnNames": ["id"],
+          "referencedTableName": "public.product_variants",
+          "deleteRule": "restrict"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "order_items",
+      "schema": "public",
+      "columns": {
+        "discount_amount": {
+          "name": "discount_amount",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 10,
+          "scale": 2,
+          "default": "0",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "product_image": {
+          "name": "product_image",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "product_name": {
+          "name": "product_name",
+          "type": "varchar(120)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 120,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "product_variant_id": {
+          "name": "product_variant_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
+        "unit_price": {
+          "name": "unit_price",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 10,
+          "scale": 2,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "variant_name": {
+          "name": "variant_name",
+          "type": "varchar(50)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 50,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": ["order_id", "product_variant_id"],
+          "composite": true,
+          "constraint": true,
+          "keyName": "order_items_order_id_product_variant_id_unique",
+          "primary": false,
+          "unique": true
+        },
+        {
+          "columnNames": ["id"],
+          "composite": false,
+          "constraint": true,
+          "keyName": "order_items_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "order_items_quantity_check",
+          "expression": "quantity >= 1",
+          "definition": "check (quantity >= 1)"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "order_items_order_id_foreign": {
+          "columnNames": ["order_id"],
+          "constraintName": "order_items_order_id_foreign",
+          "localTableName": "public.order_items",
+          "referencedColumnNames": ["id"],
+          "referencedTableName": "public.orders",
+          "deleteRule": "restrict"
+        },
+        "order_items_product_variant_id_foreign": {
+          "columnNames": ["product_variant_id"],
+          "constraintName": "order_items_product_variant_id_foreign",
+          "localTableName": "public.order_items",
+          "referencedColumnNames": ["id"],
+          "referencedTableName": "public.product_variants",
+          "deleteRule": "restrict"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "orders",
+      "schema": "public",
+      "columns": {
+        "address_line": {
+          "name": "address_line",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "city": {
+          "name": "city",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "deleted_by": {
+          "name": "deleted_by",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "district": {
+          "name": "district",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "order_number": {
+          "name": "order_number",
+          "type": "varchar(20)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": 20,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "postal_code": {
+          "name": "postal_code",
+          "type": "varchar(20)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 20,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "recipient_name": {
+          "name": "recipient_name",
+          "type": "varchar(120)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 120,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "recipient_phone": {
+          "name": "recipient_phone",
+          "type": "varchar(10)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 10,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "shipping_fee": {
+          "name": "shipping_fee",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 10,
+          "scale": 2,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "shipping_method_id": {
+          "name": "shipping_method_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "shipping_method_name": {
+          "name": "shipping_method_name",
+          "type": "varchar(120)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 120,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "shipping_status": {
+          "name": "shipping_status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'PENDING'",
+          "comment": null,
+          "collation": null,
+          "enumItems": ["PENDING", "SHIPPING", "DELIVERED", "RETURNED"],
+          "mappedType": "enum"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'PENDING'",
+          "comment": null,
+          "collation": null,
+          "enumItems": ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"],
+          "mappedType": "enum"
+        },
+        "tax": {
+          "name": "tax",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 10,
+          "scale": 2,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "total_amount": {
+          "name": "total_amount",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 10,
+          "scale": 2,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "ward": {
+          "name": "ward",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": ["order_number"],
+          "composite": false,
+          "constraint": true,
+          "keyName": "orders_order_number_unique",
+          "primary": false,
+          "unique": true
+        },
+        {
+          "columnNames": ["id"],
+          "composite": false,
+          "constraint": true,
+          "keyName": "orders_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "orders_shipping_status_check",
+          "expression": "\"shipping_status\" in ('PENDING', 'SHIPPING', 'DELIVERED', 'RETURNED')",
+          "definition": "check (\"shipping_status\" in ('PENDING', 'SHIPPING', 'DELIVERED', 'RETURNED'))",
+          "columnName": "shipping_status"
+        },
+        {
+          "name": "orders_status_check",
+          "expression": "\"status\" in ('PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED')",
+          "definition": "check (\"status\" in ('PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'))",
+          "columnName": "status"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "orders_shipping_method_id_foreign": {
+          "columnNames": ["shipping_method_id"],
+          "constraintName": "orders_shipping_method_id_foreign",
+          "localTableName": "public.orders",
+          "referencedColumnNames": ["id"],
+          "referencedTableName": "public.shipping_methods",
+          "deleteRule": "restrict"
+        },
+        "orders_user_id_foreign": {
+          "columnNames": ["user_id"],
+          "constraintName": "orders_user_id_foreign",
+          "localTableName": "public.orders",
+          "referencedColumnNames": ["id"],
+          "referencedTableName": "public.users",
+          "deleteRule": "restrict"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "payments",
+      "schema": "public",
+      "columns": {
+        "amount": {
+          "name": "amount",
+          "type": "numeric(10,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 10,
+          "scale": 2,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "currency": {
+          "name": "currency",
+          "type": "char(3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 3,
+          "precision": null,
+          "scale": null,
+          "default": "'USD'",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "character"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "deleted_by": {
+          "name": "deleted_by",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "failure_reason": {
+          "name": "failure_reason",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "method": {
+          "name": "method",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": ["COD", "CARD", "PAYPAL"],
+          "mappedType": "enum"
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'PENDING'",
+          "comment": null,
+          "collation": null,
+          "enumItems": ["PENDING", "PAID", "FAILED"],
+          "mappedType": "enum"
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'CHARGE'",
+          "comment": null,
+          "collation": null,
+          "enumItems": ["CHARGE", "REFUND"],
+          "mappedType": "enum"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": ["order_id", "created_at"],
+          "composite": true,
+          "constraint": false,
+          "keyName": "payments_order_id_created_at_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "keyName": "payments_order_id_paid_charge_unique",
+          "primary": false,
+          "unique": false,
+          "expression": "create unique index \"payments_order_id_paid_charge_unique\" on \"payments\" (\"order_id\") where \"type\" = 'CHARGE' and \"status\" = 'PAID';"
+        },
+        {
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "keyName": "payments_order_id_pending_charge_unique",
+          "primary": false,
+          "unique": false,
+          "expression": "create unique index \"payments_order_id_pending_charge_unique\" on \"payments\" (\"order_id\") where \"type\" = 'CHARGE' and \"status\" = 'PENDING';"
+        },
+        {
+          "columnNames": ["id"],
+          "composite": false,
+          "constraint": true,
+          "keyName": "payments_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "keyName": "payments_transaction_id_unique",
+          "primary": false,
+          "unique": false,
+          "expression": "create unique index \"payments_transaction_id_unique\" on \"payments\" (\"transaction_id\") where \"transaction_id\" is not null;"
+        }
+      ],
+      "checks": [
+        {
+          "name": "payments_amount_check",
+          "expression": "amount > 0",
+          "definition": "check (amount > 0)"
+        },
+        {
+          "name": "payments_method_check",
+          "expression": "\"method\" in ('COD', 'CARD', 'PAYPAL')",
+          "definition": "check (\"method\" in ('COD', 'CARD', 'PAYPAL'))",
+          "columnName": "method"
+        },
+        {
+          "name": "payments_status_check",
+          "expression": "\"status\" in ('PENDING', 'PAID', 'FAILED')",
+          "definition": "check (\"status\" in ('PENDING', 'PAID', 'FAILED'))",
+          "columnName": "status"
+        },
+        {
+          "name": "payments_type_check",
+          "expression": "\"type\" in ('CHARGE', 'REFUND')",
+          "definition": "check (\"type\" in ('CHARGE', 'REFUND'))",
+          "columnName": "type"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "payments_order_id_foreign": {
+          "columnNames": ["order_id"],
+          "constraintName": "payments_order_id_foreign",
+          "localTableName": "public.payments",
+          "referencedColumnNames": ["id"],
+          "referencedTableName": "public.orders",
+          "deleteRule": "restrict"
+        }
+      },
       "comment": null
     },
     {
@@ -833,9 +2029,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "product_images_pkey",
@@ -843,10 +2037,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "product_id",
-            "sort_order"
-          ],
+          "columnNames": ["product_id", "sort_order"],
           "composite": true,
           "constraint": true,
           "keyName": "product_images_product_id_sort_order_unique",
@@ -859,14 +2050,10 @@
       "triggers": [],
       "foreignKeys": {
         "product_images_product_id_foreign": {
-          "columnNames": [
-            "product_id"
-          ],
+          "columnNames": ["product_id"],
           "constraintName": "product_images_product_id_foreign",
           "localTableName": "public.product_images",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.products",
           "updateRule": "cascade"
         }
@@ -959,10 +2146,7 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "PERCENT",
-            "FIXED"
-          ],
+          "enumItems": ["PERCENT", "FIXED"],
           "mappedType": "enum"
         },
         "discount_value": {
@@ -1033,6 +2217,23 @@
           "enumItems": [],
           "mappedType": "uuid"
         },
+        "reserved_quantity": {
+          "name": "reserved_quantity",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "0",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
         "size": {
           "name": "size",
           "type": "numeric(10,2)",
@@ -1098,12 +2299,7 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "KG",
-            "G",
-            "ML",
-            "L"
-          ],
+          "enumItems": ["KG", "G", "ML", "L"],
           "mappedType": "enum"
         },
         "updated_at": {
@@ -1143,9 +2339,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "product_variants_pkey",
@@ -1153,9 +2347,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "sku"
-          ],
+          "columnNames": ["sku"],
           "composite": false,
           "constraint": true,
           "keyName": "product_variants_sku_unique",
@@ -1171,6 +2363,16 @@
           "columnName": "discount_type"
         },
         {
+          "name": "product_variants_reserved_quantity_check",
+          "expression": "reserved_quantity >= 0 and reserved_quantity <= stock_quantity",
+          "definition": "check (reserved_quantity >= 0 and reserved_quantity <= stock_quantity)"
+        },
+        {
+          "name": "product_variants_stock_quantity_check",
+          "expression": "stock_quantity >= 0",
+          "definition": "check (stock_quantity >= 0)"
+        },
+        {
           "name": "product_variants_unit_check",
           "expression": "\"unit\" in ('KG', 'G', 'ML', 'L')",
           "definition": "check (\"unit\" in ('KG', 'G', 'ML', 'L'))",
@@ -1180,14 +2382,10 @@
       "triggers": [],
       "foreignKeys": {
         "product_variants_product_id_foreign": {
-          "columnNames": [
-            "product_id"
-          ],
+          "columnNames": ["product_id"],
           "constraintName": "product_variants_product_id_foreign",
           "localTableName": "public.product_variants",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.products",
           "updateRule": "cascade"
         }
@@ -1416,11 +2614,7 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "LIGHT",
-            "MEDIUM",
-            "DARK"
-          ],
+          "enumItems": ["LIGHT", "MEDIUM", "DARK"],
           "mappedType": "enum"
         },
         "slug": {
@@ -1454,12 +2648,7 @@
           "default": "'DRAFT'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "DRAFT",
-            "ACTIVE",
-            "INACTIVE",
-            "ARCHIVED"
-          ],
+          "enumItems": ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"],
           "mappedType": "enum"
         },
         "tasting_notes": {
@@ -1516,9 +2705,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "name"
-          ],
+          "columnNames": ["name"],
           "composite": false,
           "constraint": true,
           "keyName": "products_name_unique",
@@ -1526,9 +2713,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "products_pkey",
@@ -1553,14 +2738,10 @@
       "triggers": [],
       "foreignKeys": {
         "products_category_id_foreign": {
-          "columnNames": [
-            "category_id"
-          ],
+          "columnNames": ["category_id"],
           "constraintName": "products_category_id_foreign",
           "localTableName": "public.products",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.categories",
           "updateRule": "cascade"
         }
@@ -1721,10 +2902,7 @@
           "default": "'ACTIVE'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "ACTIVE",
-            "INACTIVE"
-          ],
+          "enumItems": ["ACTIVE", "INACTIVE"],
           "mappedType": "enum"
         },
         "updated_at": {
@@ -1773,9 +2951,7 @@
           "expression": "create unique index \"shipping_methods_name_lower_unique\" on \"shipping_methods\" (lower(\"name\"));"
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "shipping_methods_pkey",
@@ -2000,10 +3176,7 @@
           "default": "'USER'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "ADMIN",
-            "USER"
-          ],
+          "enumItems": ["ADMIN", "USER"],
           "mappedType": "enum"
         },
         "status": {
@@ -2020,10 +3193,7 @@
           "default": "'ACTIVE'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "ACTIVE",
-            "INACTIVE"
-          ],
+          "enumItems": ["ACTIVE", "INACTIVE"],
           "mappedType": "enum"
         },
         "updated_at": {
@@ -2063,9 +3233,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "clerk_id"
-          ],
+          "columnNames": ["clerk_id"],
           "composite": false,
           "constraint": true,
           "keyName": "users_clerk_id_unique",
@@ -2073,9 +3241,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "email"
-          ],
+          "columnNames": ["email"],
           "composite": false,
           "constraint": true,
           "keyName": "users_email_unique",
@@ -2083,9 +3249,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "users_pkey",

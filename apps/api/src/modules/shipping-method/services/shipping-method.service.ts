@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ShippingMethodStatus } from '@repo/constants';
 import { ShippingMethod } from '../entities/shipping-method.entity.js';
 import type {
   CreateShippingMethodInput,
@@ -18,6 +19,7 @@ import type { ActorId } from '../../../common/utils/audit.util.js';
 import {
   DuplicateResourceException,
   ItemNotFoundException,
+  ResourceInUseException,
 } from '../../../common/exceptions/base.exception.js';
 
 @Injectable()
@@ -78,9 +80,35 @@ export class ShippingMethodService {
     return method;
   }
 
-  async remove(id: string, actorId: ActorId): Promise<void> {
-    const method = await this.findOne(id);
-    await this.repository.softDelete(method, actorId);
+  async findForOrder(id: string): Promise<ShippingMethod | null> {
+    const method = await this.repository.findByIdForShare(id);
+    return method?.status === ShippingMethodStatus.ACTIVE ? method : null;
+  }
+
+  remove(id: string, actorId: ActorId): Promise<void> {
+    return this.repository.transactional(async () => {
+      await this.findOne(id);
+      const method = await this.repository.findByIdForUpdate(id);
+      if (!method) {
+        throw new ItemNotFoundException({
+          errCode: ERROR_CODES.SHIPPING_METHOD.NOT_FOUND,
+          field: 'id',
+          message: ERROR_MESSAGES.SHIPPING_METHOD.NOT_FOUND,
+          description: ERROR_DESCRIPTIONS.SHIPPING_METHOD.NOT_FOUND,
+        });
+      }
+
+      if ((await this.repository.countOrders(id)) > 0) {
+        throw new ResourceInUseException({
+          errCode: ERROR_CODES.SHIPPING_METHOD.IN_USE,
+          field: 'id',
+          message: ERROR_MESSAGES.SHIPPING_METHOD.IN_USE,
+          description: ERROR_DESCRIPTIONS.SHIPPING_METHOD.IN_USE,
+        });
+      }
+
+      await this.repository.softDelete(method, actorId);
+    });
   }
 
   /** Any case, deleted methods included; `ownId` is the method being renamed. */

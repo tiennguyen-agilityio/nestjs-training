@@ -49,9 +49,17 @@ export const ERROR_MESSAGES = {
   CART_ITEM: {
     NOT_FOUND: 'Cart item not found',
   },
+  ORDER: {
+    CART_EMPTY: 'Cart is empty',
+    SHIPPING_METHOD_UNAVAILABLE: 'Shipping method is not available',
+    ITEM_UNAVAILABLE: 'This item can no longer be bought',
+    OUT_OF_STOCK: (available: number, sku: string) =>
+      `Only ${available} left for ${sku}`,
+  },
   SHIPPING_METHOD: {
     NOT_FOUND: 'Shipping method not found',
     NAME_EXISTS: 'Shipping method name already exists',
+    IN_USE: 'Shipping method is used by orders',
   },
   PRODUCT_VARIANT: {
     NOT_FOUND: 'Product variant not found',
@@ -59,6 +67,8 @@ export const ERROR_MESSAGES = {
     MAX_FIXED_DISCOUNT_VALUE: DISCOUNT_FIXED_MESSAGE,
     MAX_PERCENT_DISCOUNT_VALUE: DISCOUNT_PERCENT_MESSAGE,
     DUPLICATE_IDS: 'Each variant may appear only once in updateVariants',
+    STOCK_BELOW_RESERVED: (reserved: number) =>
+      `Stock cannot be below the ${reserved} units held for orders`,
   },
   PRODUCT: {
     NOT_FOUND: 'Product not found',
@@ -70,6 +80,7 @@ export const ERROR_MESSAGES = {
     INVALID_PRICE_RANGE: 'MinPrice must not be greater than MaxPrice',
     PRIMARY_IMAGE_REQUIRED: 'Exactly one image must be marked as primary',
     DUPLICATE_SORT_ORDERS: 'Images must have unique sortOrder values',
+    TOO_FEW_IMAGES: (min: number) => `A product needs at least ${min} images`,
   },
   EXCEPTION: {
     BAD_REQUEST: 'Bad request',
@@ -120,6 +131,7 @@ export const ERROR_DESCRIPTIONS = {
   PRODUCT: {
     NAME_EXISTS: 'A product with this name already exists.',
     NOT_FOUND: 'The product might have been deleted, or the id is incorrect.',
+    TOO_FEW_IMAGES: 'Keep at least 2 images: add one before removing another.',
   },
   PRODUCT_VARIANT: {
     SKU_EXISTS:
@@ -131,6 +143,8 @@ export const ERROR_DESCRIPTIONS = {
       'A percent discount must be below 100. Lower the discount value.',
     DUPLICATE_IDS:
       'The same variant id is listed more than once. Send each variant once.',
+    STOCK_BELOW_RESERVED:
+      'Placed orders hold part of this stock. Set the stock to at least the held amount.',
   },
   PRODUCT_IMAGE: {
     NOT_FOUND: 'The image might have been deleted, or the id is incorrect.',
@@ -145,10 +159,18 @@ export const ERROR_DESCRIPTIONS = {
   CART_ITEM: {
     NOT_FOUND: 'The item might have been removed, or the id is incorrect.',
   },
+  ORDER: {
+    CART_EMPTY: 'Add an item before checking out.',
+    SHIPPING_METHOD_UNAVAILABLE:
+      'The method does not exist or is not ACTIVE. Pick another method.',
+    ITEM_UNAVAILABLE: 'Remove it from the cart and try again.',
+    OUT_OF_STOCK: 'Update your cart and try again.',
+  },
   SHIPPING_METHOD: {
     NOT_FOUND:
       'The shipping method might have been deleted, or the id is incorrect.',
     NAME_EXISTS: 'A shipping method with this name already exists.',
+    IN_USE: 'Set its status to INACTIVE instead.',
   },
   PAGINATION: {
     PAGE_OUT_OF_RANGE: (pageCount: number) =>

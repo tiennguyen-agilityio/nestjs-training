@@ -28,6 +28,7 @@ export const ERROR_CODES = {
     NOT_FOUND: 'productNotFound',
     PRIMARY_IMAGE_REQUIRED: 'primaryImageRequired',
     DUPLICATE_SORT_ORDERS: 'duplicateSortOrders',
+    TOO_FEW_IMAGES: 'tooFewImages',
   },
   PRODUCT_VARIANT: {
     SKU_EXISTS: 'productVariantSkuExists',
@@ -35,6 +36,7 @@ export const ERROR_CODES = {
     MAX_FIXED_DISCOUNT_VALUE: 'maxFixedDiscountValue',
     MAX_PERCENT_DISCOUNT_VALUE: 'maxPercentDiscountValue',
     DUPLICATE_IDS: 'duplicateProductVariantIds',
+    STOCK_BELOW_RESERVED: 'stockBelowReserved',
   },
   PRODUCT_IMAGE: {
     NOT_FOUND: 'productImageNotFound',
@@ -45,9 +47,16 @@ export const ERROR_CODES = {
   CART_ITEM: {
     NOT_FOUND: 'cartItemNotFound',
   },
+  ORDER: {
+    CART_EMPTY: 'cartEmpty',
+    SHIPPING_METHOD_UNAVAILABLE: 'shippingMethodUnavailable',
+    ITEM_UNAVAILABLE: 'itemUnavailable',
+    OUT_OF_STOCK: 'outOfStock',
+  },
   SHIPPING_METHOD: {
     NOT_FOUND: 'shippingMethodNotFound',
     NAME_EXISTS: 'shippingMethodNameExists',
+    IN_USE: 'shippingMethodInUse',
   },
   PAGINATION: {
     PAGE_OUT_OF_RANGE: 'pageOutOfRange',

@@ -148,6 +148,46 @@ export abstract class BaseRepository<T extends BaseEntity> {
     });
   }
 
+  protected async incrementGuarded(
+    id: string,
+    field: keyof T & string,
+    by: number,
+    guardSql: string,
+    guardParams: unknown[],
+    actorId: ActorId,
+  ): Promise<boolean> {
+    const meta = this.em.getMetadata().get(this.entity);
+    const properties = meta.properties as Record<
+      string,
+      { fieldNames: string[] }
+    >;
+    const column = properties[field].fieldNames[0];
+    const stampActor = actorId !== null && 'updatedBy' in properties;
+    const result = await this.em
+      .getConnection()
+      .execute<{ affectedRows: number }>(
+        `update "${meta.tableName}" set "${column}" = "${column}" + ?, "updated_at" = now()${stampActor ? ', "updated_by" = ?' : ''} where "id" = ? and (${guardSql})`,
+        [by, ...(stampActor ? [actorId] : []), id, ...guardParams],
+        'run',
+        this.em.getTransactionContext(),
+      );
+
+    return result.affectedRows === 1;
+  }
+
+  protected async reloadEntity(entity: T): Promise<T | null> {
+    return await this.em.refresh(entity, {
+      filters: { softDelete: false },
+    });
+  }
+
+  protected findOneForShare(where: Criteria<T>): Promise<T | null> {
+    return this.repository.findOne(where as FilterQuery<T>, {
+      ...this.buildFindOptions(),
+      lockMode: LockMode.PESSIMISTIC_READ,
+    });
+  }
+
   protected deleteWhere(where: Criteria<T>): Promise<number> {
     return this.em.nativeDelete(this.entity, where as FilterQuery<T>);
   }
