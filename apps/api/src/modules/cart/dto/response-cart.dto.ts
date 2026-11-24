@@ -129,3 +129,22 @@ export class ResponseCartDto {
     return dto;
   }
 }
+
+/** A merged line that was lowered or skipped: `quantity` is what was added, 0 when skipped. */
+export class CartMergeAdjustmentDto {
+  productVariantId!: string;
+  requestedQuantity!: number;
+  quantity!: number;
+}
+
+export class ResponseMergedCartDto extends ResponseCartDto {
+  @ApiProperty({ type: () => CartMergeAdjustmentDto, isArray: true })
+  adjusted!: CartMergeAdjustmentDto[];
+
+  static of(
+    cart: ResponseCartDto,
+    adjusted: CartMergeAdjustmentDto[],
+  ): ResponseMergedCartDto {
+    return Object.assign(new ResponseMergedCartDto(), cart, { adjusted });
+  }
+}

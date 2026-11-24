@@ -18,6 +18,15 @@ export class CartItemRepository extends BaseRepository<CartItem> {
     return this.findOneBy({ cart: cartId, productVariant: productVariantId });
   }
 
+  findByVariants(
+    cartId: string,
+    productVariantIds: string[],
+  ): Promise<CartItem[]> {
+    return this.findMany({
+      where: { cart: cartId, productVariant: productVariantIds },
+    });
+  }
+
   create(
     cartId: string,
     productVariantId: string,

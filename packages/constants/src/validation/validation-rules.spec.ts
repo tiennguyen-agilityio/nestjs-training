@@ -14,6 +14,7 @@ describe('VALIDATION_RULES', () => {
       VARIANT: { MIN_COUNT: 1 },
       STOCK_QUANTITY: { MIN: 0 },
       CART_QUANTITY: { MIN: 1 },
+      CART_MERGE: { MAX_ITEMS: 50 },
       PRICE: { MIN: 1, MAX: 99999999.99 },
       SIZE: { MIN: 1, MAX: 99999999.99 },
       DISCOUNT: { MIN: 0, MAX: 99999999.99, PERCENT_MAX: 100 },

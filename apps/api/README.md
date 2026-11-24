@@ -396,13 +396,14 @@ erDiagram
 
 The signed-in user's own cart; every success returns the whole cart.
 
-| Method   | Path              | Auth | Description                                                                                 |
-| :------- | :---------------- | :--- | :------------------------------------------------------------------------------------------ |
-| `GET`    | `/cart`           | 🔒   | Get my cart with current prices, totals and flags (an empty cart when I have none)          |
-| `POST`   | `/cart/items`     | 🔒   | Add a variant (`Idempotency-Key` required; an existing line adds up; never above the stock) |
-| `PATCH`  | `/cart/items/:id` | 🔒   | Set a line's quantity (never above the stock)                                               |
-| `DELETE` | `/cart/items/:id` | 🔒   | Remove a line                                                                               |
-| `DELETE` | `/cart`           | 🔒   | Empty my cart                                                                               |
+| Method   | Path              | Auth | Description                                                                                                                                                                     |
+| :------- | :---------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/cart`           | 🔒   | Get my cart with current prices, totals and flags (an empty cart when I have none)                                                                                              |
+| `POST`   | `/cart/items`     | 🔒   | Add a variant (`Idempotency-Key` required; an existing line adds up; never above the stock)                                                                                     |
+| `PATCH`  | `/cart/items/:id` | 🔒   | Set a line's quantity (never above the stock)                                                                                                                                   |
+| `DELETE` | `/cart/items/:id` | 🔒   | Remove a line                                                                                                                                                                   |
+| `DELETE` | `/cart`           | 🔒   | Empty my cart                                                                                                                                                                   |
+| `POST`   | `/cart/merge`     | 🔒   | Merge a guest cart (`Idempotency-Key` required; lines add up, capped at the stock; unbuyable variants are skipped; `adjusted` lists lowered or skipped lines; at most 50 lines) |
 
 ### Shipping methods
 
