@@ -4,11 +4,11 @@ import Image from 'next/image'
 import { Trash2 } from 'lucide-react'
 
 import { Quantity } from '@/components/Quantity'
+import SalePrice from '@/components/SalePrice'
 import { Button } from '@/components/ui/button'
 import { ERROR_MESSAGES } from '@/constants/messages'
 import { OUT_OF_STOCK_LABEL } from '@/constants/order'
 import type { CartItem } from '@/types/cart'
-import { formatCurrency } from '@/utils/cart'
 import { isCartItemOutOfStock } from '@/utils/inventory'
 import { cn } from '@/utils/styles'
 
@@ -82,7 +82,7 @@ export function CartLineItem({
             ) : null}
           </div>
           <p className="shrink-0 text-2xl font-bold text-primary">
-            {formatCurrency(item.unitPrice)}
+            <SalePrice price={item.unitPrice} listPrice={item.listPrice} />
           </p>
         </div>
 

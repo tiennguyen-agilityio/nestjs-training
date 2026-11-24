@@ -23,6 +23,7 @@ import type {
   UpdateProductVariantPayload,
 } from '@repo/schemas'
 import { getPrimaryVariantQuantity } from '@/utils/inventory'
+import { pricingOf } from '@/utils/pricing'
 
 /**
  * The variant name the API works out from size and unit ("250g", "1.5kg"),
@@ -58,6 +59,21 @@ export function getProductListPrice(product: Product): number {
   const firstVariant = product.variants[0]
   if (!firstVariant) return 0
   return Number.isFinite(firstVariant.price) ? firstVariant.price : 0
+}
+
+/** The first variant's list price and the sale price the API charges for it. */
+export function getProductPricing(product: Product): {
+  listPrice: number
+  salePrice: number
+} {
+  const firstVariant = product.variants[0]
+  if (!firstVariant) return { listPrice: 0, salePrice: 0 }
+  const { price, salePrice } = pricingOf({
+    price: Number.isFinite(firstVariant.price) ? firstVariant.price : 0,
+    discountType: firstVariant.discountType,
+    discountValue: firstVariant.discountValue,
+  })
+  return { listPrice: price, salePrice }
 }
 
 export function getProductPrimaryImageUrl(product: Product): string | null {

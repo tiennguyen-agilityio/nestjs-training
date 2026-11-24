@@ -15,6 +15,7 @@ import {
   getPrimaryVariantQuantity,
   isProductOutOfStock,
 } from '@/utils/inventory'
+import { getProductPricing } from '@/utils/product'
 import { cn } from '@/utils/styles'
 
 export interface ProductPurchasePanelProps {
@@ -42,7 +43,7 @@ export function ProductPurchasePanel({
     const primaryImage = [...product.images]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .find((image) => Boolean(image.url))
-    const unitPrice = product.variants[0]?.price ?? 0
+    const { listPrice, salePrice: unitPrice } = getProductPricing(product)
     const meta = [product.roastLevel, product.tastingNotes]
       .filter(Boolean)
       .join(' • ')
@@ -57,6 +58,7 @@ export function ProductPurchasePanel({
         meta,
         imageUrl: primaryImage?.url ?? '',
         unitPrice,
+        listPrice,
         quantity,
         maxQuantity: maxQuantity,
       })

@@ -1,6 +1,7 @@
 import { EMPTY_IMAGE } from '@/constants/images'
 import { ERROR_MESSAGES } from '@/constants/messages'
 import { formatPrice } from '@/utils/common'
+import { lineTotalOf, sumOf, taxOf } from '@/utils/pricing'
 import type {
   CartItem,
   CartMergeAdjustment,
@@ -31,12 +32,13 @@ const isCountedLine = (item: CartItem): boolean => !item.isUnavailable
 
 /** Leaves out the lines the API flagged; a server line counts its `lineTotal`. */
 export const calculateSubtotal = (items: CartItem[]): number =>
-  items
-    .filter(isCountedLine)
-    .reduce(
-      (sum, item) => sum + (item.lineTotal ?? item.unitPrice * item.quantity),
-      0,
-    )
+  sumOf(
+    items
+      .filter(isCountedLine)
+      .map(
+        (item) => item.lineTotal ?? lineTotalOf(item.unitPrice, item.quantity),
+      ),
+  )
 
 /** The header count: the total quantity of the lines that can be bought. */
 export const countCartQuantity = (items: CartItem[]): number =>
@@ -51,6 +53,7 @@ export const toCartItem = (item: ServerCartItem): CartItem => ({
   meta: item.variant.sizeName,
   imageUrl: item.product.primaryImageUrl ?? EMPTY_IMAGE,
   unitPrice: item.variant.salePrice,
+  listPrice: item.variant.price,
   quantity: item.quantity,
   maxQuantity: item.variant.availableQuantity,
   lineTotal: item.lineTotal,
@@ -113,12 +116,12 @@ export const calculateTotal = ({
   subtotal: number
   shipping: number | null
   tax: number
-}): number => subtotal + (shipping ?? 0) + tax
+}): number => sumOf([subtotal, shipping ?? 0, tax])
 
 export const buildCartTotals = (items: CartItem[]): CartTotals => {
   const subtotal = calculateSubtotal(items)
   const shipping = null
-  const tax = 0
+  const tax = taxOf(subtotal)
 
   return {
     subtotal,
