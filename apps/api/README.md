@@ -96,25 +96,25 @@ PostgreSQL via MikroORM.
   `DB_HOST=localhost`, `DB_PORT=5432`.
 - `.env.docker`: the same values as `.env`, except `DB_HOST=postgres` and `DB_PORT=5432`.
 
-| Variable                | Description                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------ |
-| `NODE_ENV`              | `development` \| `test` \| `production`                                              |
-| `PORT`                  | HTTP port the API listens on                                                         |
-| `DB_HOST`               | PostgreSQL host                                                                      |
-| `DB_PORT`               | PostgreSQL port                                                                      |
-| `DB_NAME`               | PostgreSQL database name                                                             |
-| `DB_USER`               | PostgreSQL user                                                                      |
-| `DB_PASSWORD`           | PostgreSQL password                                                                  |
-| `CORS_ORIGIN`           | Allowed origins, comma-separated; `*` matches one run of lowercase letters or digits |
-| `THROTTLE_TTL`          | Rate-limit window, in milliseconds                                                   |
-| `THROTTLE_LIMIT`        | Max requests per IP per `THROTTLE_TTL` window                                        |
-| `CLERK_SECRET_KEY`      | Clerk backend secret key                                                             |
-| `CLERK_PUBLISHABLE_KEY` | Clerk publishable key                                                                |
-| `CLERK_WEBHOOK_SECRET`  | Clerk webhook signing secret                                                         |
-| `CLERK_SYNC_TIMEOUT_MS` | Clerk API timeout, in milliseconds (default `5000`)                                  |
+| Variable                       | Description                                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                     | `development` \| `test` \| `production`                                                                                       |
+| `PORT`                         | HTTP port the API listens on                                                                                                  |
+| `DB_HOST`                      | PostgreSQL host                                                                                                               |
+| `DB_PORT`                      | PostgreSQL port                                                                                                               |
+| `DB_NAME`                      | PostgreSQL database name                                                                                                      |
+| `DB_USER`                      | PostgreSQL user                                                                                                               |
+| `DB_PASSWORD`                  | PostgreSQL password                                                                                                           |
+| `CORS_ORIGIN`                  | Allowed origins, comma-separated; `*` matches one run of lowercase letters or digits                                          |
+| `THROTTLE_TTL`                 | Rate-limit window, in milliseconds                                                                                            |
+| `THROTTLE_LIMIT`               | Max requests per IP per `THROTTLE_TTL` window                                                                                 |
+| `CLERK_SECRET_KEY`             | Clerk backend secret key                                                                                                      |
+| `CLERK_PUBLISHABLE_KEY`        | Clerk publishable key                                                                                                         |
+| `CLERK_WEBHOOK_SECRET`         | Clerk webhook signing secret                                                                                                  |
+| `CLERK_SYNC_TIMEOUT_MS`        | Clerk API timeout, in milliseconds (default `5000`)                                                                           |
 | `GRACEFUL_SHUTDOWN_TIMEOUT_MS` | Wait after `SIGTERM` before shutting down, in milliseconds; health probes answer 503 meanwhile (default `5000`, `0` disables) |
-| `APP_KEY`               | Nest Observe app key                                                                 |
-| `APP_SECRET`            | Nest Observe app secret                                                              |
+| `APP_KEY`                      | Nest Observe app key                                                                                                          |
+| `APP_SECRET`                   | Nest Observe app secret                                                                                                       |
 
 ### Running Locally
 
@@ -160,6 +160,17 @@ pnpm run docker:prod:down
 - **Products** — CRUD with images (2 to 6 at create, one primary) and variants; filter, search, sort and
   pagination.
 - **Soft delete** — deleted rows are hidden by default and visible to active admins.
+
+### Cart
+
+- **Server cart** — a signed-in user's cart is kept in PostgreSQL, so it follows them across
+  devices: one cart per user, one line per variant.
+- **Never above the stock** — adding or changing a quantity that would pass the variant's stock
+  answers `409 outOfStock`; only ACTIVE, non-deleted products can be added.
+- **Current prices** — prices, discounts, sale prices, line totals, the subtotal and the total
+  quantity are worked out on every read; a line whose stock fell below its quantity
+  (`inStock: false`) or whose product is no longer buyable (`isAvailable: false`) is kept and
+  flagged.
 
 ### Cross-cutting
 
@@ -283,9 +294,30 @@ erDiagram
         deleted_at timestamp
     }
 
+    CART {
+        id uuid PK
+        user_id uuid FK "unique"
+        created_at timestamp
+        updated_at timestamp
+        deleted_at timestamp
+    }
+
+    CART_ITEM {
+        id uuid PK
+        cart_id uuid FK
+        product_variant_id uuid FK "unique with cart_id"
+        quantity int ">= 1"
+        created_at timestamp
+        updated_at timestamp
+        deleted_at timestamp
+    }
+
     CATEGORY ||--o{ PRODUCT : "contains"
     PRODUCT ||--o{ PRODUCT_IMAGE : "has"
     PRODUCT ||--o{ PRODUCT_VARIANT : "has"
+    USER ||--o| CART : "keeps"
+    CART ||--o{ CART_ITEM : "holds"
+    PRODUCT_VARIANT ||--o{ CART_ITEM : "in"
 ```
 
 ## API Endpoints
@@ -322,8 +354,20 @@ erDiagram
 | `GET`    | `/products`     | 🔓   | List products (filter by category/status/roastLevel/price range, sort by name/price, search, pagination) |
 | `GET`    | `/products/:id` | 🔓   | Get product by ID                                                                                        |
 | `POST`   | `/products`     | 👑   | Create product (2–6 images with one primary, at least one variant)                                       |
-| `PATCH`  | `/products/:id` | 👑   | Update product (add/update/remove images; update variant size, unit, price, discount, stock quantity)   |
+| `PATCH`  | `/products/:id` | 👑   | Update product (add/update/remove images; update variant size, unit, price, discount, stock quantity)    |
 | `DELETE` | `/products/:id` | 👑   | Archive + soft-delete product                                                                            |
+
+### Cart
+
+The signed-in user's own cart; every success returns the whole cart.
+
+| Method   | Path              | Auth | Description                                                                                 |
+| :------- | :---------------- | :--- | :------------------------------------------------------------------------------------------ |
+| `GET`    | `/cart`           | 🔒   | Get my cart with current prices, totals and flags (an empty cart when I have none)          |
+| `POST`   | `/cart/items`     | 🔒   | Add a variant (`Idempotency-Key` required; an existing line adds up; never above the stock) |
+| `PATCH`  | `/cart/items/:id` | 🔒   | Set a line's quantity (never above the stock)                                               |
+| `DELETE` | `/cart/items/:id` | 🔒   | Remove a line                                                                               |
+| `DELETE` | `/cart`           | 🔒   | Empty my cart                                                                               |
 
 ### Health
 
@@ -332,9 +376,9 @@ change when the API gains or drops a version. Public probes for the orchestrator
 rate-limited, and skipped by the Clerk and user-resolution middlewares (GET and HEAD). During the
 `GRACEFUL_SHUTDOWN_TIMEOUT_MS` wait after `SIGTERM`, both answer 503 `shuttingDown`.
 
-| Method | Path            | Auth | Description                                                                            |
-| :----- | :-------------- | :--- | :------------------------------------------------------------------------------------- |
-| `GET`  | `/health/live`  | 🔓   | Liveness: the process answers; checks no dependency                                    |
+| Method | Path            | Auth | Description                                                                                                   |
+| :----- | :-------------- | :--- | :------------------------------------------------------------------------------------------------------------ |
+| `GET`  | `/health/live`  | 🔓   | Liveness: the process answers; checks no dependency                                                           |
 | `GET`  | `/health/ready` | 🔓   | Readiness: the database answers `select 1` within 1 s (result cached 2 s); 503 `serviceUnavailable` otherwise |
 
 ### Webhooks

@@ -4,7 +4,7 @@ import type {
   EntityRepository,
   FilterQuery,
 } from '@mikro-orm/core';
-import { RequestContext } from '@mikro-orm/core';
+import { LockMode, RequestContext } from '@mikro-orm/core';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { BaseEntity } from '../entities/base.entity.js';
 import {
@@ -86,6 +86,42 @@ export abstract class BaseRepository<T extends BaseEntity> {
       where as FilterQuery<T>,
       this.buildFindOptions(options),
     );
+  }
+
+  /**
+   * Reads one row and holds a write lock on it (`SELECT … FOR UPDATE`) until
+   * the open transaction ends, so concurrent writers of the same row take
+   * turns. Must run inside `transactional`.
+   */
+  protected findOneForUpdate(
+    where: Criteria<T>,
+    options?: Pick<ListOptions<T>, 'relations'>,
+  ): Promise<T | null> {
+    return this.repository.findOne(where as FilterQuery<T>, {
+      ...this.buildFindOptions(options),
+      lockMode: LockMode.PESSIMISTIC_WRITE,
+    });
+  }
+
+  /**
+   * Inserts a row unless one already holds the same `conflictFields` values
+   * (`INSERT … ON CONFLICT (…) DO NOTHING`): two first writers never fail on
+   * the unique key, and the caller reads the row that won.
+   */
+  protected async insertIgnoringConflict(
+    data: Record<string, unknown>,
+    conflictFields: (keyof T & string)[],
+  ): Promise<void> {
+    await this.em.upsert(this.entity, data as never, {
+      onConflictFields: conflictFields as never,
+      onConflictAction: 'ignore',
+      disableIdentityMap: true,
+    });
+  }
+
+  /** Deletes the matching rows for good (no soft delete); returns the count. */
+  protected deleteWhere(where: Criteria<T>): Promise<number> {
+    return this.em.nativeDelete(this.entity, where as FilterQuery<T>);
   }
 
   protected countOf<R extends BaseEntity>(

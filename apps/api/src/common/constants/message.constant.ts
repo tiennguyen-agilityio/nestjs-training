@@ -43,6 +43,12 @@ export const ERROR_MESSAGES = {
   PRODUCT_IMAGE: {
     NOT_FOUND: 'Product image not found',
   },
+  CART: {
+    OUT_OF_STOCK: (stock: number) => `Only ${stock} left for this variant`,
+  },
+  CART_ITEM: {
+    NOT_FOUND: 'Cart item not found',
+  },
   PRODUCT_VARIANT: {
     NOT_FOUND: 'Product variant not found',
     SKU_EXISTS: 'SKU already exists',
@@ -124,6 +130,16 @@ export const ERROR_DESCRIPTIONS = {
   },
   PRODUCT_IMAGE: {
     NOT_FOUND: 'The image might have been deleted, or the id is incorrect.',
+  },
+  CART: {
+    ADD_UP_TO: (remaining: number) => `You can add ${remaining} more.`,
+    NO_MORE_TO_ADD: 'No more of this variant can be added.',
+    LOWER_TO: (stock: number) => `Lower the quantity to ${stock} or less.`,
+    OUT_OF_STOCK_REMOVE:
+      'This variant is out of stock; remove it from the cart.',
+  },
+  CART_ITEM: {
+    NOT_FOUND: 'The item might have been removed, or the id is incorrect.',
   },
   PAGINATION: {
     PAGE_OUT_OF_RANGE: (pageCount: number) =>

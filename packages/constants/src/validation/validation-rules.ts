@@ -21,6 +21,10 @@ export const VALIDATION_RULES = {
   STOCK_QUANTITY: {
     MIN: 0,
   },
+  // A cart line holds at least one unit; the stock bounds it from above.
+  CART_QUANTITY: {
+    MIN: 1,
+  },
   PRICE: {
     MIN: 1,
     MAX: MAX_DECIMAL,

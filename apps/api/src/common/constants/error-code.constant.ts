@@ -39,6 +39,12 @@ export const ERROR_CODES = {
   PRODUCT_IMAGE: {
     NOT_FOUND: 'productImageNotFound',
   },
+  CART: {
+    OUT_OF_STOCK: 'outOfStock',
+  },
+  CART_ITEM: {
+    NOT_FOUND: 'cartItemNotFound',
+  },
   PAGINATION: {
     PAGE_OUT_OF_RANGE: 'pageOutOfRange',
   },

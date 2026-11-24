@@ -1399,7 +1399,7 @@ describe('ProductController (e2e)', () => {
             variants: [
               {
                 sku: uniqueName('SKU-IMAGES'),
-                weight: '250',
+                size: '250',
                 unit: ProductUnit.G,
                 price: '100',
               },
