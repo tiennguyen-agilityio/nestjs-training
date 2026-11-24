@@ -45,6 +45,10 @@ export const ERROR_CODES = {
   CART_ITEM: {
     NOT_FOUND: 'cartItemNotFound',
   },
+  SHIPPING_METHOD: {
+    NOT_FOUND: 'shippingMethodNotFound',
+    NAME_EXISTS: 'shippingMethodNameExists',
+  },
   PAGINATION: {
     PAGE_OUT_OF_RANGE: 'pageOutOfRange',
   },

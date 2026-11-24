@@ -49,6 +49,10 @@ export const ERROR_MESSAGES = {
   CART_ITEM: {
     NOT_FOUND: 'Cart item not found',
   },
+  SHIPPING_METHOD: {
+    NOT_FOUND: 'Shipping method not found',
+    NAME_EXISTS: 'Shipping method name already exists',
+  },
   PRODUCT_VARIANT: {
     NOT_FOUND: 'Product variant not found',
     SKU_EXISTS: 'SKU already exists',
@@ -140,6 +144,11 @@ export const ERROR_DESCRIPTIONS = {
   },
   CART_ITEM: {
     NOT_FOUND: 'The item might have been removed, or the id is incorrect.',
+  },
+  SHIPPING_METHOD: {
+    NOT_FOUND:
+      'The shipping method might have been deleted, or the id is incorrect.',
+    NAME_EXISTS: 'A shipping method with this name already exists.',
   },
   PAGINATION: {
     PAGE_OUT_OF_RANGE: (pageCount: number) =>

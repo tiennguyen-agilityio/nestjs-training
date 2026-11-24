@@ -327,6 +327,20 @@ erDiagram
         deleted_at timestamp
     }
 
+    SHIPPING_METHOD {
+        id uuid PK
+        name string "max 120, unique (case-insensitive)"
+        description string
+        price number "0 - 99,999,999.99"
+        status string "ACTIVE | INACTIVE"
+        created_at timestamp
+        updated_at timestamp
+        deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
+    }
+
     CATEGORY ||--o{ PRODUCT : "contains"
     PRODUCT ||--o{ PRODUCT_IMAGE : "has"
     PRODUCT ||--o{ PRODUCT_VARIANT : "has"
@@ -334,6 +348,7 @@ erDiagram
     USER |o--o{ PRODUCT : "created, updated, deleted by"
     USER |o--o{ PRODUCT_IMAGE : "created, updated, deleted by"
     USER |o--o{ PRODUCT_VARIANT : "created, updated, deleted by"
+    USER |o--o{ SHIPPING_METHOD : "created, updated, deleted by"
     USER |o--o{ USER : "created, updated, deleted by"
     USER ||--o| CART : "keeps"
     CART ||--o{ CART_ITEM : "holds"
@@ -388,6 +403,16 @@ The signed-in user's own cart; every success returns the whole cart.
 | `PATCH`  | `/cart/items/:id` | 🔒   | Set a line's quantity (never above the stock)                                               |
 | `DELETE` | `/cart/items/:id` | 🔒   | Remove a line                                                                               |
 | `DELETE` | `/cart`           | 🔒   | Empty my cart                                                                               |
+
+### Shipping methods
+
+| Method   | Path                    | Auth | Description                                                                                                                                 |
+| :------- | :---------------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/shipping-methods`     | 🔓   | List shipping methods (search, sort by name/price, pagination; guests and users see ACTIVE only; admins can filter by status incl. DELETED) |
+| `GET`    | `/shipping-methods/:id` | 👑   | Get shipping method by ID                                                                                                                   |
+| `POST`   | `/shipping-methods`     | 👑   | Create shipping method                                                                                                                      |
+| `PATCH`  | `/shipping-methods/:id` | 👑   | Update shipping method (name, description, price, status)                                                                                   |
+| `DELETE` | `/shipping-methods/:id` | 👑   | Soft-delete shipping method                                                                                                                 |
 
 ### Health
 
