@@ -45,4 +45,10 @@ describe('shared enums', () => {
   it('ShippingMethodStatus has the API values', () => {
     expect(Object.values(ShippingMethodStatus)).toEqual(['ACTIVE', 'INACTIVE']);
   });
+
+  it('ShippingMethodStatus is the only shipping-method enum', async () => {
+    const enums: object = await import('./shipping-method.enum.js');
+
+    expect(Object.keys(enums)).toEqual(['ShippingMethodStatus']);
+  });
 });

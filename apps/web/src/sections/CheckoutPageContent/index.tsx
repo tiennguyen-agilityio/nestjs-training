@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button'
 import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
-import { useShippingMethods } from '@/hooks/useShippingMethod'
+import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
 // import { useCreateOrder } from '@/hooks/useOrder'
 import { parseCheckoutValues } from '@/schemas/checkout'
 import {
@@ -114,7 +114,7 @@ const CheckoutPageContent = () => {
     isError: isShippingMethodsError,
     errorMessage: shippingMethodsErrorMessage,
     refetch: refetchShippingMethods,
-  } = useShippingMethods()
+  } = useActiveShippingMethods()
 
   const hasItems = items.length > 0
   const hasOutOfStockItems = items.some(isCartItemOutOfStock)

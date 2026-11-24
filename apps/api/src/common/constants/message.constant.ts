@@ -43,6 +43,12 @@ export const ERROR_MESSAGES = {
   PRODUCT_IMAGE: {
     NOT_FOUND: 'Product image not found',
   },
+  CART: {
+    OUT_OF_STOCK: (stock: number) => `Only ${stock} left for this variant`,
+  },
+  CART_ITEM: {
+    NOT_FOUND: 'Cart item not found',
+  },
   SHIPPING_METHOD: {
     NOT_FOUND: 'Shipping method not found',
     NAME_EXISTS: 'Shipping method name already exists',
@@ -82,7 +88,7 @@ export const ERROR_MESSAGES = {
 export const ERROR_DESCRIPTIONS = {
   IDEMPOTENCY: {
     HEADER:
-      'Required. A client-generated key (1–255 printable ASCII, e.g. a UUID): a new one for each create, the same one when retrying it. A repeat after success replays the original 201 with `Idempotent-Replayed: true` instead of creating a second record. A missing or malformed key gets 400 `invalidRequest`; the same key while the first request still runs gets 409 `duplicateResource` with `Retry-After`.',
+      'A new UUID for each create; reuse it only to retry the same request (the retry returns the first 201). Same key while the first request runs: 409.',
   },
   AUTH_PROVIDER: {
     TIMEOUT:
@@ -128,6 +134,16 @@ export const ERROR_DESCRIPTIONS = {
   },
   PRODUCT_IMAGE: {
     NOT_FOUND: 'The image might have been deleted, or the id is incorrect.',
+  },
+  CART: {
+    ADD_UP_TO: (remaining: number) => `You can add ${remaining} more.`,
+    NO_MORE_TO_ADD: 'No more of this variant can be added.',
+    LOWER_TO: (stock: number) => `Lower the quantity to ${stock} or less.`,
+    OUT_OF_STOCK_REMOVE:
+      'This variant is out of stock; remove it from the cart.',
+  },
+  CART_ITEM: {
+    NOT_FOUND: 'The item might have been removed, or the id is incorrect.',
   },
   SHIPPING_METHOD: {
     NOT_FOUND:

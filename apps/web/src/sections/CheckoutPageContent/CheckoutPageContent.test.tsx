@@ -6,8 +6,8 @@ import { ShippingMethodStatus } from '@repo/constants'
 
 import { useAuth } from '@/hooks/useAuth'
 import {
-  useShippingMethods,
-  type UseShippingMethodsResult,
+  useActiveShippingMethods,
+  type UseActiveShippingMethodsResult,
 } from '@/hooks/useShippingMethod'
 import CheckoutPageContent from '@/sections/CheckoutPageContent'
 import { useCartStore } from '@/store/useCartStore'
@@ -41,7 +41,7 @@ jest.mock('@/components/CheckoutShippingMethods', () => {
 jest.mock('@/store/useCartStore', () => ({ useCartStore: jest.fn() }))
 jest.mock('@/hooks/useAuth', () => ({ useAuth: jest.fn() }))
 jest.mock('@/hooks/useShippingMethod', () => ({
-  useShippingMethods: jest.fn(),
+  useActiveShippingMethods: jest.fn(),
 }))
 jest.mock('@/services/mapboxGeocode', () => ({
   findMapboxAddressSuggestions: jest
@@ -53,7 +53,7 @@ jest.mock('@/services/mapboxGeocode', () => ({
 const mockUseRouter = jest.mocked(useRouter)
 const mockUseCart = jest.mocked(useCartStore)
 const mockUseAuth = jest.mocked(useAuth)
-const mockUseShippingMethods = jest.mocked(useShippingMethods)
+const mockUseShippingMethods = jest.mocked(useActiveShippingMethods)
 
 const standard: ShippingMethod = {
   id: 'standard-id',
@@ -101,8 +101,8 @@ const cartResult = {
 }
 
 const shippingResult = (
-  overrides: Partial<UseShippingMethodsResult> = {},
-): UseShippingMethodsResult => ({
+  overrides: Partial<UseActiveShippingMethodsResult> = {},
+): UseActiveShippingMethodsResult => ({
   shippingMethods: [],
   isLoading: false,
   isFetching: false,

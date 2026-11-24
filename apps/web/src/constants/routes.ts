@@ -11,6 +11,8 @@ export const ROUTES = {
   DASHBOARD_USERS: '/dashboard/users',
   DASHBOARD_USERS_ADD: '/dashboard/users/add',
   DASHBOARD_ORDERS: '/dashboard/orders',
+  DASHBOARD_SHIPPING_METHODS: '/dashboard/shipping-methods',
+  DASHBOARD_SHIPPING_METHODS_ADD: '/dashboard/shipping-methods/add',
   SIGN_IN: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL ?? '/sign-in',
   SIGN_UP: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? '/sign-up',
   SIGN_UP_VERIFY: `${process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? '/sign-up'}/verify`,

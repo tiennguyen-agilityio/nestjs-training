@@ -6,7 +6,10 @@ export interface ShippingMethod {
   description: string
   price: number
   status: ShippingMethodStatus
-  createdAt: string
-  updatedAt: string
+  createdBy?: string | null
+  updatedBy?: string | null
+  deletedBy?: string | null
+  createdAt: string | null
+  updatedAt: string | null
   deletedAt: string | null
 }

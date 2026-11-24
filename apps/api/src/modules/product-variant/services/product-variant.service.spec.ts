@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ProductVariantService } from './product-variant.service.js';
 import { ProductVariant } from '../entities/product-variant.entity.js';
 import { ProductVariantRepository } from '../repositories/product-variant.repository.js';
-import { DiscountType, ProductUnit } from '@repo/constants';
+import { DiscountType, ProductStatus, ProductUnit } from '@repo/constants';
 import {
   DuplicateResourceException,
   ItemNotFoundException,
@@ -16,6 +16,7 @@ describe('ProductVariantService', () => {
   let service: ProductVariantService;
   let productVariantRepository: {
     findById: Mock;
+    findWithProduct: Mock;
     findBySku: Mock;
     findAllByProduct: Mock;
     create: Mock;
@@ -44,6 +45,7 @@ describe('ProductVariantService', () => {
   beforeEach(async () => {
     productVariantRepository = {
       findById: vi.fn(),
+      findWithProduct: vi.fn(),
       findBySku: vi.fn(),
       findAllByProduct: vi.fn(),
       create: vi.fn(),
@@ -296,5 +298,67 @@ describe('ProductVariantService', () => {
       );
       expect(productVariantRepository.softDelete).not.toHaveBeenCalled();
     });
+  });
+
+  describe('findPurchasable', () => {
+    const withProduct = (
+      product: { status: ProductStatus; deletedAt?: Date | null },
+      variant: Partial<ProductVariant> = {},
+    ): ProductVariant =>
+      buildVariant({
+        product: { deletedAt: null, ...product } as ProductVariant['product'],
+        ...variant,
+      });
+
+    const expectNotFound = async (field: string): Promise<void> => {
+      const error = await service
+        .findPurchasable('variant-id-1', field)
+        .catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(ItemNotFoundException);
+      expect((error as ItemNotFoundException).getErrors()[0]).toMatchObject({
+        errCode: ERROR_CODES.PRODUCT_VARIANT.NOT_FOUND,
+        field,
+      });
+    };
+
+    it("findPurchasable returns an ACTIVE product's variant", async () => {
+      const variant = withProduct({ status: ProductStatus.ACTIVE });
+      productVariantRepository.findWithProduct.mockResolvedValue(variant);
+
+      await expect(
+        service.findPurchasable('variant-id-1', 'productVariantId'),
+      ).resolves.toBe(variant);
+      expect(productVariantRepository.findWithProduct).toHaveBeenCalledWith(
+        'variant-id-1',
+      );
+    });
+
+    it('findPurchasable is not found for a missing or deleted variant', async () => {
+      productVariantRepository.findWithProduct.mockResolvedValue(null);
+      await expectNotFound('productVariantId');
+
+      productVariantRepository.findWithProduct.mockResolvedValue(
+        withProduct(
+          { status: ProductStatus.ACTIVE },
+          { deletedAt: new Date() },
+        ),
+      );
+      await expectNotFound('productVariantId');
+    });
+
+    it.each([
+      [{ status: ProductStatus.DRAFT }],
+      [{ status: ProductStatus.INACTIVE }],
+      [{ status: ProductStatus.ARCHIVED }],
+      [{ status: ProductStatus.ACTIVE, deletedAt: new Date() }],
+    ])(
+      'findPurchasable is not found for a DRAFT, INACTIVE, ARCHIVED or deleted product (%o)',
+      async (product) => {
+        productVariantRepository.findWithProduct.mockResolvedValue(
+          withProduct(product),
+        );
+        await expectNotFound('id');
+      },
+    );
   });
 });

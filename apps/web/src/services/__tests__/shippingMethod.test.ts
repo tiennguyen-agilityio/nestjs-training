@@ -1,30 +1,36 @@
-import { ShippingMethodStatus, VALIDATION_RULES } from '@repo/constants'
+import { ShippingMethodStatus } from '@repo/constants'
 
+import { IDEMPOTENCY } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { API_ROUTES } from '@/constants/routes'
-import { fetchShippingMethods } from '@/services/shippingMethod'
-import type { ShippingMethod } from '@/types/shippingMethod'
+import {
+  createShippingMethod,
+  deleteShippingMethod,
+  fetchShippingMethodById,
+  fetchShippingMethods,
+  updateShippingMethod,
+} from '@/services/shippingMethod'
 
-const standard: ShippingMethod = {
-  id: 'standard-id',
-  name: 'Artisanal Standard',
-  description: '3-5 business days',
-  price: 0,
+const method = {
+  id: 'sm-1',
+  name: 'Roast Express',
+  description: '1-2 business days',
+  price: 12,
   status: ShippingMethodStatus.ACTIVE,
   createdAt: '2026-11-24T00:00:00.000Z',
   updatedAt: '2026-11-24T00:00:00.000Z',
   deletedAt: null,
 }
 
-const express: ShippingMethod = {
-  ...standard,
-  id: 'express-id',
-  name: 'Roast Express',
-  description: '1-2 business days',
-  price: 12,
-}
+const okResponse = (body: unknown, status = 200) => ({
+  ok: true,
+  status,
+  json: async () => body,
+  text: async () => (body === undefined ? '' : JSON.stringify(body)),
+})
 
-const meta = { limit: 100, currentPage: 1, pageCount: 1, totalCount: 2 }
+const requestInit = (fetchMock: jest.Mock, call = 0) =>
+  fetchMock.mock.calls[call]?.[1] as RequestInit
 
 describe('shipping method service', () => {
   const originalFetch = globalThis.fetch
@@ -33,89 +39,149 @@ describe('shipping method service', () => {
     globalThis.fetch = originalFetch
   })
 
-  const mockFetch = (response: {
-    ok: boolean
-    status: number
-    body: unknown
-  }) => {
+  it('fetchShippingMethods sends page, limit, search and status with the token', async () => {
+    const meta = { limit: 10, currentPage: 2, pageCount: 3, totalCount: 21 }
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(okResponse({ data: [method], meta }))
+    globalThis.fetch = fetchMock as typeof fetch
+
+    const result = await fetchShippingMethods({
+      getToken: async () => 'tok',
+      page: 2,
+      limit: 10,
+      search: ' express ',
+      status: ShippingMethodStatus.INACTIVE,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_ROUTES.SHIPPING_METHODS}?page=2&limit=10&search=express&status=INACTIVE`,
+      expect.objectContaining({ credentials: 'include' }),
+    )
+    expect(
+      (requestInit(fetchMock).headers as Headers).get('Authorization'),
+    ).toBe('Bearer tok')
+    expect(result).toEqual({ ok: true, shippingMethods: [method], meta })
+  })
+
+  it('fetchShippingMethodById reads the method from data', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(okResponse({ data: method }))
+    globalThis.fetch = fetchMock as typeof fetch
+
+    const result = await fetchShippingMethodById(' sm-1 ')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_ROUTES.SHIPPING_METHODS}/sm-1`,
+      expect.objectContaining({ credentials: 'include' }),
+    )
+    expect(result).toEqual({ ok: true, shippingMethod: method })
+  })
+
+  it('createShippingMethod posts the body with the idempotency key', async () => {
+    const created = { ...method, id: 'sm-2', name: 'Same day', price: 25 }
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(okResponse({ data: created }, 201))
+    globalThis.fetch = fetchMock as typeof fetch
+    const body = { name: 'Same day', description: 'Today', price: 25 }
+
+    const result = await createShippingMethod(body, {
+      idempotencyKey: 'key-1',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      API_ROUTES.SHIPPING_METHODS,
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify(body),
+      }),
+    )
+    expect(
+      (requestInit(fetchMock).headers as Headers).get(IDEMPOTENCY.HEADER),
+    ).toBe('key-1')
+    expect(result).toEqual({ ok: true, shippingMethod: created })
+  })
+
+  it('updateShippingMethod patches only the given fields', async () => {
+    const updated = { ...method, status: ShippingMethodStatus.INACTIVE }
+    const fetchMock = jest.fn().mockResolvedValue(okResponse({ data: updated }))
+    globalThis.fetch = fetchMock as typeof fetch
+
+    const result = await updateShippingMethod('sm-1', {
+      status: ShippingMethodStatus.INACTIVE,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_ROUTES.SHIPPING_METHODS}/sm-1`,
+      expect.objectContaining({
+        method: 'PATCH',
+        credentials: 'include',
+        body: JSON.stringify({ status: 'INACTIVE' }),
+      }),
+    )
+    expect(result).toEqual({ ok: true, shippingMethod: updated })
+  })
+
+  it('deleteShippingMethod returns ok on 204', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(okResponse(undefined, 204))
+    globalThis.fetch = fetchMock as typeof fetch
+
+    const result = await deleteShippingMethod('a/b')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_ROUTES.SHIPPING_METHODS}/a%2Fb`,
+      expect.objectContaining({ method: 'DELETE', credentials: 'include' }),
+    )
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('a 409 keeps the API error response', async () => {
+    const errorResponse = {
+      statusCode: 409,
+      message: 'Conflict',
+      errors: [
+        {
+          errCode: 'X',
+          field: 'name',
+          message: 'Shipping method name already exists',
+        },
+      ],
+    }
     const fetchMock = jest.fn().mockResolvedValue({
-      ok: response.ok,
-      status: response.status,
-      json: async () => response.body,
-      text: async () => JSON.stringify(response.body),
+      ok: false,
+      status: 409,
+      json: async () => errorResponse,
     })
     globalThis.fetch = fetchMock as typeof fetch
-    return fetchMock
-  }
 
-  it('fetchShippingMethods requests the list without a token and returns the methods', async () => {
-    const fetchMock = mockFetch({
-      ok: true,
-      status: 200,
-      body: { data: [standard, express], meta },
+    const result = await createShippingMethod(
+      { name: 'Roast Express', description: '1-2 business days', price: 12 },
+      { idempotencyKey: 'key-2' },
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Shipping method name already exists',
+      status: 409,
+      errorResponse,
     })
-
-    const result = await fetchShippingMethods()
-
-    const [url, init] = fetchMock.mock.calls[0]
-    const requestUrl = new URL(url as string)
-    expect(`${requestUrl.origin}${requestUrl.pathname}`).toBe(
-      API_ROUTES.SHIPPING_METHODS,
-    )
-    expect(requestUrl.searchParams.get('limit')).toBe(
-      String(VALIDATION_RULES.PAGINATION.MAX_LIMIT),
-    )
-    // An admin's session cookie would otherwise list every method.
-    expect(requestUrl.searchParams.get('status')).toBe(
-      ShippingMethodStatus.ACTIVE,
-    )
-    expect(requestUrl.searchParams.has('sortBy')).toBe(false)
-    expect(init).toEqual(expect.objectContaining({ credentials: 'include' }))
-    expect(result).toEqual({ ok: true, shippingMethods: [standard, express] })
   })
 
-  it('fetchShippingMethods drops INACTIVE and deleted methods', async () => {
-    const inactive: ShippingMethod = {
-      ...express,
-      id: 'inactive-id',
-      status: ShippingMethodStatus.INACTIVE,
-    }
-    const deleted: ShippingMethod = {
-      ...express,
-      id: 'deleted-id',
-      deletedAt: '2026-11-24T01:00:00.000Z',
-    }
-    mockFetch({
-      ok: true,
-      status: 200,
-      body: { data: [standard, inactive, deleted], meta },
-    })
-
-    const result = await fetchShippingMethods()
-
-    expect(result).toEqual({ ok: true, shippingMethods: [standard] })
-  })
-
-  it('fetchShippingMethods returns the fallback error when the request fails', async () => {
+  it('a failed response without a message returns the fallback error', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: false,
       status: 500,
-      json: async () => {
-        throw new Error('not json')
-      },
-      text: async () => 'Internal Server Error',
+      json: async () => ({ message: '' }),
     })
     globalThis.fetch = fetchMock as typeof fetch
 
     const result = await fetchShippingMethods()
 
-    expect(result).toEqual(
-      expect.objectContaining({
-        ok: false,
-        // apiClient appends the status to the fallback message.
-        error: `${API_FALLBACK_ERRORS.SHIPPING_METHODS_LOAD} (500)`,
-        status: 500,
-      }),
-    )
+    expect(result).toEqual({
+      ok: false,
+      error: `${API_FALLBACK_ERRORS.SHIPPING_METHODS_LOAD} (500)`,
+      status: 500,
+    })
   })
 })

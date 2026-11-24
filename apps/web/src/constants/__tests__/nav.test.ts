@@ -4,6 +4,7 @@ import {
   DASHBOARD_DISABLED_HINT,
   DASHBOARD_MENU,
 } from '@/constants/nav'
+import { ROUTES } from '@/constants/routes'
 
 describe('nav constants', () => {
   it('exports the dashboard disabled hint label', () => {
@@ -20,6 +21,18 @@ describe('nav constants', () => {
     )
 
     expect(disabledByLabel).toEqual(['Favorites', 'Orders', 'Settings'])
+  })
+
+  it('lists an enabled Shipping methods entry right after Products', () => {
+    const productsIndex = DASHBOARD_MENU.findIndex(
+      (item) => item.label === 'Products',
+    )
+    const entry = DASHBOARD_MENU[productsIndex + 1]
+
+    expect(entry?.label).toBe('Shipping methods')
+    expect(entry?.href).toBe(ROUTES.DASHBOARD_SHIPPING_METHODS)
+    expect(entry?.match).toBe('prefix')
+    expect(entry?.disabled).toBeFalsy()
   })
 
   it('only disables brew guides, subscriptions, and contact in header', () => {

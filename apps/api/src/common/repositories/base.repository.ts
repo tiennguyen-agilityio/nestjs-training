@@ -4,7 +4,7 @@ import type {
   EntityRepository,
   FilterQuery,
 } from '@mikro-orm/core';
-import { ChangeSetType, RequestContext } from '@mikro-orm/core';
+import { ChangeSetType, LockMode, RequestContext } from '@mikro-orm/core';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { BaseEntity } from '../entities/base.entity.js';
 import type { AuditableEntity } from '../entities/auditable.entity.js';
@@ -127,6 +127,31 @@ export abstract class BaseRepository<T extends BaseEntity> {
     );
   }
 
+  protected findOneForUpdate(
+    where: Criteria<T>,
+    options?: Pick<ListOptions<T>, 'relations'>,
+  ): Promise<T | null> {
+    return this.repository.findOne(where as FilterQuery<T>, {
+      ...this.buildFindOptions(options),
+      lockMode: LockMode.PESSIMISTIC_WRITE,
+    });
+  }
+
+  protected async insertIgnoringConflict(
+    data: Record<string, unknown>,
+    conflictFields: (keyof T & string)[],
+  ): Promise<void> {
+    await this.em.upsert(this.entity, data as never, {
+      onConflictFields: conflictFields as never,
+      onConflictAction: 'ignore',
+      disableIdentityMap: true,
+    });
+  }
+
+  protected deleteWhere(where: Criteria<T>): Promise<number> {
+    return this.em.nativeDelete(this.entity, where as FilterQuery<T>);
+  }
+
   protected countOf<R extends BaseEntity>(
     entity: EntityName<R>,
     where: Criteria<R>,
@@ -152,8 +177,11 @@ export abstract class BaseRepository<T extends BaseEntity> {
         limit,
         offset: (page - 1) * limit,
         ...this.buildFindOptions(options),
-        orderBy: this.buildOrderBy(options).orderBy ?? { createdAt: 'DESC' },
-      } as never,
+        orderBy: [
+          this.buildOrderBy(options).orderBy ?? { createdAt: 'DESC' },
+          { id: 'ASC' },
+        ] as never,
+      },
     );
 
     return this.toPaginatedResult(data, totalCount, query);

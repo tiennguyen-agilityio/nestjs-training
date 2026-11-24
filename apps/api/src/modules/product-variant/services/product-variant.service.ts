@@ -8,7 +8,7 @@ import {
   ERROR_DESCRIPTIONS,
 } from '../../../common/constants/message.constant.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
-import { DiscountType } from '@repo/constants';
+import { DiscountType, ProductStatus } from '@repo/constants';
 import { assignDefinedFields } from '../../../common/utils/object.util.js';
 import {
   DuplicateResourceException,
@@ -55,6 +55,27 @@ export class ProductVariantService {
       throw new ItemNotFoundException({
         errCode: ERROR_CODES.PRODUCT_VARIANT.NOT_FOUND,
         field: 'id',
+        message: ERROR_MESSAGES.PRODUCT_VARIANT.NOT_FOUND,
+        description: ERROR_DESCRIPTIONS.PRODUCT_VARIANT.NOT_FOUND,
+      });
+    }
+
+    return variant;
+  }
+
+  async findPurchasable(id: string, field: string): Promise<ProductVariant> {
+    const variant = await this.productVariantRepository.findWithProduct(id);
+    const product = variant?.product;
+    if (
+      !variant ||
+      variant.deletedAt ||
+      !product ||
+      product.deletedAt ||
+      (product.status as ProductStatus) !== ProductStatus.ACTIVE
+    ) {
+      throw new ItemNotFoundException({
+        errCode: ERROR_CODES.PRODUCT_VARIANT.NOT_FOUND,
+        field,
         message: ERROR_MESSAGES.PRODUCT_VARIANT.NOT_FOUND,
         description: ERROR_DESCRIPTIONS.PRODUCT_VARIANT.NOT_FOUND,
       });
