@@ -9,8 +9,11 @@ import type {
   Response as ApiResponse,
   ResponseMeta,
 } from '@/types/api'
+import type { OrderStatus } from '@repo/constants'
 import type {
   Order,
+  OrderDetail,
+  OrderSummary,
   ORDER_STATUS,
   PlacedOrder,
   SHIPPING_STATUS,
@@ -169,4 +172,52 @@ export async function updateOrderShippingStatus(
   if (!result.ok) return result
 
   return { ok: true }
+}
+
+export interface FetchMyOrdersOptions {
+  getToken: () => Promise<string | null>
+  page?: number
+  limit?: number
+  status?: OrderStatus
+}
+
+/** The signed-in shopper's own orders (`GET /orders`), newest first. */
+export async function fetchMyOrders(
+  options: FetchMyOrdersOptions,
+): Promise<
+  | { ok: true; orders: OrderSummary[]; meta?: ResponseMeta }
+  | { ok: false; error: ApiErrorResponse }
+> {
+  const { getToken, page, limit, status } = options
+  const result = await apiClient.get<ApiResponse<OrderSummary[]>>(
+    API_ROUTES.ORDERS,
+    {
+      getToken,
+      query: { page, limit, status },
+      fallbackError: API_FALLBACK_ERRORS.ORDERS_LOAD,
+    },
+  )
+  if (!result.ok) return { ok: false, error: toApiErrorResponse(result) }
+
+  const { data, meta } = result.data
+  return { ok: true, orders: data, meta }
+}
+
+/** One of the signed-in shopper's orders, by order number. */
+export async function fetchOrderDetail(
+  orderNumber: string,
+  options: { getToken: () => Promise<string | null> },
+): Promise<
+  { ok: true; order: OrderDetail } | { ok: false; error: ApiErrorResponse }
+> {
+  const result = await apiClient.get<ApiResponse<OrderDetail>>(
+    `${API_ROUTES.ORDERS}/${encodeURIComponent(orderNumber)}`,
+    {
+      getToken: options.getToken,
+      fallbackError: API_FALLBACK_ERRORS.ORDER_LOAD,
+    },
+  )
+  if (!result.ok) return { ok: false, error: toApiErrorResponse(result) }
+
+  return { ok: true, order: result.data.data }
 }

@@ -1,6 +1,7 @@
 import { VALIDATION_RULES } from '@repo/constants'
 
 export const ERROR_MESSAGES = {
+  ORDER_NOT_FOUND: 'Order not found.',
   IDENTIFIER_REQUIRED: 'Enter your email address',
   IDENTIFIER_EMAIL_INVALID: 'Enter a valid email address',
   PASSWORD_REQUIRED: 'Enter your password',
@@ -92,6 +93,7 @@ export const API_FALLBACK_ERRORS = {
   ORDER_STATUS_UPDATE: 'Could not update order status',
   ORDER_SHIPPING_STATUS_UPDATE: 'Could not update shipping status',
   ORDERS_LOAD: 'Could not load orders',
+  ORDER_LOAD: 'Could not load order',
   SHIPPING_METHODS_LOAD: 'Could not load shipping methods',
   SHIPPING_METHOD_LOAD: 'Could not load shipping method',
   SHIPPING_METHOD_CREATE: 'Could not create shipping method',

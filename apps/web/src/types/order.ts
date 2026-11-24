@@ -121,3 +121,26 @@ export interface PlacedOrder {
   createdAt: string
   updatedAt: string
 }
+
+/** One row of `GET /orders` (OROW of the API design). */
+export interface OrderSummary {
+  id: string
+  orderNumber: string
+  userId: string
+  customer: { firstName: string; lastName: string; email: string }
+  status: OrderStatus
+  shippingStatus: ShippingStatus
+  paymentStatus: OrderPaymentStatus
+  paymentMethod: ApiPaymentMethod | null
+  itemCount: number
+  totalAmount: number
+  createdAt: string
+}
+
+/**
+ * `GET /orders/{idOrOrderNumber}` returns the same `ResponseOrderDto` as
+ * `POST /orders`, so the order details reuse its types.
+ */
+export type OrderDetail = PlacedOrder
+export type OrderDetailItem = PlacedOrderItem
+export type OrderPayment = PlacedOrderPayment

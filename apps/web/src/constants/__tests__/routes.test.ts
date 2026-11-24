@@ -1,7 +1,21 @@
 import * as routes from '@/constants/routes'
-import { API_ROUTES, ROUTES, dashboardEditPath } from '@/constants/routes'
+import {
+  API_ROUTES,
+  ROUTES,
+  dashboardEditPath,
+  profileOrderPath,
+} from '@/constants/routes'
 
 describe('routes', () => {
+  it('profileOrderPath builds the order details route and encodes the order number', () => {
+    expect(profileOrderPath('CH-261117-0001')).toBe(
+      `${ROUTES.USER_PROFILE}/orders/CH-261117-0001`,
+    )
+    expect(profileOrderPath('a b/c')).toBe(
+      `${ROUTES.USER_PROFILE}/orders/a%20b%2Fc`,
+    )
+  })
+
   it('dashboardEditPath builds the edit route under a base', () => {
     expect(dashboardEditPath(ROUTES.DASHBOARD_CATEGORIES, 'cat-1')).toBe(
       '/dashboard/categories/cat-1/edit',

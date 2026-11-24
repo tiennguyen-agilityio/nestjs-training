@@ -175,6 +175,24 @@ export abstract class BaseRepository<T extends BaseEntity> {
     return result.affectedRows === 1;
   }
 
+  /**
+   * The `id` column of the rows a hand-written query returns, for a filter the
+   * criteria cannot express (a value worked out from child rows). Runs in the
+   * open transaction, if any.
+   */
+  protected async selectIds(sql: string, params: unknown[]): Promise<string[]> {
+    const rows = await this.em
+      .getConnection()
+      .execute<{ id: string }[]>(
+        sql,
+        params,
+        'all',
+        this.em.getTransactionContext(),
+      );
+
+    return rows.map(({ id }) => id);
+  }
+
   protected async reloadEntity(entity: T): Promise<T | null> {
     return await this.em.refresh(entity, {
       filters: { softDelete: false },

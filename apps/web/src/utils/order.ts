@@ -17,10 +17,17 @@ import {
   type PlacedOrder,
 } from '@/types/order'
 
+import {
+  OrderPaymentStatus,
+  type OrderStatus,
+  type ShippingStatus,
+} from '@repo/constants'
+
 import { formatPrice } from './common'
 
 export function formatOrderCustomerName(order: Order): string {
-  const { firstName, lastName } = order.addressSnapshot
+  // A `GET /orders` list row (OROW) has no addressSnapshot.
+  const { firstName, lastName } = order.addressSnapshot ?? {}
   const full = [firstName, lastName].map((s) => s?.trim()).filter(Boolean)
   return full.length > 0 ? full.join(' ') : '—'
 }
@@ -35,7 +42,21 @@ export function formatOrderListDate(iso: string): string {
   }).format(d)
 }
 
-export function getOrderStatusPresentation(status: ORDER_STATUS): {
+/** Day, short month and time, e.g. "17 Nov, 16:00". */
+export function formatOrderDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d)
+}
+
+export function getOrderStatusPresentation(
+  status: ORDER_STATUS | OrderStatus,
+): {
   label: string
   badgeClassName: string
 } {
@@ -71,7 +92,9 @@ export function getOrderStatusPresentation(status: ORDER_STATUS): {
   }
 }
 
-export function getShippingStatusPresentation(status: SHIPPING_STATUS): {
+export function getShippingStatusPresentation(
+  status: SHIPPING_STATUS | ShippingStatus,
+): {
   label: string
   badgeClassName: string
 } {
@@ -106,6 +129,49 @@ export function getShippingStatusPresentation(status: SHIPPING_STATUS): {
         badgeClassName: 'bg-muted text-muted-foreground',
       }
   }
+}
+
+const PAYMENT_STATUS_PRESENTATION: Record<
+  OrderPaymentStatus,
+  { label: string; badgeClassName: string }
+> = {
+  [OrderPaymentStatus.UNPAID]: {
+    label: 'Unpaid',
+    badgeClassName: 'bg-muted text-muted-foreground',
+  },
+  [OrderPaymentStatus.PENDING]: {
+    label: 'Pending',
+    badgeClassName:
+      'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200',
+  },
+  [OrderPaymentStatus.PAID]: {
+    label: 'Paid',
+    badgeClassName:
+      'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',
+  },
+  [OrderPaymentStatus.FAILED]: {
+    label: 'Failed',
+    badgeClassName:
+      'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200',
+  },
+  [OrderPaymentStatus.PARTIALLY_REFUNDED]: {
+    label: 'Partially refunded',
+    badgeClassName:
+      'bg-orange-100 text-orange-900 dark:bg-orange-950/40 dark:text-orange-200',
+  },
+  [OrderPaymentStatus.REFUNDED]: {
+    label: 'Refunded',
+    badgeClassName:
+      'bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200',
+  },
+}
+
+/** Badge label and colours of an order's payment status. */
+export function getPaymentStatusPresentation(status: OrderPaymentStatus): {
+  label: string
+  badgeClassName: string
+} {
+  return PAYMENT_STATUS_PRESENTATION[status]
 }
 
 export function buildOrderDashboardStats(

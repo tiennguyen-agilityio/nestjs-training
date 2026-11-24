@@ -1,66 +1,74 @@
 'use client'
 
-import { ChevronRight } from 'lucide-react'
+import Link from 'next/link'
 
 // Types
-import type { Order } from '@/types/order'
+import type { OrderSummary } from '@/types/order'
+
+// Constants
+import { profileOrderPath } from '@/constants/routes'
 
 // Utils
 import { formatPrice } from '@/utils/common'
-import { formatOrderListDate, getOrderStatusPresentation } from '@/utils/order'
+import {
+  formatOrderListDate,
+  getOrderStatusPresentation,
+  getPaymentStatusPresentation,
+  getShippingStatusPresentation,
+} from '@/utils/order'
 import { cn } from '@/utils/styles'
 
-// Components
-import { Button } from '@/components/ui/button'
-
 export interface ProfileOrderTableRowProps {
-  order: Order
-  onRequestView?: (order: Order) => void
+  order: OrderSummary
+  /** Opens the order's details page; every cell calls it, the number is a link. */
+  onOpen?: (order: OrderSummary) => void
 }
+
+const PILL_CLASS = 'inline-flex rounded-full px-3 py-1 text-xs font-semibold'
 
 export function ProfileOrderTableRow({
   order,
-  onRequestView,
+  onOpen,
 }: ProfileOrderTableRowProps) {
-  const orderLabel = order.orderNumber?.trim() || order.id
-  const displayId = orderLabel.startsWith('#') ? orderLabel : `#${orderLabel}`
-  const statusPresentation = getOrderStatusPresentation(order.status)
+  const badges = [
+    getOrderStatusPresentation(order.status),
+    getShippingStatusPresentation(order.shippingStatus),
+    getPaymentStatusPresentation(order.paymentStatus),
+  ]
+  const open = () => onOpen?.(order)
 
   return (
     <>
       <td
-        title={displayId}
-        className="min-w-0 truncate px-8 py-8 font-medium text-on-surface"
+        className="px-6 py-6 font-mono text-sm text-on-surface"
+        onClick={open}
       >
-        {displayId}
+        <Link
+          href={profileOrderPath(order.orderNumber)}
+          className="hover:underline"
+          onClick={(event) => event.stopPropagation()}
+        >
+          #{order.orderNumber}
+        </Link>
       </td>
-      <td className="px-8 py-8 text-on-surface-variant">
+      <td className="px-6 py-6 text-on-surface-variant" onClick={open}>
         {formatOrderListDate(order.createdAt)}
       </td>
-      <td className="px-8 py-8">
-        <span
-          className={cn(
-            'inline-flex rounded-full px-3 py-1 text-xs font-semibold',
-            statusPresentation.badgeClassName,
-          )}
-        >
-          {statusPresentation.label}
-        </span>
+      <td className="px-6 py-6 text-on-surface-variant" onClick={open}>
+        {order.itemCount}
       </td>
-      <td className="px-8 py-8 font-bold text-on-surface">
+      {badges.map((badge, index) => (
+        <td key={index} className="px-6 py-6" onClick={open}>
+          <span className={cn(PILL_CLASS, badge.badgeClassName)}>
+            {badge.label}
+          </span>
+        </td>
+      ))}
+      <td
+        className="px-6 py-6 text-right font-bold text-on-surface"
+        onClick={open}
+      >
         {formatPrice(order.totalAmount)}
-      </td>
-      <td className="px-8 py-8 text-right">
-        <Button
-          type="button"
-          variant="link"
-          className="ms-auto inline-flex h-auto w-auto gap-1 p-0 font-semibold text-primary"
-          onClick={() => onRequestView?.(order)}
-          aria-label={`View order ${displayId}`}
-        >
-          View Details
-          <ChevronRight className="size-4" aria-hidden />
-        </Button>
       </td>
     </>
   )

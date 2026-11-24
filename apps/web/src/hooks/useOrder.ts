@@ -1,14 +1,18 @@
 'use client'
 
+import { useAuth } from '@clerk/nextjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { VALIDATION_RULES, type OrderStatus } from '@repo/constants'
 
 import type { PlaceOrderPayload } from '@repo/schemas'
 
-import { PAGE_SIZE } from '@/constants/common'
+import { CLERK_SESSION_TEMPLATE, PAGE_SIZE } from '@/constants/common'
 import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import {
   createOrder,
   deleteOrder,
+  fetchMyOrders,
+  fetchOrderDetail,
   fetchOrders,
   updateOrderShippingStatus,
   updateOrderStatus,
@@ -17,18 +21,29 @@ import {
 import type { ResponseMeta } from '@/types/api'
 import type {
   Order,
+  OrderDetail,
+  OrderSummary,
   ORDER_STATUS,
   PlacedOrder,
   SHIPPING_STATUS,
 } from '@/types/order'
 import {
+  detailQueryOptions,
   listQueryOptions,
   throwIfServiceFailed,
   toQueryResult,
 } from '@/utils/query'
 
+/**
+ * Keys under the one `['orders']` root. The shopper's own lists and details
+ * carry the user id, so a switched account never reads another user's cache.
+ */
 export const ordersQueryKeys = {
   root: ['orders'] as const,
+  mine: (userId: string, params: MyOrdersParams) =>
+    ['orders', 'mine', userId, params.page, params.status ?? ''] as const,
+  detail: (userId: string, orderNumber: string) =>
+    ['orders', 'detail', userId, orderNumber] as const,
 }
 
 const ordersQueryRoot = ordersQueryKeys.root
@@ -151,5 +166,115 @@ export function useOrders(params: UseOrdersParams = {}): UseOrdersResult {
     orders: query.data?.orders ?? [],
     meta: query.data?.meta ?? null,
     ...toQueryResult(query),
+  }
+}
+
+export interface MyOrdersParams {
+  page: number
+  status?: OrderStatus
+}
+
+export interface UseMyOrdersResult {
+  orders: OrderSummary[]
+  meta: ResponseMeta | null
+  isLoading: boolean
+  isError: boolean
+  errorMessage: string | null
+  refetch: () => Promise<void>
+}
+
+/** The signed-in shopper's orders, 10 a page, newest first. */
+export function useMyOrders(params: MyOrdersParams): UseMyOrdersResult {
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth()
+
+  const query = useQuery({
+    queryKey: ordersQueryKeys.mine(userId ?? '', params),
+    queryFn: async () => {
+      const result = await fetchMyOrders({
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+        page: params.page,
+        limit: VALIDATION_RULES.PAGINATION.DEFAULT_LIMIT,
+        status: params.status,
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      return { orders: result.orders, meta: result.meta ?? null }
+    },
+    enabled: Boolean(isLoaded && isSignedIn && userId),
+    ...listQueryOptions,
+    // Keep the shown rows only while paging the same user's same filter: a
+    // new user or a new status starts empty (loading), never with old rows.
+    placeholderData: (previous, previousQuery) => {
+      const key = previousQuery?.queryKey
+      return key?.[2] === userId && key?.[4] === (params.status ?? '')
+        ? previous
+        : undefined
+    },
+  })
+  const { isError, errorMessage, refetch } = toQueryResult(query)
+
+  return {
+    orders: query.data?.orders ?? [],
+    meta: query.data?.meta ?? null,
+    // Pending until Clerk loads and the first data arrives; a signed-out
+    // shopper (query disabled for good) is not loading.
+    isLoading: query.isPending && (!isLoaded || Boolean(isSignedIn && userId)),
+    isError,
+    errorMessage,
+    refetch,
+  }
+}
+
+/** A 404 is final (no such order, or another user's); other errors retry once. */
+export function orderDetailRetry(failureCount: number, error: Error): boolean {
+  return (
+    (error as { statusCode?: number }).statusCode !== 404 && failureCount < 1
+  )
+}
+
+export interface UseOrderDetailResult {
+  order: OrderDetail | null
+  isLoading: boolean
+  isError: boolean
+  /** The API answered 404: no such order, or another user's. */
+  isNotFound: boolean
+  errorMessage: string | null
+  refetch: () => Promise<void>
+}
+
+/** One of the shopper's orders; nothing is fetched without an order number. */
+export function useOrderDetail(
+  orderNumber: string | null,
+): UseOrderDetailResult {
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth()
+
+  const query = useQuery({
+    queryKey: ordersQueryKeys.detail(userId ?? '', orderNumber ?? ''),
+    queryFn: async () => {
+      const result = await fetchOrderDetail(orderNumber ?? '', {
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+      })
+      if (!result.ok) {
+        throw Object.assign(new Error(result.error.message), {
+          statusCode: result.error.statusCode,
+        })
+      }
+      return result.order
+    },
+    enabled: Boolean(isLoaded && isSignedIn && userId && orderNumber),
+    ...detailQueryOptions,
+    retry: orderDetailRetry,
+  })
+  const { isError, errorMessage, refetch } = toQueryResult(query)
+
+  return {
+    order: query.data ?? null,
+    isNotFound:
+      (query.error as { statusCode?: number } | null)?.statusCode === 404,
+    isLoading:
+      query.isPending &&
+      (!isLoaded || Boolean(isSignedIn && userId && orderNumber)),
+    isError,
+    errorMessage,
+    refetch,
   }
 }
