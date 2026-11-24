@@ -21,13 +21,10 @@ export class ProductVariant extends BaseEntity {
   sku!: string;
 
   @Property({ type: 'decimal', precision: 10, scale: 2 })
-  weight!: string;
+  size!: string;
 
   @Enum({ items: () => ProductUnit })
   unit!: ProductUnit;
-
-  @Property({ type: 'string' })
-  name!: string;
 
   @Property({ type: 'decimal', precision: 10, scale: 2 })
   price!: string;
@@ -48,6 +45,6 @@ export class ProductVariant extends BaseEntity {
   })
   discountValue: string | null = null;
 
-  @Property({ type: 'number' })
-  quantity: number & Opt = 0;
+  @Property({ type: 'number', fieldName: 'stock_quantity' })
+  stockQuantity: number & Opt = 0;
 }

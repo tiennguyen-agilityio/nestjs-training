@@ -16,18 +16,17 @@ export class ProductVariantRepository extends BaseRepository<ProductVariant> {
   }
 
   create(
-    data: CreateProductVariantInput & { productId: string; name: string },
+    data: CreateProductVariantInput & { productId: string },
   ): Promise<ProductVariant> {
     return this.createAndSave({
       product: data.productId,
       sku: data.sku,
-      weight: data.weight,
+      size: data.size,
       unit: data.unit,
-      name: data.name,
       price: data.price,
       discountType: data.discountType ?? null,
       discountValue: data.discountValue ?? null,
-      quantity: data.quantity,
+      stockQuantity: data.stockQuantity,
     });
   }
 }

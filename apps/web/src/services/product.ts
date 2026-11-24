@@ -14,6 +14,7 @@ import type {
   UpdateProductPayload,
 } from '@repo/schemas'
 import type { Product, ProductVariantSummary } from '@/types/product'
+import { formatVariantName } from '@/utils/product'
 
 export interface ProductOptions {
   getToken?: () => Promise<string | null>
@@ -174,12 +175,13 @@ const toVariantSummary = (
   variant: CreateProductVariantPayload,
 ): ProductVariantSummary => ({
   sku: variant.sku,
-  weight: variant.weight,
+  size: variant.size,
   unit: variant.unit,
+  name: formatVariantName(variant.size, variant.unit),
   price: variant.price,
   discountType: variant.discountType ?? null,
   discountValue: variant.discountValue ?? null,
-  quantity: variant.quantity ?? 0,
+  stockQuantity: variant.stockQuantity ?? 0,
 })
 
 // Last resort when neither the response nor a refetch gives the product back:

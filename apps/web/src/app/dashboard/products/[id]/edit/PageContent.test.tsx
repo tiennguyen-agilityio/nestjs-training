@@ -49,12 +49,13 @@ const variant = (
 ): ProductVariantSummary => ({
   id: 'variant-a',
   sku: 'SKU-A',
-  weight: 250,
+  size: 250,
   unit: ProductUnit.G,
+  name: '250g',
   price: 100,
   discountType: DiscountType.PERCENT,
   discountValue: 10,
-  quantity: 30,
+  stockQuantity: 30,
   ...overrides,
 })
 
@@ -158,13 +159,38 @@ describe('EditProductForm pricing', () => {
     expect(sentBody().updateVariants).toEqual([
       {
         id: 'variant-a',
+        size: 250,
+        unit: ProductUnit.G,
         price: 120,
         discountType: DiscountType.PERCENT,
         discountValue: 10,
-        quantity: 30,
+        stockQuantity: 30,
       },
     ])
     expect(mockPush).toHaveBeenCalledWith(ROUTES.DASHBOARD_PRODUCTS)
+  })
+
+  it('fills Size and Unit from the variant', () => {
+    renderPage()
+
+    expect(screen.getByRole('textbox', { name: 'Size' })).toHaveValue('250')
+    expect(field('Unit')).toHaveTextContent('Grams')
+  })
+
+  it('sends size, unit and stockQuantity in updateVariants', async () => {
+    mockMutate.mockImplementation((_input, options: MutateOptions) =>
+      options.onSuccess?.(),
+    )
+    renderPage()
+
+    await replaceValue('Size', '500')
+    await replaceValue('Quantity', '5')
+    await save()
+
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
+    expect(sentBody().updateVariants?.[0]).toEqual(
+      expect.objectContaining({ size: 500, unit: 'G', stockQuantity: 5 }),
+    )
   })
 
   it('sends PERCENT 0 when Discount (%) is 0', async () => {
@@ -207,7 +233,7 @@ describe('EditProductForm pricing', () => {
     expect(field('Discount (%)')).toHaveValue('10')
   })
 
-  it('accepts a quantity above 500, since the API has no maximum', async () => {
+  it('accepts a stock above 500, since the API has no maximum', async () => {
     renderPage()
 
     await replaceValue('Quantity', '501')
@@ -516,11 +542,10 @@ describe('EditProductForm shared form', () => {
     await waitFor(() => expect(field('Base Price')).toHaveFocus())
   })
 
-  it('does not show Weight or Unit', () => {
+  it('does not show Weight', () => {
     renderPage()
 
     expect(screen.queryByLabelText('Weight')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Unit')).not.toBeInTheDocument()
   })
 
   it('keeps typed changes when the page re-renders', async () => {

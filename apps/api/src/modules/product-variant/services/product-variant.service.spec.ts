@@ -27,13 +27,12 @@ describe('ProductVariantService', () => {
     ({
       id: 'variant-id-1',
       sku: 'SKU-1',
-      weight: '250.000',
+      size: '250.000',
       unit: ProductUnit.G,
-      name: '250g - Whole Bean',
       price: '10.00',
       discountType: null,
       discountValue: null,
-      quantity: 0,
+      stockQuantity: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
       deletedAt: null,
@@ -70,13 +69,14 @@ describe('ProductVariantService', () => {
   const createData = {
     productId: 'product-id-1',
     sku: 'SKU-1',
-    weight: '250.000',
+    size: '250.000',
     unit: ProductUnit.G,
     price: '10.00',
+    stockQuantity: 12,
   };
 
   describe('create', () => {
-    it('creates and returns a variant on a unique SKU, deriving name from weight + unit', async () => {
+    it('creates and returns a variant on a unique SKU, passing size and stockQuantity and no name', async () => {
       productVariantRepository.findBySku.mockResolvedValue(null);
       const created = buildVariant();
       productVariantRepository.create.mockResolvedValue(created);
@@ -88,8 +88,13 @@ describe('ProductVariantService', () => {
         ...createData,
         discountType: DiscountType.PERCENT,
         discountValue: '0',
-        name: '250.000G',
       });
+      expect(productVariantRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ size: '250.000', stockQuantity: 12 }),
+      );
+      expect(
+        productVariantRepository.create.mock.calls[0]?.[0],
+      ).not.toHaveProperty('name');
       expect(result).toBe(created);
     });
 
@@ -185,33 +190,20 @@ describe('ProductVariantService', () => {
       const variant = buildVariant();
       productVariantRepository.findById.mockResolvedValue(variant);
 
-      await service.update('variant-id-1', { quantity: 5 });
+      await service.update('variant-id-1', { stockQuantity: 5 });
 
       expect(productVariantRepository.findBySku).not.toHaveBeenCalled();
       expect(productVariantRepository.save).toHaveBeenCalledWith(variant);
     });
 
-    it('recomputes name from weight + unit when weight changes', async () => {
+    it('sets size on update and writes no name', async () => {
       const variant = buildVariant();
       productVariantRepository.findById.mockResolvedValue(variant);
 
-      const result = await service.update('variant-id-1', {
-        weight: '500.000',
-      });
+      const result = await service.update('variant-id-1', { size: '500' });
 
-      expect(result.name).toBe('500.000G');
-      expect(productVariantRepository.save).toHaveBeenCalledWith(variant);
-    });
-
-    it('recomputes name from weight + unit when unit changes', async () => {
-      const variant = buildVariant();
-      productVariantRepository.findById.mockResolvedValue(variant);
-
-      const result = await service.update('variant-id-1', {
-        unit: ProductUnit.KG,
-      });
-
-      expect(result.name).toBe('250.000KG');
+      expect(result.size).toBe('500');
+      expect(result).not.toHaveProperty('name');
       expect(productVariantRepository.save).toHaveBeenCalledWith(variant);
     });
 
@@ -249,7 +241,7 @@ describe('ProductVariantService', () => {
       productVariantRepository.findById.mockResolvedValue(null);
 
       await expect(
-        service.update('missing-id', { quantity: 5 }),
+        service.update('missing-id', { stockQuantity: 5 }),
       ).rejects.toBeInstanceOf(ItemNotFoundException);
       expect(productVariantRepository.save).not.toHaveBeenCalled();
     });

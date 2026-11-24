@@ -12,9 +12,9 @@ describe('VALIDATION_RULES', () => {
         MAX_SORT_ORDER: 5,
       },
       VARIANT: { MIN_COUNT: 1 },
-      QUANTITY: { MIN: 0 },
+      STOCK_QUANTITY: { MIN: 0 },
       PRICE: { MIN: 1, MAX: 99999999.99 },
-      WEIGHT: { MIN: 1, MAX: 99999999.99 },
+      SIZE: { MIN: 1, MAX: 99999999.99 },
       DISCOUNT: { MIN: 0, MAX: 99999999.99, PERCENT_MAX: 100 },
       PAGINATION: {
         MIN_PAGE: 1,
@@ -26,5 +26,14 @@ describe('VALIDATION_RULES', () => {
       PHONE: { REGEX: /^\d{10}$/ },
       CLERK_ID: { REGEX: /^user_[a-zA-Z0-9]+$/ },
     });
+  });
+
+  it('SIZE and STOCK_QUANTITY bounds', () => {
+    expect(VALIDATION_RULES).toMatchObject({
+      STOCK_QUANTITY: { MIN: 0 },
+      SIZE: { MIN: 1, MAX: 99999999.99 },
+    });
+    expect(VALIDATION_RULES).not.toHaveProperty('WEIGHT');
+    expect(VALIDATION_RULES).not.toHaveProperty('QUANTITY');
   });
 });

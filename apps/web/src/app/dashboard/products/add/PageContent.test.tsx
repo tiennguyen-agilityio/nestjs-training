@@ -105,10 +105,10 @@ const fillValidForm = async (skip: string[] = []) => {
   await fill('Product Name', 'Single Origin')
   await fill('Description', 'Bright and floral')
   await user.selectOptions(screen.getByLabelText('Category'), 'cat-1')
-  await fill('Weight', '250')
+  await fill('Size', '250')
   await user.selectOptions(screen.getByLabelText('Unit'), ProductUnit.G)
   await fill('Base Price', '20')
-  await fill('Initial Quantity', '5')
+  await fill('Quantity', '5')
   await fill('Origin', 'Ethiopia')
   await fill('Processing Method', 'Washed')
   return user
@@ -191,7 +191,22 @@ describe('Add product API errors', () => {
     )
   })
 
-  it('shows a duplicate-SKU API error under Weight', async () => {
+  it('sends size and stockQuantity in the create payload', async () => {
+    await submitValidForm()
+
+    const [payload] = mockMutate.mock.calls[0] as [
+      { variants: Record<string, unknown>[] },
+    ]
+    expect(payload.variants[0]).toMatchObject({
+      size: 250,
+      unit: ProductUnit.G,
+      stockQuantity: 5,
+    })
+    expect(payload.variants[0]).not.toHaveProperty('weight')
+    expect(payload.variants[0]).not.toHaveProperty('quantity')
+  })
+
+  it('shows a duplicate-SKU API error under Size', async () => {
     await submitValidForm()
 
     failWith(
@@ -204,7 +219,7 @@ describe('Add product API errors', () => {
         'A variant with this SKU already exists. Please choose a different SKU.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('Weight')).toHaveAttribute(
+    expect(screen.getByLabelText('Size')).toHaveAttribute(
       'aria-invalid',
       'true',
     )
@@ -243,13 +258,13 @@ describe('Add product API errors', () => {
     expect(payload.variants[0]?.discountValue).toBe(12.5)
   })
 
-  it('does not accept a quantity above 500', async () => {
+  it('does not accept a stock above 500', async () => {
     const user = userEvent.setup()
     render(<PageContent />)
 
-    await user.type(screen.getByLabelText('Initial Quantity'), '501')
+    await user.type(screen.getByLabelText('Quantity'), '501')
 
-    expect(screen.getByLabelText('Initial Quantity')).toHaveValue('50')
+    expect(screen.getByLabelText('Quantity')).toHaveValue('50')
   })
 })
 
@@ -259,23 +274,23 @@ describe('Add product shared form', () => {
       first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
     )
 
-  it('starts Weight and Base Price empty and Discount (%) at 0', () => {
+  it('starts Size and Base Price empty and Discount (%) at 0', () => {
     render(<PageContent />)
 
-    expect(screen.getByLabelText('Weight')).toHaveValue('')
+    expect(screen.getByLabelText('Size')).toHaveValue('')
     expect(screen.getByLabelText('Base Price')).toHaveValue('')
     expect(screen.getByLabelText('Discount (%)')).toHaveValue('0')
   })
 
-  it('shows required under Weight and Base Price when left empty', async () => {
-    const user = await fillValidForm(['Weight', 'Base Price'])
+  it('shows required under Size and Base Price when left empty', async () => {
+    const user = await fillValidForm(['Size', 'Base Price'])
 
     await clickPublish(user)
 
     expect(
       await screen.findAllByText(ERROR_MESSAGES.FIELD_REQUIRED),
     ).toHaveLength(2)
-    expect(screen.getByLabelText('Weight')).toHaveAttribute(
+    expect(screen.getByLabelText('Size')).toHaveAttribute(
       'aria-invalid',
       'true',
     )
@@ -286,7 +301,7 @@ describe('Add product shared form', () => {
     expect(mockMutate).not.toHaveBeenCalled()
   })
 
-  it('focuses Weight after a duplicate-SKU error', async () => {
+  it('focuses Size after a duplicate-SKU error', async () => {
     await submitValidForm()
 
     failWith(
@@ -294,7 +309,7 @@ describe('Add product shared form', () => {
       'A variant with this SKU already exists. Please choose a different SKU.',
     )
 
-    await waitFor(() => expect(screen.getByLabelText('Weight')).toHaveFocus())
+    await waitFor(() => expect(screen.getByLabelText('Size')).toHaveFocus())
   })
 
   it('sends the primary image first and the gallery image after it', async () => {
@@ -312,16 +327,16 @@ describe('Add product shared form', () => {
     ])
   })
 
-  it('shows Weight and Unit before Base Price', () => {
+  it('shows Size and Unit before Base Price', () => {
     render(<PageContent />)
 
-    const weight = screen.getByLabelText('Weight')
+    const size = screen.getByLabelText('Size')
     const unit = screen.getByLabelText('Unit')
     const price = screen.getByLabelText('Base Price')
-    const quantity = screen.getByLabelText('Initial Quantity')
-    expect(isBefore(weight, unit)).toBe(true)
+    const stock = screen.getByLabelText('Quantity')
+    expect(isBefore(size, unit)).toBe(true)
     expect(isBefore(unit, price)).toBe(true)
-    expect(isBefore(price, quantity)).toBe(true)
+    expect(isBefore(price, stock)).toBe(true)
   })
 
   it('marks the selected Discount Type with aria-pressed', async () => {

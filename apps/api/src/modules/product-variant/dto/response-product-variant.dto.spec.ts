@@ -6,17 +6,31 @@ const variant = (overrides: Partial<ProductVariant>): ProductVariant =>
   ({
     id: 'variant-id-1',
     sku: 'SKU-1',
-    weight: '250.00',
+    size: '250.00',
     unit: ProductUnit.G,
-    name: '250.00G',
     price: '120.00',
     discountType: DiscountType.PERCENT,
     discountValue: '10.00',
-    quantity: 30,
+    stockQuantity: 30,
     ...overrides,
   }) as ProductVariant;
 
 describe('ResponseProductVariantDto', () => {
+  it('works the name out from size and unit', () => {
+    const dto = ResponseProductVariantDto.fromEntity(
+      variant({ size: '250.00', unit: ProductUnit.G, stockQuantity: 37 }),
+    );
+
+    expect(dto).toMatchObject({
+      size: 250,
+      unit: 'G',
+      name: '250g',
+      stockQuantity: 37,
+    });
+    expect(dto).not.toHaveProperty('weight');
+    expect(dto).not.toHaveProperty('quantity');
+  });
+
   it('reads a null discount as PERCENT 0', () => {
     expect(
       ResponseProductVariantDto.fromEntity(

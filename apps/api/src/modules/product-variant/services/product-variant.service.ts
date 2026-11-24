@@ -7,15 +7,12 @@ import {
   ERROR_DESCRIPTIONS,
 } from '../../../common/constants/message.constant.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
-import { DiscountType, type ProductUnit } from '@repo/constants';
+import { DiscountType } from '@repo/constants';
 import { assignDefinedFields } from '../../../common/utils/object.util.js';
 import {
   DuplicateResourceException,
   ItemNotFoundException,
 } from '../../../common/exceptions/base.exception.js';
-
-const variantNameFrom = (weight: string, unit: ProductUnit): string =>
-  `${weight}${unit}`;
 
 @Injectable()
 export class ProductVariantService {
@@ -40,7 +37,6 @@ export class ProductVariantService {
       ...data,
       discountType: data.discountType ?? DiscountType.PERCENT,
       discountValue: data.discountValue ?? '0',
-      name: variantNameFrom(data.weight, data.unit),
     });
   }
 
@@ -81,9 +77,6 @@ export class ProductVariantService {
     }
 
     assignDefinedFields(variant, data);
-    if (data.weight !== undefined || data.unit !== undefined) {
-      variant.name = variantNameFrom(variant.weight, variant.unit);
-    }
     await this.productVariantRepository.save(variant);
 
     return variant;

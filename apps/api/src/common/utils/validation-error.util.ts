@@ -8,7 +8,7 @@ import { ERROR_CODES } from '../constants/error-code.constant.js';
  * StandardSchemaValidationPipe failure is returned in through
  * ValidationException. `errCode` is the API's error code for the failed
  * constraint (minLength, isUuid, ...) and `field` is the dotted path to the
- * value, so a nested failure reads `variants.0.weight`.
+ * value, so a nested failure reads `variants.0.size`.
  */
 export const toErrorDetailsFromStandardSchemaIssues = (
   issues: readonly StandardSchemaV1.Issue[],

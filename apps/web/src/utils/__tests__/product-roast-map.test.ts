@@ -21,12 +21,13 @@ describe('mapProductToRoastCollection', () => {
       variants: [
         {
           sku: 's',
-          weight: 250,
+          size: 250,
           unit: ProductUnit.G,
+          name: '250g',
           price: 18.5,
           discountType: null,
           discountValue: null,
-          quantity: 50,
+          stockQuantity: 50,
         },
       ],
       images: [],
@@ -48,7 +49,7 @@ describe('mapProductToRoastCollection', () => {
     expect(item.badgeLabel).toBeUndefined()
   })
 
-  it('sets low stock badge when quantity is below threshold', () => {
+  it('sets low stock badge when stockQuantity is below threshold', () => {
     const product: Product = {
       id: 'p-2',
       categoryId: 'cat',
@@ -64,12 +65,13 @@ describe('mapProductToRoastCollection', () => {
       variants: [
         {
           sku: 's',
-          weight: 250,
+          size: 250,
           unit: ProductUnit.G,
+          name: '250g',
           price: 20,
           discountType: null,
           discountValue: null,
-          quantity: 3,
+          stockQuantity: 3,
         },
       ],
       images: [],
@@ -80,5 +82,50 @@ describe('mapProductToRoastCollection', () => {
 
     const item = mapProductToRoastCollection(product, PLACEHOLDER)
     expect(item.badgeLabel).toBe('Low Stock')
+  })
+
+  describe('starts the roast line with the variant name', () => {
+    const baseProduct: Product = {
+      id: 'p-3',
+      categoryId: 'cat',
+      name: 'Huila Bean',
+      description: '',
+      roastLevel: RoastLevel.MEDIUM,
+      isOrganic: false,
+      isFairTrade: false,
+      status: ProductStatus.ACTIVE,
+      tastingNotes: '',
+      origin: 'Huila, Colombia',
+      processingMethod: '',
+      variants: [
+        {
+          sku: 's',
+          size: 250,
+          unit: ProductUnit.G,
+          name: '250g',
+          price: 20,
+          discountType: null,
+          discountValue: null,
+          stockQuantity: 30,
+        },
+      ],
+      images: [],
+      createdAt: null,
+      updatedAt: null,
+      deletedAt: null,
+    }
+
+    it('prefixes the first variant name', () => {
+      const item = mapProductToRoastCollection(baseProduct, PLACEHOLDER)
+      expect(item.roastMeta).toBe('250g · Huila, Colombia | Medium roast')
+    })
+
+    it('keeps the roast line when the product has no variant', () => {
+      const item = mapProductToRoastCollection(
+        { ...baseProduct, variants: [] },
+        PLACEHOLDER,
+      )
+      expect(item.roastMeta).toBe('Huila, Colombia | Medium roast')
+    })
   })
 })

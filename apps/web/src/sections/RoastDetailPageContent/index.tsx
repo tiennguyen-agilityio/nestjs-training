@@ -160,6 +160,11 @@ export default function RoastDetailPageContent() {
               <p className="text-3xl font-bold text-primary md:text-4xl">
                 {formatPrice(listPrice)}
               </p>
+              {product.variants[0]?.name ? (
+                <p className="text-on-surface-variant">
+                  {product.variants[0].name}
+                </p>
+              ) : null}
               <ProductDetailRatingRow />
             </div>
 

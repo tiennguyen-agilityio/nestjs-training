@@ -110,7 +110,7 @@ describe('Idempotency-Key on create routes (e2e)', () => {
     variants: [
       {
         sku: uniqueName('SKU-IDEM'),
-        weight: 250,
+        size: 250,
         unit: ProductUnit.G,
         price: 12.5,
       },

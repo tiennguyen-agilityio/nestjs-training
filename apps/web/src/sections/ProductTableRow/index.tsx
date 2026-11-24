@@ -33,8 +33,10 @@ function readProductCategory(
 
 function readProductStock(product: Product): number {
   return product.variants.reduce((total, variant) => {
-    const quantity = Number.isFinite(variant.quantity) ? variant.quantity : 0
-    return total + quantity
+    const stock = Number.isFinite(variant.stockQuantity)
+      ? variant.stockQuantity
+      : 0
+    return total + stock
   }, 0)
 }
 

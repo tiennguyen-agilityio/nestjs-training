@@ -9,25 +9,27 @@ import type {
 export interface ProductVariantSummary {
   id?: string
   sku?: string
-  weight: number
+  size: number
   unit: ProductUnit
+  // Worked out by the API from size and unit, e.g. "250g".
+  name: string
   price: number
   discountType: DiscountType | null
   discountValue: number | null
-  quantity: number
+  stockQuantity: number
 }
 
 export interface ProductVariant {
   id: string
   productId: string
   sku?: string
-  weight: number
+  size: number
   unit: ProductUnit
   name: string
   price: number
   discountType: DiscountType | null
   discountValue: number | null
-  quantity: number
+  stockQuantity: number
 }
 
 export interface ProductImage {
@@ -63,12 +65,12 @@ export interface ProductFormValues {
   roastLevel: RoastLevel
   isOrganic: boolean
   isFairTrade: boolean
-  weight: number | ''
+  size: number | ''
   unit: ProductUnit | ''
   price: number | ''
   discountType: DiscountType
   discountValue: number
-  quantity: number | ''
+  stockQuantity: number | ''
   origin: string
   processingMethod: string
 }

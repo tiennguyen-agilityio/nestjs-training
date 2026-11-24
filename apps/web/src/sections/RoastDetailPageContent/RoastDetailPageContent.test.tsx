@@ -74,12 +74,13 @@ const productFixture: Product = {
   variants: [
     {
       sku: 'SKU-1',
-      weight: 250,
+      size: 250,
       unit: ProductUnit.G,
+      name: '250g',
       price: 24,
       discountType: DiscountType.PERCENT,
       discountValue: 0,
-      quantity: 40,
+      stockQuantity: 40,
     },
   ],
   images: [
@@ -179,5 +180,19 @@ describe('RoastDetailPageContent', () => {
     expect(screen.getByTestId('product-detail-spec-grid')).toBeInTheDocument()
     expect(screen.getByTestId('product-purchase-panel')).toBeInTheDocument()
     expect(screen.getByTestId('product-reviews-section')).toBeInTheDocument()
+  })
+
+  it('shows the variant name', () => {
+    mockUseProductById.mockReturnValue({
+      product: productFixture,
+      isLoading: false,
+      isError: false,
+      errorMessage: null,
+      refetch: jest.fn(),
+    })
+
+    render(<RoastDetailPageContent />)
+
+    expect(screen.getByText('250g')).toBeInTheDocument()
   })
 })

@@ -18,14 +18,14 @@ export const VALIDATION_RULES = {
   VARIANT: {
     MIN_COUNT: 1,
   },
-  QUANTITY: {
+  STOCK_QUANTITY: {
     MIN: 0,
   },
   PRICE: {
     MIN: 1,
     MAX: MAX_DECIMAL,
   },
-  WEIGHT: {
+  SIZE: {
     MIN: 1,
     MAX: MAX_DECIMAL,
   },

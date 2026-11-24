@@ -48,7 +48,7 @@ const EditProductForm = ({ product, productId }: EditProductFormProps) => {
   // Built once per product object, so a re-render keeps what was typed.
   const initialState = useMemo<ProductFormState>(
     () => ({
-      values: { ...mapProductToEditFormValues(product), weight: '', unit: '' },
+      values: mapProductToEditFormValues(product),
       tastingNotes: parseTastingNotesString(product.tastingNotes),
       isListedOnStorefront: product.status === ProductStatus.ACTIVE,
       ...splitProductImagesForGallery(product),

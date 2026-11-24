@@ -548,47 +548,43 @@ const ProductForm = ({
                 Inventory &amp; Value
               </h2>
               <div className="mt-5 grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
-                {isCreate && (
-                  <>
-                    <Controller
-                      control={control}
-                      name="weight"
-                      render={({ field }) => (
-                        <NumberInput
-                          ref={field.ref}
-                          className="h-14"
-                          label="Weight"
-                          type="number"
-                          min={1}
-                          step={0.01}
-                          maxDecimalPlaces={2}
-                          disabled={isSubmitting}
-                          errorMessage={errors.weight?.message}
-                          name={field.name}
-                          onBlur={field.onBlur}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        />
-                      )}
+                <Controller
+                  control={control}
+                  name="size"
+                  render={({ field }) => (
+                    <NumberInput
+                      ref={field.ref}
+                      className="h-14"
+                      label="Size"
+                      type="number"
+                      min={1}
+                      step={0.01}
+                      maxDecimalPlaces={2}
+                      disabled={isSubmitting}
+                      errorMessage={errors.size?.message}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      value={field.value}
+                      onValueChange={field.onChange}
                     />
-                    <Controller
-                      control={control}
-                      name="unit"
-                      render={({ field }) => (
-                        <Select
-                          label="Unit"
-                          classNameTrigger="h-14"
-                          placeholder="Select unit"
-                          options={UNIT_OPTIONS}
-                          selected={field.value}
-                          onValueChange={(value) => field.onChange(value)}
-                          disabled={isSubmitting}
-                          errorMessage={errors.unit?.message}
-                        />
-                      )}
+                  )}
+                />
+                <Controller
+                  control={control}
+                  name="unit"
+                  render={({ field }) => (
+                    <Select
+                      label="Unit"
+                      classNameTrigger="h-14"
+                      placeholder="Select unit"
+                      options={UNIT_OPTIONS}
+                      selected={field.value}
+                      onValueChange={(value) => field.onChange(value)}
+                      disabled={isSubmitting}
+                      errorMessage={errors.unit?.message}
                     />
-                  </>
-                )}
+                  )}
+                />
                 <Controller
                   control={control}
                   name="price"
@@ -615,19 +611,19 @@ const ProductForm = ({
                 />
                 <Controller
                   control={control}
-                  name="quantity"
+                  name="stockQuantity"
                   render={({ field }) => (
                     <NumberInput
                       ref={field.ref}
                       className="h-14"
-                      label={isCreate ? 'Initial Quantity' : 'Quantity'}
+                      label="Quantity"
                       type="number"
                       min={0}
                       max={isCreate ? QUANTITY_MAX : undefined}
                       step={1}
                       maxDecimalPlaces={0}
                       disabled={isSubmitting}
-                      errorMessage={errors.quantity?.message}
+                      errorMessage={errors.stockQuantity?.message}
                       name={field.name}
                       onBlur={field.onBlur}
                       value={field.value}

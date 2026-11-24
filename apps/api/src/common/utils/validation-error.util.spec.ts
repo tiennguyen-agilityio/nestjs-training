@@ -77,7 +77,7 @@ describe('toErrorDetailsFromStandardSchemaIssues (Standard Schema pilot: createC
 describe('toErrorDetailsFromStandardSchemaIssues (migrated schemas)', () => {
   const uuid = '11111111-1111-4111-8111-111111111111';
   const unit = Object.values(ProductUnit)[0];
-  const validVariant = { sku: 'S1', weight: 1, unit, price: 2 };
+  const validVariant = { sku: 'S1', size: 1, unit, price: 2 };
   const validImages = [
     { url: 'https://example.com/a.png', isPrimary: true },
     { url: 'https://example.com/b.png' },
@@ -121,14 +121,14 @@ describe('toErrorDetailsFromStandardSchemaIssues (migrated schemas)', () => {
     it('accepts a valid product and hands variants over with string decimals', async () => {
       const result = await run(createProductSchema, {
         ...validProduct,
-        variants: [{ ...validVariant, weight: 1.5, discountValue: '2' }],
+        variants: [{ ...validVariant, size: 1.5, discountValue: '2' }],
       });
 
       expect(result.issues).toBeUndefined();
       expect(
         (result as { value: { variants: unknown[] } }).value.variants,
       ).toEqual([
-        { ...validVariant, weight: '1.5', price: '2', discountValue: '2' },
+        { ...validVariant, size: '1.5', price: '2', discountValue: '2' },
       ]);
     });
 
@@ -246,17 +246,27 @@ describe('toErrorDetailsFromStandardSchemaIssues (migrated schemas)', () => {
         },
       ],
       [
-        'a variant weight below the minimum',
+        'a variant size below the minimum',
         {
           ...validProduct,
-          variants: [
-            { ...validVariant, weight: VALIDATION_RULES.WEIGHT.MIN - 1 },
-          ],
+          variants: [{ ...validVariant, size: VALIDATION_RULES.SIZE.MIN - 1 }],
         },
         {
           errCode: ERROR_CODES.VALIDATION.MIN,
-          field: 'variants.0.weight',
-          message: `Weight must not be less than ${VALIDATION_RULES.WEIGHT.MIN}`,
+          field: 'variants.0.size',
+          message: `Size must not be less than ${VALIDATION_RULES.SIZE.MIN}`,
+        },
+      ],
+      [
+        'labels a variant stockQuantity below the minimum',
+        {
+          ...validProduct,
+          variants: [{ ...validVariant, stockQuantity: -1 }],
+        },
+        {
+          errCode: ERROR_CODES.VALIDATION.MIN,
+          field: 'variants.0.stockQuantity',
+          message: 'StockQuantity must not be less than 0',
         },
       ],
       [

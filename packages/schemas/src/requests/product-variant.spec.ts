@@ -6,7 +6,7 @@ import {
 
 const variant = {
   sku: 'SKU-001',
-  weight: '250',
+  size: '250',
   unit: ProductUnit.G,
   price: '12.5',
   discountType: DiscountType.PERCENT,
@@ -16,7 +16,7 @@ const variant = {
 describe('createProductVariantSchema', () => {
   it('coerces numbers sent as strings and hands decimals over as strings', () => {
     expect(createProductVariantSchema.parse(variant)).toMatchObject({
-      weight: '250',
+      size: '250',
       price: '12.5',
       discountValue: '99',
     });
@@ -52,12 +52,43 @@ describe('createProductVariantSchema', () => {
   });
 
   it('accepts a variant without discount fields', () => {
-    const { sku, weight, unit, price } = variant;
+    const { sku, size, unit, price } = variant;
 
     expect(
-      createProductVariantSchema.safeParse({ sku, weight, unit, price })
-        .success,
+      createProductVariantSchema.safeParse({ sku, size, unit, price }).success,
     ).toBe(true);
+  });
+
+  it('takes size and stockQuantity', () => {
+    expect(
+      createProductVariantSchema.parse({
+        sku: 'S1',
+        size: '250',
+        unit: 'G',
+        price: '12',
+        stockQuantity: 10,
+      }),
+    ).toMatchObject({ size: '250', stockQuantity: 10 });
+
+    const withoutStock = createProductVariantSchema.parse({
+      sku: 'S1',
+      size: '250',
+      unit: 'G',
+      price: '12',
+    });
+
+    expect(withoutStock).not.toHaveProperty('stockQuantity');
+  });
+
+  it('rejects a body with weight and no size', () => {
+    const result = createProductVariantSchema.safeParse({
+      sku: 'S1',
+      weight: '250',
+      unit: 'G',
+      price: '12',
+    });
+
+    expect(result.error?.issues.map(({ path }) => path)).toEqual([['size']]);
   });
 
   it('rejects a non-numeric price', () => {
@@ -73,11 +104,24 @@ describe('createProductVariantSchema', () => {
 describe('updateProductVariantSchema', () => {
   const id = '7d5b1c1e-1d2f-4c6a-9b1e-2f3a4b5c6d7e';
 
-  it('accepts an id with only quantity', () => {
-    expect(updateProductVariantSchema.parse({ id, quantity: 50 })).toEqual({
-      id,
-      quantity: 50,
-    });
+  it('accepts an id with only stockQuantity', () => {
+    expect(updateProductVariantSchema.parse({ id, stockQuantity: 50 })).toEqual(
+      {
+        id,
+        stockQuantity: 50,
+      },
+    );
+  });
+
+  it('update takes size, unit and stockQuantity', () => {
+    expect(
+      updateProductVariantSchema.parse({
+        id,
+        size: 500,
+        unit: 'KG',
+        stockQuantity: 5,
+      }),
+    ).toEqual({ id, size: '500', unit: 'KG', stockQuantity: 5 });
   });
 
   it('rejects a null discountType', () => {
@@ -113,7 +157,7 @@ describe('updateProductVariantSchema', () => {
   });
 
   it('rejects a missing id', () => {
-    const result = updateProductVariantSchema.safeParse({ quantity: 50 });
+    const result = updateProductVariantSchema.safeParse({ stockQuantity: 50 });
 
     expect(result.error?.issues.map(({ path }) => path)).toEqual([['id']]);
   });

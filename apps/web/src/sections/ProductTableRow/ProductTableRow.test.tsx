@@ -23,12 +23,13 @@ const baseProduct = {
   variants: [
     {
       sku: 'S1',
-      weight: 250,
+      size: 250,
       unit: ProductUnit.G,
+      name: '250g',
       price: 12,
       discountType: DiscountType.PERCENT,
       discountValue: 0,
-      quantity: 1,
+      stockQuantity: 1,
     },
   ],
   images: [],
@@ -58,6 +59,19 @@ const renderRow = (
 }
 
 describe('ProductTableRow', () => {
+  it('sums stockQuantity', () => {
+    const [first] = baseProduct.variants
+    renderRow({
+      ...baseProduct,
+      variants: [
+        { ...first, stockQuantity: 7 },
+        { ...first, sku: 'S2', stockQuantity: 5 },
+      ],
+    })
+
+    expect(screen.getByRole('cell', { name: '12' })).toBeInTheDocument()
+  })
+
   it('greys a deleted row and disables Edit and Delete', () => {
     const onRequestDelete = renderRow({
       ...baseProduct,

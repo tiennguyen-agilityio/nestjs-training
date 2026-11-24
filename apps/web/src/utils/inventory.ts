@@ -2,7 +2,7 @@ import type { CartItem } from '@/types/cart'
 import type { Product } from '@/types/product'
 
 export const getPrimaryVariantQuantity = (product: Product): number => {
-  const raw = product.variants[0]?.quantity
+  const raw = product.variants[0]?.stockQuantity
   if (raw === undefined || raw === null) return 0
   const n = Number(raw)
   return Number.isFinite(n) ? Math.trunc(n) : 0
