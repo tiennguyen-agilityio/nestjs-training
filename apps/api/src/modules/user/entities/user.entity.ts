@@ -1,7 +1,10 @@
 import { Opt } from '@mikro-orm/core';
 import { Entity, Enum, Property, Unique } from '@mikro-orm/decorators/legacy';
 import { BaseEntity } from '../../../common/entities/base.entity.js';
-import { UserRole, UserStatus } from '@repo/constants';
+import { UserRole, UserStatus, VALIDATION_RULES } from '@repo/constants';
+
+// Matches VALIDATION_RULES.PHONE.REGEX (`^\d{10}$`): exactly 10 digits.
+const PHONE_NUMBER_LENGTH = 10;
 
 @Entity({ tableName: 'users' })
 export class User extends BaseEntity {
@@ -16,13 +19,26 @@ export class User extends BaseEntity {
   @Enum({ items: () => UserRole })
   role: UserRole & Opt = UserRole.USER;
 
-  @Property({ type: 'string', fieldName: 'first_name' })
+  @Property({
+    type: 'string',
+    fieldName: 'first_name',
+    length: VALIDATION_RULES.NAME.MAX_LENGTH,
+  })
   firstName!: string;
 
-  @Property({ type: 'string', fieldName: 'last_name' })
+  @Property({
+    type: 'string',
+    fieldName: 'last_name',
+    length: VALIDATION_RULES.NAME.MAX_LENGTH,
+  })
   lastName!: string;
 
-  @Property({ type: 'string', fieldName: 'phone_number', nullable: true })
+  @Property({
+    type: 'string',
+    fieldName: 'phone_number',
+    nullable: true,
+    length: PHONE_NUMBER_LENGTH,
+  })
   phoneNumber: string | null = null;
 
   @Property({ type: 'string', fieldName: 'avatar_url', nullable: true })

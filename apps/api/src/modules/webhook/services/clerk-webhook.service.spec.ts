@@ -129,6 +129,45 @@ describe('ClerkWebhookService', () => {
         expect(authProvider.syncUserRole).not.toHaveBeenCalled();
       });
 
+      const createdWithPhone = (phone: string) =>
+        ({
+          type: 'user.created',
+          data: {
+            ...createdEventData,
+            phone_numbers: [{ id: 'phone-1', phone_number: phone }],
+            primary_phone_number_id: 'phone-1',
+          },
+        }) as never;
+
+      it('keeps a Clerk phone of exactly 10 digits', async () => {
+        userService.createFromAuthProvider.mockResolvedValue(buildUser());
+
+        await service.handleEvent(createdWithPhone('0987654321'));
+
+        expect(userService.createFromAuthProvider).toHaveBeenCalledWith(
+          expect.objectContaining({ phoneNumber: '0987654321' }),
+        );
+      });
+
+      it.each(['+84987654321', '098 765 4321'])(
+        'stores null for a Clerk phone that is not exactly 10 digits (%s)',
+        async (phone) => {
+          userService.createFromAuthProvider.mockResolvedValue(buildUser());
+          const warn = vi
+            .spyOn(Logger.prototype, 'warn')
+            .mockImplementation(() => undefined);
+
+          await service.handleEvent(createdWithPhone(phone));
+
+          expect(userService.createFromAuthProvider).toHaveBeenCalledWith(
+            expect.objectContaining({ phoneNumber: null }),
+          );
+          const messages = warn.mock.calls.map(([message]) => String(message));
+          expect(messages.some((m) => m.includes('clerk-1'))).toBe(true);
+          expect(messages.some((m) => m.includes(phone))).toBe(false);
+        },
+      );
+
       it('does not call UserService.create when there is no primary email', async () => {
         const eventWithoutPrimaryEmail = {
           type: 'user.created',
@@ -200,6 +239,49 @@ describe('ClerkWebhookService', () => {
           status: 'ACTIVE',
         });
       });
+
+      const updatedWithPhone = (phone: string) =>
+        ({
+          type: 'user.updated',
+          data: {
+            ...(updatedEvent as unknown as { data: object }).data,
+            phone_numbers: [{ id: 'phone-1', phone_number: phone }],
+            primary_phone_number_id: 'phone-1',
+          },
+        }) as never;
+
+      it('keeps a Clerk phone of exactly 10 digits on update', async () => {
+        const existing = buildUser();
+        userService.findByClerkId.mockResolvedValue(existing);
+
+        await service.handleEvent(updatedWithPhone('0987654321'));
+
+        expect(userService.update).toHaveBeenCalledWith(
+          existing.id,
+          expect.objectContaining({ phoneNumber: '0987654321' }),
+        );
+      });
+
+      it.each(['+84987654321', '098 765 4321'])(
+        'stores null for a Clerk phone that is not exactly 10 digits on update (%s)',
+        async (phone) => {
+          const existing = buildUser();
+          userService.findByClerkId.mockResolvedValue(existing);
+          const warn = vi
+            .spyOn(Logger.prototype, 'warn')
+            .mockImplementation(() => undefined);
+
+          await service.handleEvent(updatedWithPhone(phone));
+
+          expect(userService.update).toHaveBeenCalledWith(
+            existing.id,
+            expect.objectContaining({ phoneNumber: null }),
+          );
+          const messages = warn.mock.calls.map(([message]) => String(message));
+          expect(messages.some((m) => m.includes('clerk-1'))).toBe(true);
+          expect(messages.some((m) => m.includes(phone))).toBe(false);
+        },
+      );
 
       it('maps a banned Clerk user to INACTIVE', async () => {
         const existing = buildUser();

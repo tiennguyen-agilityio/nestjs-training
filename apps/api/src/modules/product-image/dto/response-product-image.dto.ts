@@ -11,7 +11,8 @@ export class ResponseProductImageDto {
     dto.id = image.id;
     dto.url = image.url;
     dto.isPrimary = image.isPrimary;
-    dto.sortOrder = image.sortOrder;
+    // Only live images are listed, and a live image always has a position.
+    dto.sortOrder = image.sortOrder ?? 0;
     return dto;
   }
 }

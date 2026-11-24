@@ -104,8 +104,8 @@ describe('Idempotency-Key on create routes (e2e)', () => {
     origin: 'Ethiopia',
     processingMethod: 'Washed',
     images: [
-      { url: 'https://example.com/1.jpg', isPrimary: true },
-      { url: 'https://example.com/2.jpg' },
+      { url: 'https://example.com/1.jpg', isPrimary: true, sortOrder: 0 },
+      { url: 'https://example.com/2.jpg', sortOrder: 1 },
     ],
     variants: [
       {

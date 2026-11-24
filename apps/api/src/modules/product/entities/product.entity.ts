@@ -11,14 +11,14 @@ import { BaseEntity } from '../../../common/entities/base.entity.js';
 import { Category } from '../../category/entities/category.entity.js';
 import { ProductImage } from '../../product-image/entities/product-image.entity.js';
 import { ProductVariant } from '../../product-variant/entities/product-variant.entity.js';
-import { RoastLevel, ProductStatus } from '@repo/constants';
+import { RoastLevel, ProductStatus, VALIDATION_RULES } from '@repo/constants';
 
 @Entity({ tableName: 'products' })
 export class Product extends BaseEntity {
   @ManyToOne(() => Category, { updateRule: 'cascade' })
   category!: Category;
 
-  @Property({ type: 'string' })
+  @Property({ type: 'string', length: VALIDATION_RULES.NAME.MAX_LENGTH })
   @Unique()
   name!: string;
 
