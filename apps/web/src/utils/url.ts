@@ -44,6 +44,11 @@ export const userUrlSchema = {
   status: parseOptionalQueryParam,
 } as const
 
+export const shippingMethodUrlSchema = {
+  ...urlSchema,
+  status: parseOptionalQueryParam,
+} as const
+
 export const productUrlSchema = {
   ...urlSchema,
   categoryId: parseOptionalQueryParam,

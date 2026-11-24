@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ProductSortBy } from '@repo/constants';
+import { ProductSortBy, ShippingMethodStatus } from '@repo/constants';
 import {
   createShippingMethodSchema,
   updateShippingMethodSchema,
@@ -8,7 +8,6 @@ import {
   paginationQuerySchema,
   type PaginationQueryInput,
 } from '../../../common/dto/pagination.schema.js';
-import { ShippingMethodStatusFilter } from '../enums/shipping-method-status-filter.enum.js';
 
 export { createShippingMethodSchema, updateShippingMethodSchema };
 
@@ -21,7 +20,7 @@ export type UpdateShippingMethodInput = z.infer<
 >;
 
 export const shippingMethodQuerySchema = paginationQuerySchema.extend({
-  status: z.enum(ShippingMethodStatusFilter).optional(),
+  status: z.enum(ShippingMethodStatus).optional(),
   sortBy: z.enum(ProductSortBy).optional(),
 });
 
