@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { DiscountType, ProductStatus } from '@repo/constants';
 import { Cart } from '../entities/cart.entity.js';
 import { CartItem } from '../entities/cart-item.entity.js';
+import { availableQuantityOf } from '../../product-variant/utils/stock.util.js';
 import { variantNameFrom } from '../../product-variant/utils/variant-name.util.js';
 import { lineTotalOf, pricingOf, sumOf } from '../utils/cart-pricing.util.js';
 
@@ -69,9 +70,9 @@ export class ResponseCartItemDto {
       sku: variant.sku,
       sizeName: variantNameFrom(variant.size, variant.unit),
       ...pricing,
-      availableQuantity: variant.stockQuantity,
+      availableQuantity: availableQuantityOf(variant),
     };
-    dto.inStock = variant.stockQuantity >= item.quantity;
+    dto.inStock = availableQuantityOf(variant) >= item.quantity;
     dto.isAvailable =
       (product.status as ProductStatus) === ProductStatus.ACTIVE &&
       !product.deletedAt &&

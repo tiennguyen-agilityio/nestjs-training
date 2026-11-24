@@ -35,10 +35,16 @@ import {
   ApiErrorResponse,
 } from '../../../common/decorators/api-response.decorator.js';
 import { User } from '../../user/entities/user.entity.js';
-import { ERROR_MESSAGES } from '../../../common/constants/message.constant.js';
+import {
+  ERROR_DESCRIPTIONS,
+  ERROR_MESSAGES,
+} from '../../../common/constants/message.constant.js';
+import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 import { mapPaginatedResult } from '../../../common/utils/pagination.util.js';
 import { isActiveAdmin } from '../../../common/utils/user.util.js';
-import { ProductStatus } from '@repo/constants';
+import { ProductStatus, VALIDATION_RULES } from '@repo/constants';
+
+const STOCK_HELD_EXAMPLE = 2;
 
 @ApiTags('products')
 @Controller('products')
@@ -107,11 +113,19 @@ export class ProductController {
 
   @Patch(':id')
   @AdminOnly()
-  @ApiOperation({ summary: 'Update a product (admin only)' })
+  @ApiOperation({
+    summary: 'Update a product (admin only)',
+    description: `400 \`${ERROR_CODES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED}\` on \`updateVariants.<i>.stockQuantity\`: ${ERROR_DESCRIPTIONS.PRODUCT_VARIANT.STOCK_BELOW_RESERVED} 400 \`${ERROR_CODES.PRODUCT.TOO_FEW_IMAGES}\` on \`removeImageIds\` or \`addImages\`: ${ERROR_MESSAGES.PRODUCT.TOO_FEW_IMAGES(VALIDATION_RULES.IMAGE.MIN_COUNT)}. ${ERROR_DESCRIPTIONS.PRODUCT.TOO_FEW_IMAGES}`,
+  })
   @ApiDataResponse(HttpStatus.OK, ResponseProductDto)
   @ApiErrorResponse(
     HttpStatus.BAD_REQUEST,
-    ERROR_MESSAGES.EXCEPTION.VALIDATION_FAILED,
+    ERROR_MESSAGES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED(STOCK_HELD_EXAMPLE),
+    {
+      errCode: ERROR_CODES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED,
+      field: 'updateVariants.0.stockQuantity',
+      description: ERROR_DESCRIPTIONS.PRODUCT_VARIANT.STOCK_BELOW_RESERVED,
+    },
   )
   @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.PRODUCT.NOT_FOUND)
   @ApiErrorResponse(HttpStatus.CONFLICT, ERROR_MESSAGES.PRODUCT.NAME_EXISTS)

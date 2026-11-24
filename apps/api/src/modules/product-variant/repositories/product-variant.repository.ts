@@ -27,6 +27,30 @@ export class ProductVariantRepository extends BaseRepository<ProductVariant> {
     });
   }
 
+  reserve(id: string, quantity: number, actorId: ActorId): Promise<boolean> {
+    return this.incrementGuarded(
+      id,
+      'reservedQuantity',
+      quantity,
+      'stock_quantity - reserved_quantity >= ?',
+      [quantity],
+      actorId,
+    );
+  }
+
+  reload(variant: ProductVariant): Promise<ProductVariant | null> {
+    return this.reloadEntity(variant);
+  }
+
+  async lockByIds(ids: string[]): Promise<ProductVariant[]> {
+    const locked: ProductVariant[] = [];
+    for (const id of [...ids].sort()) {
+      const variant = await this.findOneForUpdate({ id });
+      if (variant) locked.push(variant);
+    }
+    return locked;
+  }
+
   findAllByProduct(productId: string): Promise<ProductVariant[]> {
     return this.findMany({ where: { product: productId } });
   }

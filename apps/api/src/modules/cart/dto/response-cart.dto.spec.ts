@@ -88,6 +88,15 @@ describe('ResponseCartDto', () => {
     expect(item.isAvailable).toBe(true);
   });
 
+  it('availableQuantity and inStock use stock minus reserved', () => {
+    const [item] = ResponseCartDto.fromEntity(
+      cartWith(line(variant({ stockQuantity: 5, reservedQuantity: 3 }), 3)),
+    ).items;
+
+    expect(item.variant.availableQuantity).toBe(2);
+    expect(item.inStock).toBe(false);
+  });
+
   it('flags a line whose product is not ACTIVE or was deleted', () => {
     const isAvailable = (productVariant: ProductVariant): boolean =>
       ResponseCartDto.fromEntity(cartWith(line(productVariant, 1))).items[0]

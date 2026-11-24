@@ -16,6 +16,7 @@ import type { Cart } from '../entities/cart.entity.js';
 import type { CartItem } from '../entities/cart-item.entity.js';
 import type { ProductVariant } from '../../product-variant/entities/product-variant.entity.js';
 import { isPurchasable } from '../../product-variant/utils/purchasable.util.js';
+import { availableQuantityOf } from '../../product-variant/utils/stock.util.js';
 import {
   InvalidStateException,
   ItemNotFoundException,
@@ -50,7 +51,7 @@ export class CartService {
         variant.id,
       );
       const current = line?.quantity ?? 0;
-      const stock = variant.stockQuantity;
+      const stock = availableQuantityOf(variant);
 
       if (current + input.quantity > stock) {
         const remaining = Math.max(stock - current, 0);
@@ -103,7 +104,7 @@ export class CartService {
       );
       const writableIds = [...requested.keys()].filter((id) => {
         const variant = variants.get(id);
-        return isPurchasable(variant) && variant.stockQuantity > 0;
+        return isPurchasable(variant) && availableQuantityOf(variant) > 0;
       });
 
       const cart = writableIds.length
@@ -127,7 +128,7 @@ export class CartService {
           const current = line?.quantity ?? 0;
           const total = Math.min(
             current + quantity,
-            Math.max(variant.stockQuantity, current),
+            Math.max(availableQuantityOf(variant), current),
           );
           added = total - current;
           if (added > 0) {
@@ -172,7 +173,7 @@ export class CartService {
         line.productVariant.id,
         'id',
       );
-      const stock = variant.stockQuantity;
+      const stock = availableQuantityOf(variant);
 
       if (input.quantity > stock) {
         throw this.outOfStock(
@@ -211,6 +212,15 @@ export class CartService {
 
       return this.read(userId);
     });
+  }
+
+  async lockForCheckout(userId: string): Promise<Cart | null> {
+    const locked = await this.cartRepository.lockByUser(userId);
+    return locked ? this.cartRepository.findByUserWithItems(userId) : null;
+  }
+
+  async clearItems(cartId: string): Promise<void> {
+    await this.cartItemRepository.deleteByCart(cartId);
   }
 
   private async read(userId: string): Promise<ResponseCartDto> {

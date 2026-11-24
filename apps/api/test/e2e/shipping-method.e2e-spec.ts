@@ -313,6 +313,40 @@ describe('ShippingMethodController (e2e)', () => {
       }
     });
 
+    it('DELETE /shipping-methods/:id used by an order returns 409', async () => {
+      const admin = await createTestUser(UserRole.ADMIN);
+      const method = await createMethod(`In Use ${uniqueTag()}`, 12);
+      await orm.em.getConnection().execute(
+        `insert into orders (id, user_id, shipping_method_id, order_number,
+           recipient_name, recipient_phone, address_line, ward, district, city,
+           postal_code, shipping_method_name, shipping_fee, tax, total_amount,
+           created_at, updated_at)
+         values (?, ?, ?, ?, 'Lan Nguyen', '0901234567', '12 Le Loi', 'Ben Nghe',
+           'District 1', 'Ho Chi Minh City', '700000', ?, 12, 2, 34, now(), now())`,
+        [
+          randomUUID(),
+          admin.id,
+          method.id,
+          `ORD-${uniqueTag()}`.slice(0, 20),
+          method.name,
+        ],
+      );
+      mockSessionFor(admin.clerkId);
+
+      const response = await request(app.getHttpServer())
+        .delete(`${path}/${method.id}`)
+        .expect(409);
+
+      expect((response.body as ErrorBody).errors[0]).toMatchObject({
+        errCode: 'shippingMethodInUse',
+        field: 'id',
+      });
+      const kept = await request(app.getHttpServer())
+        .get(`${path}/${method.id}`)
+        .expect(200);
+      expect((kept.body as { data: MethodBody }).data.deletedAt).toBeNull();
+    });
+
     it('POST a second "Roast Express" returns 409 "Shipping method name already exists"', async () => {
       const admin = await createTestUser(UserRole.ADMIN);
       mockSessionFor(admin.clerkId);

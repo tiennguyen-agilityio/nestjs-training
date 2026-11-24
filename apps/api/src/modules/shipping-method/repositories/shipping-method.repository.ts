@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ProductSortBy, ShippingMethodStatus } from '@repo/constants';
 import { ShippingMethod } from '../entities/shipping-method.entity.js';
+import { Order } from '../../order/entities/order.entity.js';
 import type { ShippingMethodFilters } from '../dto/shipping-method.schema.js';
 import { BaseRepository } from '../../../common/repositories/base.repository.js';
 import type {
@@ -23,6 +24,18 @@ const ORDER_BY: Record<ProductSortBy, OrderByOptions<ShippingMethod>> = {
 @Injectable()
 export class ShippingMethodRepository extends BaseRepository<ShippingMethod> {
   protected readonly entity = ShippingMethod;
+
+  findByIdForShare(id: string): Promise<ShippingMethod | null> {
+    return this.findOneForShare({ id });
+  }
+
+  findByIdForUpdate(id: string): Promise<ShippingMethod | null> {
+    return this.findOneForUpdate({ id });
+  }
+
+  countOrders(id: string): Promise<number> {
+    return this.countOf(Order, { shippingMethod: id });
+  }
 
   /** Case-insensitive exact match: the name's LIKE characters are escaped. */
   findByName(

@@ -170,6 +170,15 @@ export class ShippingMethodController {
     ERROR_MESSAGES.SHIPPING_METHOD.NOT_FOUND,
     SHIPPING_METHOD_NOT_FOUND_ERROR,
   )
+  @ApiErrorResponse(
+    HttpStatus.CONFLICT,
+    ERROR_MESSAGES.SHIPPING_METHOD.IN_USE,
+    {
+      errCode: ERROR_CODES.SHIPPING_METHOD.IN_USE,
+      field: 'id',
+      description: ERROR_DESCRIPTIONS.SHIPPING_METHOD.IN_USE,
+    },
+  )
   async remove(
     @Param({ schema: idParamSchema }) { id }: IdParam,
     @AuthUser() user: User,

@@ -49,8 +49,11 @@ describe('CartService', () => {
   const readBack = { id: CART_ID } as Cart;
   const response = { id: CART_ID } as ResponseCartDto;
 
-  const variant = (stockQuantity: number): ProductVariant =>
-    ({ id: VARIANT_ID, stockQuantity }) as ProductVariant;
+  const variant = (
+    stockQuantity: number,
+    reservedQuantity = 0,
+  ): ProductVariant =>
+    ({ id: VARIANT_ID, stockQuantity, reservedQuantity }) as ProductVariant;
 
   const line = (quantity: number): CartItem =>
     ({
@@ -216,6 +219,69 @@ describe('CartService', () => {
     expect(cartItemRepository.save).toHaveBeenCalledWith(existing, USER_ID);
   });
 
+  it('addItem caps at the available stock', async () => {
+    productVariantService.findPurchasable.mockResolvedValue(variant(5, 3));
+
+    const error = await errorOf(
+      service.addItem(USER_ID, { productVariantId: VARIANT_ID, quantity: 3 }),
+    );
+
+    expect(error).toBeInstanceOf(InvalidStateException);
+    expect(error.getErrors()[0]).toEqual({
+      errCode: ERROR_CODES.CART.OUT_OF_STOCK,
+      field: 'quantity',
+      message: 'Only 2 left for this variant',
+      description: 'You can add 2 more.',
+    });
+    expect(cartItemRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('updateItem rejects a quantity above the available stock', async () => {
+    cartItemRepository.findInCart.mockResolvedValue(line(1));
+    productVariantService.findPurchasable.mockResolvedValue(variant(5, 3));
+
+    const error = await errorOf(
+      service.updateItem(USER_ID, ITEM_ID, { quantity: 3 }),
+    );
+
+    expect(error).toBeInstanceOf(InvalidStateException);
+    expect(error.getErrors()[0]).toMatchObject({
+      message: 'Only 2 left for this variant',
+      description: 'Lower the quantity to 2 or less.',
+    });
+    expect(cartItemRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('lockForCheckout locks the cart before loading its lines', async () => {
+    const calls: string[] = [];
+    cartRepository.lockByUser.mockImplementation(() => {
+      calls.push('lock');
+      return Promise.resolve({ id: CART_ID });
+    });
+    cartRepository.findByUserWithItems.mockImplementation(() => {
+      calls.push('read');
+      return Promise.resolve(readBack);
+    });
+
+    await expect(service.lockForCheckout(USER_ID)).resolves.toBe(readBack);
+    expect(calls).toEqual(['lock', 'read']);
+    expect(cartRepository.lockByUser).toHaveBeenCalledWith(USER_ID);
+  });
+
+  it('lockForCheckout returns null for a user without a cart', async () => {
+    cartRepository.lockByUser.mockResolvedValue(null);
+
+    await expect(service.lockForCheckout(USER_ID)).resolves.toBeNull();
+    expect(cartRepository.findByUserWithItems).not.toHaveBeenCalled();
+  });
+
+  it('clearItems deletes the cart lines', async () => {
+    await service.clearItems(CART_ID);
+
+    expect(cartItemRepository.deleteByCart).toHaveBeenCalledWith(CART_ID);
+    expect(cartRepository.findByUserWithItems).not.toHaveBeenCalled();
+  });
+
   it('updateItem rejects a quantity above the stock', async () => {
     cartItemRepository.findInCart.mockResolvedValue(line(1));
 
@@ -372,10 +438,12 @@ describe('CartService', () => {
       stockQuantity: number,
       id = VARIANT_ID,
       status = ProductStatus.ACTIVE,
+      reservedQuantity = 0,
     ): ProductVariant =>
       ({
         id,
         stockQuantity,
+        reservedQuantity,
         deletedAt: null,
         product: { status, deletedAt: null },
       }) as unknown as ProductVariant;
@@ -418,6 +486,24 @@ describe('CartService', () => {
       expect(existing.quantity).toBe(3);
       expect(result.adjusted).toEqual([
         { productVariantId: VARIANT_ID, requestedQuantity: 4, quantity: 1 },
+      ]);
+    });
+
+    it('merge caps a line at the available stock', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([
+        buyable(5, VARIANT_ID, ProductStatus.ACTIVE, 3),
+      ]);
+
+      const result = await merge([VARIANT_ID, 4]);
+
+      expect(cartItemRepository.create).toHaveBeenCalledWith(
+        CART_ID,
+        VARIANT_ID,
+        2,
+        USER_ID,
+      );
+      expect(result.adjusted).toEqual([
+        { productVariantId: VARIANT_ID, requestedQuantity: 4, quantity: 2 },
       ]);
     });
 

@@ -1467,6 +1467,20 @@ describe('ProductController (e2e)', () => {
         return (response.body as { data: { images: ImageBody[] } }).data.images;
       };
 
+      it('PATCH /products/:id removing all images returns 400', async () => {
+        const { productId, imageIds } = await createProductWithImages(2);
+
+        const response = await patchAsAdmin(productId, {
+          removeImageIds: imageIds,
+        });
+
+        expect(response.status).toBe(400);
+        expect(
+          (response.body as { errors: { errCode: string }[] }).errors[0],
+        ).toMatchObject({ errCode: 'tooFewImages' });
+        expect(await getImages(productId)).toHaveLength(2);
+      });
+
       it('PATCH /products/:id swaps two image positions in one update', async () => {
         const {
           productId,
@@ -1573,6 +1587,32 @@ describe('ProductController (e2e)', () => {
           response.body as { data: { variants: Record<string, unknown>[] } }
         ).data.variants.find((v) => v.id === variantId);
         expect(variant).toMatchObject({ size: 500, name: '500g' });
+      });
+
+      it('PATCH /products/:id below reserved returns 400', async () => {
+        const { productId, variantId } = await createPricedProduct();
+        await orm.em
+          .getConnection()
+          .execute(
+            'update product_variants set stock_quantity = 5, reserved_quantity = 2 where id = ?',
+            [variantId],
+          );
+
+        const response = await patch(productId, {
+          updateVariants: [{ id: variantId, stockQuantity: 1 }],
+        });
+
+        expect(response.status).toBe(400);
+        expect(
+          (response.body as { errors: { errCode: string; field: string }[] })
+            .errors[0],
+        ).toMatchObject({
+          errCode: 'stockBelowReserved',
+          field: 'updateVariants.0.stockQuantity',
+        });
+        expect((await getVariants(productId))[0]).toMatchObject({
+          stockQuantity: 5,
+        });
       });
 
       it('PATCH /products/:id with only stockQuantity keeps price and discount', async () => {
@@ -2095,6 +2135,11 @@ describe('ProductController (e2e)', () => {
       const [kept, removed] = product.images;
       const [changedVariant, untouchedVariant] = product.variants;
       expect(changedVariant.createdBy).toBe(a1.id);
+      await orm.em.getConnection().execute(
+        `insert into product_images (id, product_id, url, is_primary, sort_order, created_at, updated_at)
+           values (?, ?, 'https://example.com/third.jpg', false, 5, now(), now())`,
+        [randomUUID(), product.id],
+      );
 
       mockSessionFor(a2.clerkId);
       const response = await request(app.getHttpServer())

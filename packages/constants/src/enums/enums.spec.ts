@@ -2,6 +2,15 @@ import { ProductSortBy, ProductStatus, RoastLevel } from './product.enum.js';
 import { DiscountType, ProductUnit } from './product-variant.enum.js';
 import { UserRole, UserStatus } from './user.enum.js';
 import { ShippingMethodStatus } from './shipping-method.enum.js';
+import {
+  InventoryMovementType,
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
+  ShippingStatus,
+} from './order.enum.js';
 
 describe('shared enums', () => {
   it('DiscountType has the API values', () => {
@@ -50,5 +59,38 @@ describe('shared enums', () => {
     const enums: object = await import('./shipping-method.enum.js');
 
     expect(Object.keys(enums)).toEqual(['ShippingMethodStatus']);
+  });
+
+  it('order enums hold the ERD values', () => {
+    expect(Object.values(OrderStatus)).toEqual([
+      'PENDING',
+      'CONFIRMED',
+      'COMPLETED',
+      'CANCELLED',
+    ]);
+    expect(Object.values(ShippingStatus)).toEqual([
+      'PENDING',
+      'SHIPPING',
+      'DELIVERED',
+      'RETURNED',
+    ]);
+    expect(Object.values(PaymentMethod)).toEqual(['COD', 'CARD', 'PAYPAL']);
+    expect(Object.values(PaymentType)).toEqual(['CHARGE', 'REFUND']);
+    expect(Object.values(PaymentStatus)).toEqual(['PENDING', 'PAID', 'FAILED']);
+    expect(Object.values(OrderPaymentStatus)).toEqual([
+      'UNPAID',
+      'PENDING',
+      'PAID',
+      'FAILED',
+      'PARTIALLY_REFUNDED',
+      'REFUNDED',
+    ]);
+    expect(Object.values(InventoryMovementType)).toEqual([
+      'RESERVE',
+      'RELEASE',
+      'SALE',
+      'RESTOCK',
+      'ADJUSTMENT',
+    ]);
   });
 });

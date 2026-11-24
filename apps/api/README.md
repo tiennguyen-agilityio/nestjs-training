@@ -300,7 +300,8 @@ erDiagram
         price number
         discount_type string "PERCENT | FIXED"
         discount_value number
-        stock_quantity int
+        stock_quantity int ">= 0"
+        reserved_quantity int "0 - stock_quantity, held for orders"
         created_at timestamp
         updated_at timestamp
         deleted_at timestamp
@@ -341,6 +342,76 @@ erDiagram
         deleted_by uuid FK
     }
 
+    ORDER {
+        id uuid PK
+        user_id uuid FK
+        shipping_method_id uuid FK
+        order_number string "unique, ORD-<base36 time>-<4 chars>"
+        status string "PENDING | CONFIRMED | COMPLETED | CANCELLED"
+        shipping_status string "PENDING | SHIPPING | DELIVERED | RETURNED"
+        recipient_name string "max 120"
+        recipient_phone string "10 digits"
+        address_line string
+        ward string
+        district string
+        city string
+        postal_code string
+        shipping_method_name string "copy of the method name"
+        shipping_fee number "copy of the method price"
+        tax number "10% of the subtotal"
+        total_amount number "subtotal + shipping_fee + tax"
+        note string
+        expires_at timestamp "CARD, PAYPAL: created_at + 30 min"
+        created_at timestamp
+        updated_at timestamp
+        deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
+    }
+
+    ORDER_ITEM {
+        id uuid PK
+        order_id uuid FK "unique with product_variant_id"
+        product_variant_id uuid FK
+        product_name string "copy"
+        product_image string "copy of the primary image URL"
+        variant_name string "copy, such as 250g"
+        unit_price number "copy of the variant price"
+        discount_amount number "per unit"
+        quantity int ">= 1"
+    }
+
+    PAYMENT {
+        id uuid PK
+        order_id uuid FK
+        type string "CHARGE | REFUND"
+        method string "COD | CARD | PAYPAL"
+        status string "PENDING | PAID | FAILED"
+        amount number "> 0"
+        currency string "USD"
+        transaction_id string "unique when set"
+        completed_at timestamp
+        failure_reason string
+        created_at timestamp
+        updated_at timestamp
+        deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
+    }
+
+    INVENTORY_MOVEMENT {
+        id uuid PK
+        product_variant_id uuid FK
+        order_id uuid FK
+        type string "RESERVE | RELEASE | SALE | RESTOCK | ADJUSTMENT"
+        quantity int
+        reason string
+        created_by uuid FK
+        created_at timestamp
+    }
+
     CATEGORY ||--o{ PRODUCT : "contains"
     PRODUCT ||--o{ PRODUCT_IMAGE : "has"
     PRODUCT ||--o{ PRODUCT_VARIANT : "has"
@@ -353,6 +424,15 @@ erDiagram
     USER ||--o| CART : "keeps"
     CART ||--o{ CART_ITEM : "holds"
     PRODUCT_VARIANT ||--o{ CART_ITEM : "in"
+    USER ||--o{ ORDER : "places"
+    SHIPPING_METHOD ||--o{ ORDER : "ships"
+    ORDER ||--|{ ORDER_ITEM : "contains"
+    PRODUCT_VARIANT ||--o{ ORDER_ITEM : "sold as"
+    ORDER ||--|{ PAYMENT : "paid by"
+    PRODUCT_VARIANT ||--o{ INVENTORY_MOVEMENT : "moves"
+    ORDER |o--o{ INVENTORY_MOVEMENT : "reserves"
+    USER |o--o{ ORDER : "created, updated, deleted by"
+    USER |o--o{ PAYMENT : "created, updated, deleted by"
 ```
 
 ## API Endpoints
@@ -407,13 +487,19 @@ The signed-in user's own cart; every success returns the whole cart.
 
 ### Shipping methods
 
-| Method   | Path                    | Auth | Description                                                                                                                                 |
-| :------- | :---------------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`    | `/shipping-methods`     | 🔓   | List shipping methods (search, filter, sort, pagination) |
-| `GET`    | `/shipping-methods/:id` | 👑   | Get shipping method by ID                                                                                                                   |
-| `POST`   | `/shipping-methods`     | 👑   | Create shipping method                                                                                                                      |
-| `PATCH`  | `/shipping-methods/:id` | 👑   | Update shipping method (name, description, price, status)                                                                                   |
-| `DELETE` | `/shipping-methods/:id` | 👑   | Soft-delete shipping method                                                                                                                 |
+| Method   | Path                    | Auth | Description                                                                                             |
+| :------- | :---------------------- | :--- | :------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/shipping-methods`     | 🔓   | List shipping methods (search, filter, sort, pagination)                                                |
+| `GET`    | `/shipping-methods/:id` | 👑   | Get shipping method by ID                                                                               |
+| `POST`   | `/shipping-methods`     | 👑   | Create shipping method                                                                                  |
+| `PATCH`  | `/shipping-methods/:id` | 👑   | Update shipping method (name, description, price, status)                                               |
+| `DELETE` | `/shipping-methods/:id` | 👑   | Soft-delete shipping method (409 `shippingMethodInUse` while an order uses it; set it INACTIVE instead) |
+
+### Orders
+
+| Method | Path      | Auth | Description                                                                                                                                                                                                                                           |
+| :----- | :-------- | :--- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/orders` | 🔒   | Place an order from my cart (`Idempotency-Key` required): holds the stock (`reserved_quantity` + a `RESERVE` movement), copies names, prices and the method's fee, adds 10% tax, creates a PENDING CHARGE and empties the cart; any 400 saves nothing |
 
 ### Health
 

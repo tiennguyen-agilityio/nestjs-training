@@ -28,6 +28,14 @@ describe('VALIDATION_RULES', () => {
       },
       PHONE: { REGEX: /^\d{10}$/ },
       CLERK_ID: { REGEX: /^user_[a-zA-Z0-9]+$/ },
+      ORDER: {
+        TAX_PERCENT: 10,
+        PAYMENT_EXPIRY_MINUTES: 30,
+        ADDRESS_MAX_LENGTH: 255,
+        POSTAL_CODE_MAX_LENGTH: 20,
+        NOTE_MAX_LENGTH: 1000,
+        NUMBER_MAX_LENGTH: 20,
+      },
     });
   });
 
