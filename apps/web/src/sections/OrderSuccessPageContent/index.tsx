@@ -1,7 +1,8 @@
 'use client'
 
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import type { ReactNode } from 'react'
 import {
   ArrowRight,
   Check,
@@ -11,41 +12,55 @@ import {
   Share2,
 } from 'lucide-react'
 
+import Loading from '@/components/Loading'
 import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/constants/routes'
+import { useOrderDetail } from '@/hooks/useOrder'
+import OrderSuccessPayment from '@/sections/OrderSuccessPayment'
 import { useCartStore } from '@/store/useCartStore'
-import type { PlacedOrderItem } from '@/types/order'
+import type { OrderDetail, PlacedOrder, PlacedOrderItem } from '@/types/order'
 import { formatPrice } from '@/utils/common'
 import { isPlacedOrder } from '@/utils/order'
+import { OrderPaymentStatus } from '@repo/constants'
 
 const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
 const dayFormatter = new Intl.DateTimeFormat('en-US', { day: '2-digit' })
 const weekdayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'long' })
 
-const OrderSuccessPageContent = () => {
-  const router = useRouter()
-  const { itemSnapshots: snapshot, clearItemSnapshots } = useCartStore()
+const isAwaitingPayment = (order: OrderDetail): boolean =>
+  order.paymentStatus === OrderPaymentStatus.PENDING ||
+  order.paymentStatus === OrderPaymentStatus.FAILED
 
-  // A snapshot saved before the page read the API's order is not shown.
-  if (!isPlacedOrder(snapshot)) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-20 text-center md:px-6">
-        <h1 className="text-4xl font-semibold text-on-surface">
-          Order Summary Unavailable
-        </h1>
-        <p className="mt-4 text-on-surface-variant">
-          We could not find your order summary. Continue shopping to place a new
-          order.
-        </p>
-        <Button
-          className="mt-8 w-auto px-8"
-          onClick={() => router.push(ROUTES.HOME)}
-        >
-          Continue Shopping
-        </Button>
-      </div>
-    )
-  }
+const OrderSummaryUnavailable = () => {
+  const router = useRouter()
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-20 text-center md:px-6">
+      <h1 className="text-4xl font-semibold text-on-surface">
+        Order Summary Unavailable
+      </h1>
+      <p className="mt-4 text-on-surface-variant">
+        We could not find your order summary. Continue shopping to place a new
+        order.
+      </p>
+      <Button
+        className="mt-8 w-auto px-8"
+        onClick={() => router.push(ROUTES.HOME)}
+      >
+        Continue Shopping
+      </Button>
+    </div>
+  )
+}
+
+interface OrderSuccessSummaryProps {
+  order: PlacedOrder
+  payment?: ReactNode
+}
+
+const OrderSuccessSummary = ({ order, payment }: OrderSuccessSummaryProps) => {
+  const router = useRouter()
+  const { clearItemSnapshots } = useCartStore()
 
   const {
     orderNumber,
@@ -62,7 +77,7 @@ const OrderSuccessPageContent = () => {
     createdAt,
     items,
     tax,
-  } = snapshot
+  } = order
 
   const addressLines = [addressLine, ward, district, city, postalCode].filter(
     Boolean,
@@ -90,6 +105,7 @@ const OrderSuccessPageContent = () => {
           Order ID: {orderNumber}
         </p>
       </div>
+      {payment}
 
       <div className="mt-10 grid gap-5 lg:grid-cols-[1.35fr_1fr]">
         <section className="rounded-2xl bg-surface-container-low p-7">
@@ -243,6 +259,79 @@ const OrderSuccessPageContent = () => {
       </div>
     </div>
   )
+}
+
+const OrderSuccessFromApi = ({
+  orderId,
+  hasSessionId,
+  paymentError,
+}: {
+  orderId: string
+  hasSessionId: boolean
+  paymentError: string | null
+}) => {
+  const {
+    order,
+    isLoading,
+    isError,
+    isNotFound,
+    errorMessage,
+    refetch,
+    isPollExhausted,
+  } = useOrderDetail(orderId, {
+    pollWhile: (current) => hasSessionId && isAwaitingPayment(current),
+  })
+
+  if (isLoading) return <Loading size="lg" label="Loading order" />
+
+  if (isNotFound && !order) return <OrderSummaryUnavailable />
+
+  if (isError && !order) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-20 text-center md:px-6">
+        <p className="text-on-surface-variant">{errorMessage}</p>
+        <Button className="mt-6 w-auto px-8" onClick={() => void refetch()}>
+          Try again
+        </Button>
+      </div>
+    )
+  }
+
+  if (!order) return <OrderSummaryUnavailable />
+
+  return (
+    <OrderSuccessSummary
+      order={order}
+      payment={
+        <OrderSuccessPayment
+          order={order}
+          hasSessionId={hasSessionId}
+          paymentError={paymentError}
+          isPollExhausted={isPollExhausted ?? false}
+        />
+      }
+    />
+  )
+}
+
+const OrderSuccessPageContent = () => {
+  const searchParams = useSearchParams()
+  const { itemSnapshots: snapshot } = useCartStore()
+  const orderId = searchParams.get('orderId')
+
+  if (orderId) {
+    return (
+      <OrderSuccessFromApi
+        orderId={orderId}
+        hasSessionId={Boolean(searchParams.get('session_id'))}
+        paymentError={searchParams.get('paymentError')}
+      />
+    )
+  }
+
+  if (!isPlacedOrder(snapshot)) return <OrderSummaryUnavailable />
+
+  return <OrderSuccessSummary order={snapshot} />
 }
 
 export default OrderSuccessPageContent

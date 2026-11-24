@@ -140,3 +140,8 @@ export const PAYMENT_METHOD_LABELS: Readonly<Record<PaymentMethod, string>> = {
   [PaymentMethod.CARD]: 'Card (Stripe)',
   [PaymentMethod.PAYPAL]: 'PayPal',
 }
+
+export const ORDER_PAYMENT_POLL = {
+  INTERVAL_MS: 3000,
+  MAX_TRIES: 10,
+} as const

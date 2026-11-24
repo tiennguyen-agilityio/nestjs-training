@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 
 import OrderSuccessPageContent from '@/sections/OrderSuccessPageContent'
 
@@ -8,5 +9,9 @@ export const metadata: Metadata = {
 }
 
 export default function OrderSuccessPage() {
-  return <OrderSuccessPageContent />
+  return (
+    <Suspense>
+      <OrderSuccessPageContent />
+    </Suspense>
+  )
 }
