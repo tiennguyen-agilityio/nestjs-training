@@ -17,6 +17,7 @@ export const ROUTES = {
   SIGN_UP: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? '/sign-up',
   SIGN_UP_VERIFY: `${process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? '/sign-up'}/verify`,
   USER_PROFILE: '/profile',
+  ROASTS: '/roasts',
 }
 
 export function dashboardEditPath(base: string, id: string): string {

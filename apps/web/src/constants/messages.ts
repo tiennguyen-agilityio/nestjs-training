@@ -81,6 +81,7 @@ export const API_FALLBACK_ERRORS = {
   ORDER_STATUS_UPDATE: 'Could not update order status',
   ORDER_SHIPPING_STATUS_UPDATE: 'Could not update shipping status',
   ORDERS_LOAD: 'Could not load orders',
+  ORDER_LOAD: 'Could not load order',
   SHIPPING_METHODS_LOAD: 'Could not load shipping methods',
   SHIPPING_METHOD_LOAD: 'Could not load shipping method',
   SHIPPING_METHOD_CREATE: 'Could not create shipping method',

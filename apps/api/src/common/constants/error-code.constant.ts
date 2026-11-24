@@ -48,6 +48,7 @@ export const ERROR_CODES = {
     NOT_FOUND: 'cartItemNotFound',
   },
   ORDER: {
+    NOT_FOUND: 'orderNotFound',
     CART_EMPTY: 'cartEmpty',
     SHIPPING_METHOD_UNAVAILABLE: 'shippingMethodUnavailable',
     ITEM_UNAVAILABLE: 'itemUnavailable',

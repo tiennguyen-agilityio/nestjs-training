@@ -50,6 +50,7 @@ export const ERROR_MESSAGES = {
     NOT_FOUND: 'Cart item not found',
   },
   ORDER: {
+    NOT_FOUND: 'Order not found',
     CART_EMPTY: 'Cart is empty',
     SHIPPING_METHOD_UNAVAILABLE: 'Shipping method is not available',
     ITEM_UNAVAILABLE: 'This item can no longer be bought',
@@ -160,6 +161,8 @@ export const ERROR_DESCRIPTIONS = {
     NOT_FOUND: 'The item might have been removed, or the id is incorrect.',
   },
   ORDER: {
+    NOT_FOUND:
+      'The order might not exist, or the id or order number is incorrect.',
     CART_EMPTY: 'Add an item before checking out.',
     SHIPPING_METHOD_UNAVAILABLE:
       'The method does not exist or is not ACTIVE. Pick another method.',

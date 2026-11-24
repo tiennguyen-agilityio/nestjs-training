@@ -3,7 +3,7 @@
 import { ChevronRight } from 'lucide-react'
 
 // Types
-import type { Order } from '@/types/order'
+import type { OrderSummary } from '@/types/order'
 
 // Utils
 import { formatPrice } from '@/utils/common'
@@ -14,8 +14,8 @@ import { cn } from '@/utils/styles'
 import { Button } from '@/components/ui/button'
 
 export interface ProfileOrderTableRowProps {
-  order: Order
-  onRequestView?: (order: Order) => void
+  order: OrderSummary
+  onRequestView?: (order: OrderSummary) => void
 }
 
 export function ProfileOrderTableRow({
