@@ -7,14 +7,14 @@ import {
   Property,
   Unique,
 } from '@mikro-orm/decorators/legacy';
-import { BaseEntity } from '../../../common/entities/base.entity.js';
+import { AuditableEntity } from '../../../common/entities/auditable.entity.js';
 import { Category } from '../../category/entities/category.entity.js';
 import { ProductImage } from '../../product-image/entities/product-image.entity.js';
 import { ProductVariant } from '../../product-variant/entities/product-variant.entity.js';
 import { RoastLevel, ProductStatus, VALIDATION_RULES } from '@repo/constants';
 
 @Entity({ tableName: 'products' })
-export class Product extends BaseEntity {
+export class Product extends AuditableEntity {
   @ManyToOne(() => Category, { updateRule: 'cascade' })
   category!: Category;
 

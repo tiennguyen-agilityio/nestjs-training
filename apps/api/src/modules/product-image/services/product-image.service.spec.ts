@@ -6,6 +6,8 @@ import { ProductImage } from '../entities/product-image.entity.js';
 import { ProductImageRepository } from '../repositories/product-image.repository.js';
 
 import type { Mock } from 'vitest';
+const ACTOR = 'admin-1';
+
 describe('ProductImageService', () => {
   let service: ProductImageService;
   let productImageRepository: {
@@ -60,9 +62,9 @@ describe('ProductImageService', () => {
         productId: 'product-id-1',
         url: 'https://example.com/image.jpg',
       };
-      const result = await service.create(data);
+      const result = await service.create(data, ACTOR);
 
-      expect(productImageRepository.create).toHaveBeenCalledWith(data);
+      expect(productImageRepository.create).toHaveBeenCalledWith(data, ACTOR);
       expect(result).toBe(created);
     });
   });
@@ -114,9 +116,12 @@ describe('ProductImageService', () => {
       const image = buildImage();
       productImageRepository.findById.mockResolvedValue(image);
 
-      await service.remove('image-id-1');
+      await service.remove('image-id-1', ACTOR);
 
-      expect(productImageRepository.softDelete).toHaveBeenCalledWith(image);
+      expect(productImageRepository.softDelete).toHaveBeenCalledWith(
+        image,
+        ACTOR,
+      );
     });
 
     it('soft-deletes the image and clears its sortOrder', async () => {
@@ -124,17 +129,18 @@ describe('ProductImageService', () => {
       image.sortOrder = 2;
       productImageRepository.findById.mockResolvedValue(image);
 
-      await service.remove('image-id-1');
+      await service.remove('image-id-1', ACTOR);
 
       expect(productImageRepository.softDelete).toHaveBeenCalledWith(
         expect.objectContaining({ sortOrder: null }),
+        ACTOR,
       );
     });
 
     it('throws ItemNotFoundException for a missing id, without calling softDelete', async () => {
       productImageRepository.findById.mockResolvedValue(null);
 
-      await expect(service.remove('missing-id')).rejects.toBeInstanceOf(
+      await expect(service.remove('missing-id', ACTOR)).rejects.toBeInstanceOf(
         ItemNotFoundException,
       );
       expect(productImageRepository.softDelete).not.toHaveBeenCalled();

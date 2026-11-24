@@ -138,20 +138,23 @@ describe('API response capture', () => {
     lastName: string,
   ) =>
     RequestContext.create(orm.em, async () => {
-      const user = await userService.create({
-        clerkId: `clerk-baseline-${key}`,
-        email: `${key}@baseline.test`,
-        firstName,
-        lastName,
-        role,
-      });
+      const user = await userService.create(
+        {
+          clerkId: `clerk-baseline-${key}`,
+          email: `${key}@baseline.test`,
+          firstName,
+          lastName,
+          role,
+        },
+        null,
+      );
       label(user.id, `user:${key}`);
       return user;
     });
 
   const seedCategory = (key: string, name: string) =>
     RequestContext.create(orm.em, async () => {
-      const category = await categoryService.create({ name });
+      const category = await categoryService.create({ name }, null);
       label(category.id, `category:${key}`);
       return category;
     });
@@ -164,15 +167,18 @@ describe('API response capture', () => {
       Pick<ProductCreateInput, 'categoryId' | 'name'>,
   ) =>
     RequestContext.create(orm.em, async () => {
-      const product = await productService.create({
-        roastLevel: RoastLevel.MEDIUM,
-        description: 'A balanced, well-rounded coffee.',
-        origin: 'Ethiopia',
-        processingMethod: 'Washed',
-        images: [],
-        variants: [],
-        ...data,
-      });
+      const product = await productService.create(
+        {
+          roastLevel: RoastLevel.MEDIUM,
+          description: 'A balanced, well-rounded coffee.',
+          origin: 'Ethiopia',
+          processingMethod: 'Washed',
+          images: [],
+          variants: [],
+          ...data,
+        },
+        null,
+      );
       label(product.id, `product:${key}`);
       return product;
     });

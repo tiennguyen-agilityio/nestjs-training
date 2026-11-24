@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Outbox } from '@nestjs/outbox';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import { User } from '../entities/user.entity.js';
 import type { CreateUserInput, UserFilters } from '../dto/user.schema.js';
 import type { UserRole } from '@repo/constants';
@@ -49,8 +50,8 @@ export class UserRepository extends BaseRepository<User> {
     });
   }
 
-  create(data: CreateUserInput): Promise<User> {
-    return this.createAndSave({ ...data });
+  create(data: CreateUserInput, actorId: ActorId): Promise<User> {
+    return this.createAndSave({ ...data }, actorId);
   }
 
   /** The role of a (not soft-deleted) user, from a context of its own: callable outside a request. */
@@ -65,9 +66,12 @@ export class UserRepository extends BaseRepository<User> {
    * Inserts the user and, in the same transaction, the outbox message that
    * syncs its role to the auth provider; then wakes the relay.
    */
-  async createWithRoleSync(data: CreateUserInput): Promise<User> {
+  async createWithRoleSync(
+    data: CreateUserInput,
+    actorId: ActorId,
+  ): Promise<User> {
     const user = await this.inTransaction(async (tx) => {
-      const created = await this.createAndSave({ ...data });
+      const created = await this.createAndSave({ ...data }, actorId);
       await this.outbox.add<UserRoleSyncPayload>(tx, {
         topic: OUTBOX_TOPICS.USER_ROLE_SYNC,
         key: created.clerkId,

@@ -228,6 +228,9 @@ erDiagram
         created_at timestamp
         updated_at timestamp
         deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
     }
 
     CATEGORY {
@@ -237,6 +240,9 @@ erDiagram
         created_at timestamp
         updated_at timestamp
         deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
     }
 
     PRODUCT {
@@ -255,6 +261,9 @@ erDiagram
         created_at timestamp
         updated_at timestamp
         deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
     }
 
     PRODUCT_IMAGE {
@@ -266,6 +275,9 @@ erDiagram
         created_at timestamp
         updated_at timestamp
         deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
     }
 
     PRODUCT_VARIANT {
@@ -281,11 +293,19 @@ erDiagram
         created_at timestamp
         updated_at timestamp
         deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
     }
 
     CATEGORY ||--o{ PRODUCT : "contains"
     PRODUCT ||--o{ PRODUCT_IMAGE : "has"
     PRODUCT ||--o{ PRODUCT_VARIANT : "has"
+    USER |o--o{ CATEGORY : "created, updated, deleted by"
+    USER |o--o{ PRODUCT : "created, updated, deleted by"
+    USER |o--o{ PRODUCT_IMAGE : "created, updated, deleted by"
+    USER |o--o{ PRODUCT_VARIANT : "created, updated, deleted by"
+    USER |o--o{ USER : "created, updated, deleted by"
 ```
 
 ## API Endpoints

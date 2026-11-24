@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import { ProductImage } from '../entities/product-image.entity.js';
 import type { CreateProductImageInput } from '../dto/product-image.schema.js';
 import { ProductImageRepository } from '../repositories/product-image.repository.js';
@@ -17,8 +18,9 @@ export class ProductImageService {
 
   create(
     data: CreateProductImageInput & { productId: string },
+    actorId: ActorId,
   ): Promise<ProductImage> {
-    return this.productImageRepository.create(data);
+    return this.productImageRepository.create(data, actorId);
   }
 
   findAllByProduct(productId: string): Promise<ProductImage[]> {
@@ -39,10 +41,10 @@ export class ProductImageService {
     return image;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actorId: ActorId): Promise<void> {
     const image = await this.findOne(id);
     // A deleted image holds no position (product_images unique key).
     image.sortOrder = null;
-    await this.productImageRepository.softDelete(image);
+    await this.productImageRepository.softDelete(image, actorId);
   }
 }

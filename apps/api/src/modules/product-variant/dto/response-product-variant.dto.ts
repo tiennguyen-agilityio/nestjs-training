@@ -1,7 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProductVariant } from '../entities/product-variant.entity.js';
 import { DiscountType, ProductUnit } from '@repo/constants';
 import { variantNameFrom } from '../utils/variant-name.util.js';
+import {
+  auditFieldsOf,
+  type ResponseOptions,
+} from '../../../common/utils/audit.util.js';
 
 export class ResponseProductVariantDto {
   id!: string;
@@ -22,7 +26,19 @@ export class ResponseProductVariantDto {
 
   stockQuantity!: number;
 
-  static fromEntity(variant: ProductVariant): ResponseProductVariantDto {
+  @ApiPropertyOptional({ nullable: true, type: String })
+  createdBy?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String })
+  updatedBy?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String })
+  deletedBy?: string | null;
+
+  static fromEntity(
+    variant: ProductVariant,
+    options: ResponseOptions = {},
+  ): ResponseProductVariantDto {
     const dto = new ResponseProductVariantDto();
     dto.id = variant.id;
     dto.sku = variant.sku;
@@ -35,6 +51,7 @@ export class ResponseProductVariantDto {
     dto.discountType = variant.discountType ?? DiscountType.PERCENT;
     dto.discountValue = Number(variant.discountValue ?? 0);
     dto.stockQuantity = variant.stockQuantity;
+    if (options.withAudit) Object.assign(dto, auditFieldsOf(variant));
     return dto;
   }
 }

@@ -27,6 +27,8 @@ import {
 } from '../../../common/constants/message.constant.js';
 
 import type { Mock } from 'vitest';
+const ACTOR = 'admin-1';
+
 describe('ProductService', () => {
   let service: ProductService;
   let productRepository: {
@@ -111,7 +113,7 @@ describe('ProductService', () => {
       const created = buildProduct();
       productRepository.create.mockResolvedValue(created);
 
-      const result = await service.create(createData);
+      const result = await service.create(createData, ACTOR);
 
       expect(categoryService.findOne).toHaveBeenCalledWith('category-id-1');
       expect(productRepository.create).toHaveBeenCalledWith(
@@ -119,6 +121,7 @@ describe('ProductService', () => {
           name: 'Espresso Blend',
           slug: 'espresso-blend',
         }),
+        ACTOR,
       );
       expect(result).toBe(created);
     });
@@ -131,31 +134,40 @@ describe('ProductService', () => {
       productRepository.create.mockResolvedValue(created);
       productRepository.findById.mockResolvedValue(refetched);
 
-      const result = await service.create({
-        ...createData,
-        images: [{ url: 'https://example.com/a.jpg', isPrimary: true }],
-        variants: [
-          {
-            sku: 'SKU-1',
-            size: '250.000',
-            unit: ProductUnit.G,
-            price: '10.00',
-          },
-        ],
-      });
+      const result = await service.create(
+        {
+          ...createData,
+          images: [{ url: 'https://example.com/a.jpg', isPrimary: true }],
+          variants: [
+            {
+              sku: 'SKU-1',
+              size: '250.000',
+              unit: ProductUnit.G,
+              price: '10.00',
+            },
+          ],
+        },
+        ACTOR,
+      );
 
-      expect(productImageService.create).toHaveBeenCalledWith({
-        productId: 'product-id-1',
-        url: 'https://example.com/a.jpg',
-        isPrimary: true,
-      });
-      expect(productVariantService.create).toHaveBeenCalledWith({
-        productId: 'product-id-1',
-        sku: 'SKU-1',
-        size: '250.000',
-        unit: ProductUnit.G,
-        price: '10.00',
-      });
+      expect(productImageService.create).toHaveBeenCalledWith(
+        {
+          productId: 'product-id-1',
+          url: 'https://example.com/a.jpg',
+          isPrimary: true,
+        },
+        ACTOR,
+      );
+      expect(productVariantService.create).toHaveBeenCalledWith(
+        {
+          productId: 'product-id-1',
+          sku: 'SKU-1',
+          size: '250.000',
+          unit: ProductUnit.G,
+          price: '10.00',
+        },
+        ACTOR,
+      );
       expect(productRepository.findById).toHaveBeenCalledWith(
         'product-id-1',
         {},
@@ -165,13 +177,16 @@ describe('ProductService', () => {
 
     it('rejects two added images without sortOrder, without persisting', async () => {
       await expect(
-        service.create({
-          ...createData,
-          images: [
-            { url: 'https://example.com/a.jpg', isPrimary: true },
-            { url: 'https://example.com/b.jpg' },
-          ],
-        }),
+        service.create(
+          {
+            ...createData,
+            images: [
+              { url: 'https://example.com/a.jpg', isPrimary: true },
+              { url: 'https://example.com/b.jpg' },
+            ],
+          },
+          ACTOR,
+        ),
       ).rejects.toThrow(ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS);
       expect(productRepository.create).not.toHaveBeenCalled();
       expect(productImageService.create).not.toHaveBeenCalled();
@@ -179,13 +194,16 @@ describe('ProductService', () => {
 
     it('rejects more than one primary image, without checking the name or persisting', async () => {
       await expect(
-        service.create({
-          ...createData,
-          images: [
-            { url: 'https://example.com/a.jpg', isPrimary: true },
-            { url: 'https://example.com/b.jpg', isPrimary: true },
-          ],
-        }),
+        service.create(
+          {
+            ...createData,
+            images: [
+              { url: 'https://example.com/a.jpg', isPrimary: true },
+              { url: 'https://example.com/b.jpg', isPrimary: true },
+            ],
+          },
+          ACTOR,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(productRepository.findByName).not.toHaveBeenCalled();
       expect(productRepository.create).not.toHaveBeenCalled();
@@ -200,16 +218,22 @@ describe('ProductService', () => {
       productRepository.create.mockResolvedValue(created);
       productRepository.findById.mockResolvedValue(refetched);
 
-      await service.create({
-        ...createData,
-        images: [{ url: 'https://example.com/a.jpg', isPrimary: true }],
-      });
+      await service.create(
+        {
+          ...createData,
+          images: [{ url: 'https://example.com/a.jpg', isPrimary: true }],
+        },
+        ACTOR,
+      );
 
-      expect(productImageService.create).toHaveBeenCalledWith({
-        productId: 'product-id-1',
-        url: 'https://example.com/a.jpg',
-        isPrimary: true,
-      });
+      expect(productImageService.create).toHaveBeenCalledWith(
+        {
+          productId: 'product-id-1',
+          url: 'https://example.com/a.jpg',
+          isPrimary: true,
+        },
+        ACTOR,
+      );
     });
 
     it('does not re-fetch the product when no images or variants are supplied', async () => {
@@ -218,7 +242,7 @@ describe('ProductService', () => {
       const created = buildProduct();
       productRepository.create.mockResolvedValue(created);
 
-      const result = await service.create(createData);
+      const result = await service.create(createData, ACTOR);
 
       expect(productRepository.findById).not.toHaveBeenCalled();
       expect(result).toBe(created);
@@ -229,7 +253,7 @@ describe('ProductService', () => {
       expect.assertions(5);
 
       try {
-        await service.create(createData);
+        await service.create(createData, ACTOR);
       } catch (error) {
         expect(error).toBeInstanceOf(DuplicateResourceException);
         expect(
@@ -252,7 +276,7 @@ describe('ProductService', () => {
         }),
       );
 
-      await expect(service.create(createData)).rejects.toBeInstanceOf(
+      await expect(service.create(createData, ACTOR)).rejects.toBeInstanceOf(
         ItemNotFoundException,
       );
       expect(productRepository.create).not.toHaveBeenCalled();
@@ -397,11 +421,11 @@ describe('ProductService', () => {
       const product = buildProduct();
       productRepository.findById.mockResolvedValue(product);
 
-      await service.update('product-id-1', { description: 'Updated' });
+      await service.update('product-id-1', { description: 'Updated' }, ACTOR);
 
       expect(productRepository.findByName).not.toHaveBeenCalled();
       expect(categoryService.findOne).not.toHaveBeenCalled();
-      expect(productRepository.save).toHaveBeenCalledWith(product);
+      expect(productRepository.save).toHaveBeenCalledWith(product, ACTOR);
     });
 
     it('throws DuplicateResourceException when the new name collides with another product', async () => {
@@ -413,7 +437,7 @@ describe('ProductService', () => {
       expect.assertions(3);
 
       try {
-        await service.update('product-id-1', { name: 'Other' });
+        await service.update('product-id-1', { name: 'Other' }, ACTOR);
       } catch (error) {
         expect(error).toBeInstanceOf(DuplicateResourceException);
         expect(
@@ -428,16 +452,20 @@ describe('ProductService', () => {
       productRepository.findById.mockResolvedValue(product);
       productRepository.findByName.mockResolvedValue(product);
 
-      const result = await service.update('product-id-1', {
-        name: 'Espresso Blend Reserve',
-      });
+      const result = await service.update(
+        'product-id-1',
+        {
+          name: 'Espresso Blend Reserve',
+        },
+        ACTOR,
+      );
 
       expect(productRepository.findByName).toHaveBeenCalledWith(
         'Espresso Blend Reserve',
         { includeDeleted: true },
       );
       expect(result).toBe(product);
-      expect(productRepository.save).toHaveBeenCalledWith(product);
+      expect(productRepository.save).toHaveBeenCalledWith(product, ACTOR);
     });
 
     it('re-validates the category via CategoryService.findOne when categoryId changes, and assigns the loaded category', async () => {
@@ -446,7 +474,11 @@ describe('ProductService', () => {
       productRepository.findById.mockResolvedValue(product);
       categoryService.findOne.mockResolvedValue(loadedCategory);
 
-      await service.update('product-id-1', { categoryId: 'category-id-2' });
+      await service.update(
+        'product-id-1',
+        { categoryId: 'category-id-2' },
+        ACTOR,
+      );
 
       expect(categoryService.findOne).toHaveBeenCalledWith('category-id-2');
       expect(product.category).toBe(loadedCategory);
@@ -456,7 +488,7 @@ describe('ProductService', () => {
       productRepository.findById.mockResolvedValue(null);
 
       await expect(
-        service.update('missing-id', { description: 'x' }),
+        service.update('missing-id', { description: 'x' }, ACTOR),
       ).rejects.toBeInstanceOf(ItemNotFoundException);
       expect(productRepository.save).not.toHaveBeenCalled();
     });
@@ -494,7 +526,7 @@ describe('ProductService', () => {
           buildImage(idB, { isPrimary: true, sortOrder: 1 }),
         ]);
 
-        await service.update('product-id-1', { removeImageIds: [idA] });
+        await service.update('product-id-1', { removeImageIds: [idA] }, ACTOR);
 
         expect(images[0].deletedAt).toBeInstanceOf(Date);
         expect(images[0].sortOrder).toBeNull();
@@ -507,12 +539,16 @@ describe('ProductService', () => {
         const { add } = productWithImages([]);
 
         await expect(
-          service.update('product-id-1', {
-            addImages: [
-              { url: 'https://example.com/a.png', isPrimary: true },
-              { url: 'https://example.com/b.png' },
-            ],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              addImages: [
+                { url: 'https://example.com/a.png', isPrimary: true },
+                { url: 'https://example.com/b.png' },
+              ],
+            },
+            ACTOR,
+          ),
         ).rejects.toThrow(ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS);
         expect(add).not.toHaveBeenCalled();
         expect(productRepository.save).not.toHaveBeenCalled();
@@ -524,9 +560,13 @@ describe('ProductService', () => {
         ]);
 
         await expect(
-          service.update('product-id-1', {
-            addImages: [{ url: 'https://example.com/added.png' }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              addImages: [{ url: 'https://example.com/added.png' }],
+            },
+            ACTOR,
+          ),
         ).rejects.toThrow(ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS);
         expect(add).not.toHaveBeenCalled();
         expect(productRepository.save).not.toHaveBeenCalled();
@@ -538,9 +578,13 @@ describe('ProductService', () => {
           buildImage(idB, { isPrimary: true }),
         ]);
 
-        await service.update('product-id-1', {
-          updateImages: [{ id: idA, url: 'https://example.com/new.png' }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateImages: [{ id: idA, url: 'https://example.com/new.png' }],
+          },
+          ACTOR,
+        );
 
         expect(images[0]).toMatchObject({
           url: 'https://example.com/new.png',
@@ -556,9 +600,13 @@ describe('ProductService', () => {
           buildImage(idB, { isPrimary: true }),
         ]);
 
-        await service.update('product-id-1', {
-          updateImages: [{ id: idA, sortOrder: 5 }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateImages: [{ id: idA, sortOrder: 5 }],
+          },
+          ACTOR,
+        );
 
         expect(images[0].sortOrder).toBe(5);
       });
@@ -568,9 +616,13 @@ describe('ProductService', () => {
           buildImage(idA, { isPrimary: true, sortOrder: 1 }),
         ]);
 
-        await service.update('product-id-1', {
-          addImages: [{ url: 'https://example.com/added.png' }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            addImages: [{ url: 'https://example.com/added.png' }],
+          },
+          ACTOR,
+        );
 
         expect(add).toHaveBeenCalledTimes(1);
         expect(add.mock.calls[0][0]).toMatchObject({
@@ -587,11 +639,15 @@ describe('ProductService', () => {
           buildImage(idB, { sortOrder: 1 }),
         ]);
 
-        await service.update('product-id-1', {
-          removeImageIds: [idA],
-          updateImages: [{ id: idB, isPrimary: true }],
-          addImages: [{ url: 'https://example.com/added.png' }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            removeImageIds: [idA],
+            updateImages: [{ id: idB, isPrimary: true }],
+            addImages: [{ url: 'https://example.com/added.png' }],
+          },
+          ACTOR,
+        );
 
         expect(images[0].deletedAt).toBeInstanceOf(Date);
         expect(images[1].isPrimary).toBe(true);
@@ -603,7 +659,7 @@ describe('ProductService', () => {
         const { images } = productWithImages([buildImage(idA)]);
 
         await expect(
-          service.update('product-id-1', { removeImageIds: [idA, idC] }),
+          service.update('product-id-1', { removeImageIds: [idA, idC] }, ACTOR),
         ).rejects.toBeInstanceOf(BadRequestException);
 
         expect(images[0].deletedAt).toBeNull();
@@ -614,10 +670,14 @@ describe('ProductService', () => {
         productWithImages([buildImage(idA)]);
 
         await expect(
-          service.update('product-id-1', {
-            removeImageIds: [idA],
-            updateImages: [{ id: idA, sortOrder: 1 }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              removeImageIds: [idA],
+              updateImages: [{ id: idA, sortOrder: 1 }],
+            },
+            ACTOR,
+          ),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(productRepository.save).not.toHaveBeenCalled();
       });
@@ -626,7 +686,7 @@ describe('ProductService', () => {
         productWithImages([buildImage(idA, { deletedAt: new Date() })]);
 
         await expect(
-          service.update('product-id-1', { removeImageIds: [idA] }),
+          service.update('product-id-1', { removeImageIds: [idA] }, ACTOR),
         ).rejects.toBeInstanceOf(BadRequestException);
       });
 
@@ -639,9 +699,13 @@ describe('ProductService', () => {
         );
         productWithImages(existing);
 
-        await service.update('product-id-1', {
-          addImages: [{ url: 'https://example.com/sixth.png', sortOrder: 5 }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            addImages: [{ url: 'https://example.com/sixth.png', sortOrder: 5 }],
+          },
+          ACTOR,
+        );
 
         expect(productRepository.save).toHaveBeenCalledTimes(1);
       });
@@ -657,17 +721,25 @@ describe('ProductService', () => {
         const { add } = productWithImages(existing);
 
         await expect(
-          service.update('product-id-1', {
-            addImages: [{ url: 'https://example.com/seventh.png' }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              addImages: [{ url: 'https://example.com/seventh.png' }],
+            },
+            ACTOR,
+          ),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(add).not.toHaveBeenCalled();
         expect(productRepository.save).not.toHaveBeenCalled();
 
-        await service.update('product-id-1', {
-          removeImageIds: [existing[0].id],
-          addImages: [{ url: 'https://example.com/seventh.png' }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            removeImageIds: [existing[0].id],
+            addImages: [{ url: 'https://example.com/seventh.png' }],
+          },
+          ACTOR,
+        );
         expect(productRepository.save).toHaveBeenCalledTimes(1);
       });
 
@@ -678,14 +750,24 @@ describe('ProductService', () => {
         ]);
 
         await expect(
-          service.update('product-id-1', {
-            updateImages: [{ id: idB, isPrimary: true }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              updateImages: [{ id: idB, isPrimary: true }],
+            },
+            ACTOR,
+          ),
         ).rejects.toBeInstanceOf(BadRequestException);
         await expect(
-          service.update('product-id-1', {
-            addImages: [{ url: 'https://example.com/x.png', isPrimary: true }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              addImages: [
+                { url: 'https://example.com/x.png', isPrimary: true },
+              ],
+            },
+            ACTOR,
+          ),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(productRepository.save).not.toHaveBeenCalled();
       });
@@ -696,12 +778,16 @@ describe('ProductService', () => {
           buildImage(idB, { sortOrder: 1 }),
         ]);
 
-        await service.update('product-id-1', {
-          updateImages: [
-            { id: idA, isPrimary: false },
-            { id: idB, isPrimary: true },
-          ],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateImages: [
+              { id: idA, isPrimary: false },
+              { id: idB, isPrimary: true },
+            ],
+          },
+          ACTOR,
+        );
 
         expect(images.map((image) => image.isPrimary)).toEqual([false, true]);
       });
@@ -714,7 +800,7 @@ describe('ProductService', () => {
         ]);
 
         await expect(
-          service.update('product-id-1', { removeImageIds: [idA] }),
+          service.update('product-id-1', { removeImageIds: [idA] }, ACTOR),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(productRepository.save).not.toHaveBeenCalled();
       });
@@ -726,9 +812,13 @@ describe('ProductService', () => {
         ]);
 
         await expect(
-          service.update('product-id-1', {
-            updateImages: [{ id: idA, isPrimary: false }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              updateImages: [{ id: idA, isPrimary: false }],
+            },
+            ACTOR,
+          ),
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(productRepository.save).not.toHaveBeenCalled();
       });
@@ -739,10 +829,14 @@ describe('ProductService', () => {
           buildImage(idB),
         ]);
 
-        await service.update('product-id-1', {
-          removeImageIds: [idA],
-          updateImages: [{ id: idB, isPrimary: true }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            removeImageIds: [idA],
+            updateImages: [{ id: idB, isPrimary: true }],
+          },
+          ACTOR,
+        );
 
         expect(images[0].deletedAt).toBeInstanceOf(Date);
         expect(images[1].isPrimary).toBe(true);
@@ -754,10 +848,16 @@ describe('ProductService', () => {
           buildImage(idA, { isPrimary: true }),
         ]);
 
-        await service.update('product-id-1', {
-          removeImageIds: [idA],
-          addImages: [{ url: 'https://example.com/new.png', isPrimary: true }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            removeImageIds: [idA],
+            addImages: [
+              { url: 'https://example.com/new.png', isPrimary: true },
+            ],
+          },
+          ACTOR,
+        );
 
         expect(images[0].deletedAt).toBeInstanceOf(Date);
         expect(add).toHaveBeenCalledTimes(1);
@@ -768,7 +868,7 @@ describe('ProductService', () => {
       it('does not touch the images when the request has no image changes', async () => {
         const { images, add } = productWithImages([buildImage(idA)]);
 
-        await service.update('product-id-1', { description: 'Updated' });
+        await service.update('product-id-1', { description: 'Updated' }, ACTOR);
 
         expect(add).not.toHaveBeenCalled();
         expect(images[0].deletedAt).toBeNull();
@@ -820,9 +920,13 @@ describe('ProductService', () => {
           }),
         ]);
 
-        await service.update('product-id-1', {
-          updateVariants: [{ id: idA, size: '500' }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateVariants: [{ id: idA, size: '500' }],
+          },
+          ACTOR,
+        );
         expect(variants[0]).toMatchObject({
           size: '500',
           unit: ProductUnit.G,
@@ -830,26 +934,38 @@ describe('ProductService', () => {
         });
 
         variants[0].size = '250.00';
-        await service.update('product-id-1', {
-          updateVariants: [{ id: idA, unit: ProductUnit.KG }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateVariants: [{ id: idA, unit: ProductUnit.KG }],
+          },
+          ACTOR,
+        );
         expect(variants[0]).toMatchObject({
           size: '250.00',
           unit: ProductUnit.KG,
         });
 
-        await service.update('product-id-1', {
-          updateVariants: [{ id: idA, stockQuantity: 5 }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateVariants: [{ id: idA, stockQuantity: 5 }],
+          },
+          ACTOR,
+        );
         expect(variants[0].stockQuantity).toBe(5);
       });
 
       it('keeps price and discount on a quantity-only update', async () => {
         const { variants } = productWithVariants([buildVariant(idA)]);
 
-        await service.update('product-id-1', {
-          updateVariants: [{ id: idA, stockQuantity: 50 }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateVariants: [{ id: idA, stockQuantity: 50 }],
+          },
+          ACTOR,
+        );
 
         expect(variants[0]).toMatchObject({
           price: '100.00',
@@ -866,16 +982,20 @@ describe('ProductService', () => {
         ]);
 
         const error = await rejection(
-          service.update('product-id-1', {
-            name: 'Renamed',
-            updateVariants: [
-              {
-                id: idA,
-                discountType: DiscountType.FIXED,
-                discountValue: '150',
-              },
-            ],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              name: 'Renamed',
+              updateVariants: [
+                {
+                  id: idA,
+                  discountType: DiscountType.FIXED,
+                  discountValue: '150',
+                },
+              ],
+            },
+            ACTOR,
+          ),
         );
 
         expect(error.getStatus()).toBe(400);
@@ -900,15 +1020,19 @@ describe('ProductService', () => {
         productWithVariants([buildVariant(idA)]);
 
         const error = await rejection(
-          service.update('product-id-1', {
-            updateVariants: [
-              {
-                id: idA,
-                discountType: DiscountType.PERCENT,
-                discountValue: '100',
-              },
-            ],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              updateVariants: [
+                {
+                  id: idA,
+                  discountType: DiscountType.PERCENT,
+                  discountValue: '100',
+                },
+              ],
+            },
+            ACTOR,
+          ),
         );
 
         expect(error.getErrors()[0]).toMatchObject({
@@ -931,9 +1055,13 @@ describe('ProductService', () => {
         ]);
 
         const error = await rejection(
-          service.update('product-id-1', {
-            updateVariants: [{ id: idA, price: '40' }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              updateVariants: [{ id: idA, price: '40' }],
+            },
+            ACTOR,
+          ),
         );
 
         expect(error.getErrors()[0]).toMatchObject({
@@ -953,9 +1081,13 @@ describe('ProductService', () => {
         ]);
 
         const error = await rejection(
-          service.update('product-id-1', {
-            updateVariants: [{ id: idA, stockQuantity: 50 }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              updateVariants: [{ id: idA, stockQuantity: 50 }],
+            },
+            ACTOR,
+          ),
         );
 
         expect(error.getErrors()[0]).toMatchObject({
@@ -969,9 +1101,13 @@ describe('ProductService', () => {
         productWithVariants([buildVariant(idA)]);
 
         const error = await rejection(
-          service.update('product-id-1', {
-            updateVariants: [{ id: idA, discountValue: '150' }],
-          }),
+          service.update(
+            'product-id-1',
+            {
+              updateVariants: [{ id: idA, discountValue: '150' }],
+            },
+            ACTOR,
+          ),
         );
 
         expect(error.getErrors()[0].errCode).toBe(
@@ -984,9 +1120,13 @@ describe('ProductService', () => {
           buildVariant(idA, { discountType: null, discountValue: null }),
         ]);
 
-        await service.update('product-id-1', {
-          updateVariants: [{ id: idA, stockQuantity: 50 }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateVariants: [{ id: idA, stockQuantity: 50 }],
+          },
+          ACTOR,
+        );
 
         expect(variants[0]).toMatchObject({
           discountType: DiscountType.PERCENT,
@@ -998,11 +1138,15 @@ describe('ProductService', () => {
       it('stores FIXED 0', async () => {
         const { variants } = productWithVariants([buildVariant(idA)]);
 
-        await service.update('product-id-1', {
-          updateVariants: [
-            { id: idA, discountType: DiscountType.FIXED, discountValue: '0' },
-          ],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateVariants: [
+              { id: idA, discountType: DiscountType.FIXED, discountValue: '0' },
+            ],
+          },
+          ACTOR,
+        );
 
         expect(variants[0]).toMatchObject({
           discountType: DiscountType.FIXED,
@@ -1016,9 +1160,13 @@ describe('ProductService', () => {
           buildVariant(idB),
         ]);
 
-        await service.update('product-id-1', {
-          updateVariants: [{ id: idB, price: '90' }],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateVariants: [{ id: idB, price: '90' }],
+          },
+          ACTOR,
+        );
 
         expect(variants[1].price).toBe('90');
         expect(variants[0].price).toBe('100.00');
@@ -1028,9 +1176,13 @@ describe('ProductService', () => {
         productWithVariants([buildVariant(idA)]);
 
         const error = await service
-          .update('product-id-1', {
-            updateVariants: [{ id: otherId, price: '90' }],
-          })
+          .update(
+            'product-id-1',
+            {
+              updateVariants: [{ id: otherId, price: '90' }],
+            },
+            ACTOR,
+          )
           .catch((caught: unknown) => caught);
 
         expect(error).toBeInstanceOf(ItemNotFoundException);
@@ -1047,16 +1199,20 @@ describe('ProductService', () => {
           buildVariant(idA, { price: '120.00' }),
         ]);
 
-        await service.update('product-id-1', {
-          updateVariants: [
-            {
-              id: idA,
-              price: '200',
-              discountType: DiscountType.FIXED,
-              discountValue: '150',
-            },
-          ],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            updateVariants: [
+              {
+                id: idA,
+                price: '200',
+                discountType: DiscountType.FIXED,
+                discountValue: '150',
+              },
+            ],
+          },
+          ACTOR,
+        );
 
         expect(variants[0]).toMatchObject({
           price: '200',
@@ -1068,10 +1224,14 @@ describe('ProductService', () => {
       it('ignores an empty updateVariants', async () => {
         const { product, variants } = productWithVariants([buildVariant(idA)]);
 
-        await service.update('product-id-1', {
-          name: 'Renamed',
-          updateVariants: [],
-        });
+        await service.update(
+          'product-id-1',
+          {
+            name: 'Renamed',
+            updateVariants: [],
+          },
+          ACTOR,
+        );
 
         expect(product.name).toBe('Renamed');
         expect(variants[0]).toMatchObject({
@@ -1088,10 +1248,10 @@ describe('ProductService', () => {
       const product = buildProduct();
       productRepository.findById.mockResolvedValue(product);
 
-      await service.remove('product-id-1');
+      await service.remove('product-id-1', ACTOR);
 
       expect(product.status).toBe(ProductStatus.ARCHIVED);
-      expect(productRepository.softDelete).toHaveBeenCalledWith(product);
+      expect(productRepository.softDelete).toHaveBeenCalledWith(product, ACTOR);
       expect(productImageService.create).not.toHaveBeenCalled();
       expect(productVariantService.create).not.toHaveBeenCalled();
     });
@@ -1099,7 +1259,7 @@ describe('ProductService', () => {
     it('throws ItemNotFoundException for a missing id', async () => {
       productRepository.findById.mockResolvedValue(null);
 
-      await expect(service.remove('missing-id')).rejects.toBeInstanceOf(
+      await expect(service.remove('missing-id', ACTOR)).rejects.toBeInstanceOf(
         ItemNotFoundException,
       );
       expect(productRepository.softDelete).not.toHaveBeenCalled();

@@ -28,6 +28,7 @@ import {
   type UpdateUserInput,
 } from '../dto/user.schema.js';
 import { ResponseUserDto } from '../dto/response-user.dto.js';
+import { isActiveAdmin } from '../../../common/utils/user.util.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import {
   idParamSchema,
@@ -69,9 +70,10 @@ export class UserController {
   )
   async create(
     @Body({ schema: createUserSchema }) dto: CreateUserInput,
+    @AuthUser() admin: User,
   ): Promise<ResponseUserDto> {
-    const user = await this.userService.create(dto);
-    return ResponseUserDto.fromEntity(user);
+    const user = await this.userService.create(dto, admin.id);
+    return ResponseUserDto.fromEntity(user, { withAudit: true });
   }
 
   @Get()
@@ -93,7 +95,7 @@ export class UserController {
       { includeDeleted: true, excludeId: user.id },
     );
     return mapPaginatedResult(result, (user) =>
-      ResponseUserDto.fromEntity(user),
+      ResponseUserDto.fromEntity(user, { withAudit: true }),
     );
   }
 
@@ -110,7 +112,9 @@ export class UserController {
     ERROR_MESSAGES.AUTH.UNAUTHENTICATED,
   )
   getCurrentUser(@AuthUser() user: User): ResponseUserDto {
-    return ResponseUserDto.fromEntity(user);
+    return ResponseUserDto.fromEntity(user, {
+      withAudit: isActiveAdmin(user),
+    });
   }
 
   @Get(':id')
@@ -122,7 +126,7 @@ export class UserController {
     @Param({ schema: idParamSchema }) { id }: IdParam,
   ): Promise<ResponseUserDto> {
     const user = await this.userService.findOne(id, { includeDeleted: true });
-    return ResponseUserDto.fromEntity(user);
+    return ResponseUserDto.fromEntity(user, { withAudit: true });
   }
 
   @Patch(':id')
@@ -153,9 +157,10 @@ export class UserController {
   async update(
     @Param({ schema: idParamSchema }) { id }: IdParam,
     @Body({ schema: updateUserSchema }) dto: UpdateUserInput,
+    @AuthUser() admin: User,
   ): Promise<ResponseUserDto> {
-    const user = await this.userService.updateByAdmin(id, dto);
-    return ResponseUserDto.fromEntity(user);
+    const user = await this.userService.updateByAdmin(id, dto, admin.id);
+    return ResponseUserDto.fromEntity(user, { withAudit: true });
   }
 
   @Delete(':id')
@@ -180,7 +185,10 @@ export class UserController {
       description: ERROR_DESCRIPTIONS.AUTH_PROVIDER.TIMEOUT,
     },
   )
-  remove(@Param({ schema: idParamSchema }) { id }: IdParam): Promise<void> {
-    return this.userService.remove(id);
+  remove(
+    @Param({ schema: idParamSchema }) { id }: IdParam,
+    @AuthUser() admin: User,
+  ): Promise<void> {
+    return this.userService.remove(id, admin.id);
   }
 }

@@ -12,6 +12,8 @@ import {
   InvalidRequestException,
 } from '../../../common/exceptions/base.exception.js';
 
+const ACTOR = 'admin-1';
+
 describe('UserService', () => {
   let service: UserService;
   let authProvider: { syncUserRole: Mock; syncUserStatus: Mock };
@@ -40,6 +42,9 @@ describe('UserService', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
+    createdBy: null,
+    updatedBy: null,
+    deletedBy: null,
     ...overrides,
   });
 
@@ -86,9 +91,9 @@ describe('UserService', () => {
       const created = buildUser();
       userRepository.create.mockResolvedValue(created);
 
-      const result = await service.create(dto);
+      const result = await service.create(dto, ACTOR);
 
-      expect(userRepository.create).toHaveBeenCalledWith(dto);
+      expect(userRepository.create).toHaveBeenCalledWith(dto, ACTOR);
       expect(result).toBe(created);
     });
 
@@ -97,12 +102,15 @@ describe('UserService', () => {
       userRepository.findByClerkId.mockResolvedValue(null);
       userRepository.create.mockResolvedValue(buildUser());
 
-      await service.create({
-        clerkId: 'clerk-1',
-        email: 'jane@example.com',
-        firstName: 'Jane',
-        lastName: 'Doe',
-      });
+      await service.create(
+        {
+          clerkId: 'clerk-1',
+          email: 'jane@example.com',
+          firstName: 'Jane',
+          lastName: 'Doe',
+        },
+        ACTOR,
+      );
 
       expect(userRepository.findByEmail).toHaveBeenCalledWith(
         'jane@example.com',
@@ -116,7 +124,7 @@ describe('UserService', () => {
     it('throws DuplicateResourceException on duplicate email', async () => {
       userRepository.findByEmail.mockResolvedValue(buildUser());
 
-      await expect(service.create(dto)).rejects.toBeInstanceOf(
+      await expect(service.create(dto, ACTOR)).rejects.toBeInstanceOf(
         DuplicateResourceException,
       );
       expect(userRepository.create).not.toHaveBeenCalled();
@@ -126,7 +134,7 @@ describe('UserService', () => {
       userRepository.findByEmail.mockResolvedValue(null);
       userRepository.findByClerkId.mockResolvedValue(buildUser());
 
-      await expect(service.create(dto)).rejects.toBeInstanceOf(
+      await expect(service.create(dto, ACTOR)).rejects.toBeInstanceOf(
         DuplicateResourceException,
       );
       expect(userRepository.create).not.toHaveBeenCalled();
@@ -140,9 +148,9 @@ describe('UserService', () => {
         buildUser({ role: UserRole.ADMIN }),
       );
 
-      await service.create(dtoWithRole);
+      await service.create(dtoWithRole, ACTOR);
 
-      expect(userRepository.create).toHaveBeenCalledWith(dtoWithRole);
+      expect(userRepository.create).toHaveBeenCalledWith(dtoWithRole, ACTOR);
     });
   });
 
@@ -162,7 +170,7 @@ describe('UserService', () => {
 
       const result = await service.createFromAuthProvider(dto);
 
-      expect(userRepository.createWithRoleSync).toHaveBeenCalledWith(dto);
+      expect(userRepository.createWithRoleSync).toHaveBeenCalledWith(dto, null);
       expect(userRepository.create).not.toHaveBeenCalled();
       expect(result).toBe(created);
     });
@@ -373,6 +381,63 @@ describe('UserService', () => {
   });
 
   describe('update', () => {
+    const admin = 'admin-1';
+
+    it('update from the webhook sets updatedBy null when a profile field changes', async () => {
+      const user = buildUser({ updatedBy: admin });
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.update('user-id-1', { firstName: 'Janet' });
+
+      expect(user.updatedBy).toBeNull();
+      expect(userRepository.save).toHaveBeenCalledWith(user, null);
+    });
+
+    it('update from the webhook keeps updatedBy when only role or status changes', async () => {
+      const user = buildUser({ updatedBy: admin });
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.update('user-id-1', {
+        firstName: 'Jane',
+        lastName: 'Doe',
+        role: UserRole.ADMIN,
+        status: UserStatus.INACTIVE,
+      });
+
+      expect(user.role).toBe(UserRole.ADMIN);
+      expect(user.updatedBy).toBe(admin);
+      expect(userRepository.save).toHaveBeenCalledWith(user, null);
+    });
+
+    it('update from the webhook sets updatedBy null when profile and role both change', async () => {
+      const user = buildUser({ updatedBy: admin });
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.update('user-id-1', {
+        lastName: 'Smith',
+        role: UserRole.ADMIN,
+      });
+
+      expect(user.updatedBy).toBeNull();
+    });
+
+    it('update from the webhook saves nothing when nothing changes', async () => {
+      const user = buildUser({ updatedBy: admin });
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.update('user-id-1', {
+        firstName: 'Jane',
+        lastName: 'Doe',
+        phoneNumber: null,
+        avatarUrl: null,
+        role: UserRole.USER,
+        status: UserStatus.ACTIVE,
+      });
+
+      expect(user.updatedBy).toBe(admin);
+      expect(userRepository.save).not.toHaveBeenCalled();
+    });
+
     it('updates and returns the user', async () => {
       const user = buildUser();
       userRepository.findById.mockResolvedValue(user);
@@ -381,7 +446,7 @@ describe('UserService', () => {
       const result = await service.update('user-id-1', dto);
 
       expect(user.firstName).toBe('Janet');
-      expect(userRepository.save).toHaveBeenCalledWith(user);
+      expect(userRepository.save).toHaveBeenCalledWith(user, null);
       expect(result).toBe(user);
     });
 
@@ -396,85 +461,188 @@ describe('UserService', () => {
   });
 
   describe('updateByAdmin', () => {
-    it('pushes a status change to the auth provider and does not write it to the DB', async () => {
+    it('pushes a status change to the auth provider and records the admin without writing the status', async () => {
       const user = buildUser();
       userRepository.findById.mockResolvedValue(user);
 
-      const result = await service.updateByAdmin('user-id-1', {
-        status: UserStatus.INACTIVE,
-      });
+      const result = await service.updateByAdmin(
+        'user-id-1',
+        {
+          status: UserStatus.INACTIVE,
+        },
+        ACTOR,
+      );
 
       expect(authProvider.syncUserStatus).toHaveBeenCalledWith(
         'clerk-1',
         UserStatus.INACTIVE,
       );
       expect(user.status).toBe(UserStatus.ACTIVE);
-      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(userRepository.save).toHaveBeenCalledWith(user, ACTOR);
       expect(result).toBe(user);
     });
 
-    it('pushes a role change to the auth provider and does not write it to the DB', async () => {
+    it('updateByAdmin stamps updatedBy when only role changes', async () => {
       const user = buildUser();
       userRepository.findById.mockResolvedValue(user);
 
-      await service.updateByAdmin('user-id-1', { role: UserRole.ADMIN });
+      await service.updateByAdmin('user-id-1', { role: UserRole.ADMIN }, ACTOR);
 
       expect(authProvider.syncUserRole).toHaveBeenCalledWith(
         'clerk-1',
         UserRole.ADMIN,
       );
       expect(user.role).toBe(UserRole.USER);
-      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(userRepository.save).toHaveBeenCalledWith(user, ACTOR);
+      expect(
+        authProvider.syncUserRole.mock.invocationCallOrder[0],
+      ).toBeLessThan(userRepository.save.mock.invocationCallOrder[0]);
     });
 
     it('skips the auth provider when role and status are unchanged', async () => {
       const user = buildUser();
       userRepository.findById.mockResolvedValue(user);
 
-      await service.updateByAdmin('user-id-1', {
-        role: UserRole.USER,
-        status: UserStatus.ACTIVE,
-      });
+      await service.updateByAdmin(
+        'user-id-1',
+        {
+          role: UserRole.USER,
+          status: UserStatus.ACTIVE,
+        },
+        ACTOR,
+      );
 
       expect(authProvider.syncUserRole).not.toHaveBeenCalled();
       expect(authProvider.syncUserStatus).not.toHaveBeenCalled();
+    });
+
+    it('updateByAdmin saves nothing when nothing changed', async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.updateByAdmin(
+        'user-id-1',
+        { role: UserRole.USER, status: UserStatus.ACTIVE },
+        ACTOR,
+      );
+
+      expect(userRepository.save).not.toHaveBeenCalled();
     });
 
     it('writes profile fields locally alongside a provider-synced status', async () => {
       const user = buildUser();
       userRepository.findById.mockResolvedValue(user);
 
-      await service.updateByAdmin('user-id-1', {
-        firstName: 'Janet',
-        status: UserStatus.INACTIVE,
-      });
+      await service.updateByAdmin(
+        'user-id-1',
+        {
+          firstName: 'Janet',
+          status: UserStatus.INACTIVE,
+        },
+        ACTOR,
+      );
 
       expect(authProvider.syncUserStatus).toHaveBeenCalled();
       expect(user.firstName).toBe('Janet');
       expect(user.status).toBe(UserStatus.ACTIVE);
-      expect(userRepository.save).toHaveBeenCalledWith(user);
+      expect(userRepository.save).toHaveBeenCalledWith(user, ACTOR);
     });
 
-    it('does not write to the DB when the auth provider call fails', async () => {
+    it('does not apply the profile fields when the auth provider call fails', async () => {
       const user = buildUser();
       userRepository.findById.mockResolvedValue(user);
       authProvider.syncUserStatus.mockRejectedValue(new Error('clerk down'));
 
       await expect(
-        service.updateByAdmin('user-id-1', {
-          firstName: 'Janet',
-          status: UserStatus.INACTIVE,
-        }),
+        service.updateByAdmin(
+          'user-id-1',
+          {
+            firstName: 'Janet',
+            status: UserStatus.INACTIVE,
+          },
+          ACTOR,
+        ),
       ).rejects.toThrow('clerk down');
       expect(user.firstName).toBe('Jane');
-      expect(userRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('records the admin when a status-only push fails, since it may have reached the provider', async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+      authProvider.syncUserStatus.mockRejectedValue(new Error('clerk timeout'));
+
+      await expect(
+        service.updateByAdmin(
+          'user-id-1',
+          { status: UserStatus.INACTIVE },
+          ACTOR,
+        ),
+      ).rejects.toThrow('clerk timeout');
+
+      expect(userRepository.save).toHaveBeenCalledWith(user, ACTOR);
+    });
+
+    it('records the admin when the role push fails, since it may have reached the provider', async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+      authProvider.syncUserRole.mockRejectedValue(new Error('clerk timeout'));
+
+      await expect(
+        service.updateByAdmin('user-id-1', { role: UserRole.ADMIN }, ACTOR),
+      ).rejects.toThrow('clerk timeout');
+
+      expect(userRepository.save).toHaveBeenCalledWith(user, ACTOR);
+    });
+
+    it('keeps the auth provider error when recording the admin fails too', async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+      authProvider.syncUserStatus.mockRejectedValue(new Error('clerk down'));
+      userRepository.save.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.updateByAdmin(
+          'user-id-1',
+          { role: UserRole.ADMIN, status: UserStatus.INACTIVE },
+          ACTOR,
+        ),
+      ).rejects.toThrow('clerk down');
+      expect(
+        authProvider.syncUserRole.mock.invocationCallOrder[0],
+      ).toBeLessThan(userRepository.save.mock.invocationCallOrder[0]);
+    });
+
+    it('records the admin when the role push succeeded but the status push fails', async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+      authProvider.syncUserStatus.mockRejectedValue(new Error('clerk down'));
+
+      await expect(
+        service.updateByAdmin(
+          'user-id-1',
+          {
+            firstName: 'Janet',
+            role: UserRole.ADMIN,
+            status: UserStatus.INACTIVE,
+          },
+          ACTOR,
+        ),
+      ).rejects.toThrow('clerk down');
+
+      expect(authProvider.syncUserRole).toHaveBeenCalled();
+      expect(user.firstName).toBe('Jane');
+      expect(userRepository.save).toHaveBeenCalledWith(user, ACTOR);
     });
 
     it('throws ItemNotFoundException for a missing id', async () => {
       userRepository.findById.mockResolvedValue(null);
 
       await expect(
-        service.updateByAdmin('missing-id', { status: UserStatus.INACTIVE }),
+        service.updateByAdmin(
+          'missing-id',
+          { status: UserStatus.INACTIVE },
+          ACTOR,
+        ),
       ).rejects.toBeInstanceOf(ItemNotFoundException);
       expect(authProvider.syncUserStatus).not.toHaveBeenCalled();
     });
@@ -486,9 +654,13 @@ describe('UserService', () => {
       });
       userRepository.findById.mockResolvedValue(user);
 
-      await service.updateByAdmin('user-id-1', {
-        status: UserStatus.ACTIVE,
-      });
+      await service.updateByAdmin(
+        'user-id-1',
+        {
+          status: UserStatus.ACTIVE,
+        },
+        ACTOR,
+      );
 
       expect(userRepository.findById).toHaveBeenCalledWith('user-id-1', {
         includeDeleted: true,
@@ -505,17 +677,17 @@ describe('UserService', () => {
       const user = buildUser();
       userRepository.findById.mockResolvedValue(user);
 
-      await service.remove('user-id-1');
+      await service.remove('user-id-1', ACTOR);
 
       expect(user.status).toBe(UserStatus.INACTIVE);
-      expect(userRepository.softDelete).toHaveBeenCalledWith(user);
+      expect(userRepository.softDelete).toHaveBeenCalledWith(user, ACTOR);
     });
 
     it('bans the user in Clerk before soft-deleting locally', async () => {
       const user = buildUser();
       userRepository.findById.mockResolvedValue(user);
 
-      await service.remove('user-id-1');
+      await service.remove('user-id-1', ACTOR);
 
       expect(authProvider.syncUserStatus).toHaveBeenCalledWith(
         user.clerkId,
@@ -530,7 +702,7 @@ describe('UserService', () => {
     it('throws ItemNotFoundException for a missing or already-deleted id', async () => {
       userRepository.findById.mockResolvedValue(null);
 
-      await expect(service.remove('missing-id')).rejects.toBeInstanceOf(
+      await expect(service.remove('missing-id', ACTOR)).rejects.toBeInstanceOf(
         ItemNotFoundException,
       );
       expect(userRepository.softDelete).not.toHaveBeenCalled();

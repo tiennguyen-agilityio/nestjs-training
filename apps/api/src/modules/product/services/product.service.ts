@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Product } from '../entities/product.entity.js';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import { DiscountType, ProductStatus, VALIDATION_RULES } from '@repo/constants';
 import {
   type CreateProductInput,
@@ -45,7 +46,7 @@ export class ProductService {
     private readonly productVariantService: ProductVariantService,
   ) {}
 
-  async create(data: CreateProductInput): Promise<Product> {
+  async create(data: CreateProductInput, actorId: ActorId): Promise<Product> {
     const { images = [], variants = [], ...productData } = data;
 
     this.assertExactlyOnePrimary(images);
@@ -66,23 +67,23 @@ export class ProductService {
     await this.categoryService.findOne(productData.categoryId);
 
     const product = await this.productRepository.transactional(async () => {
-      const created = await this.productRepository.create({
-        ...productData,
-        slug: slugFrom(productData.name),
-      });
+      const created = await this.productRepository.create(
+        { ...productData, slug: slugFrom(productData.name) },
+        actorId,
+      );
 
       for (const image of images) {
-        await this.productImageService.create({
-          ...image,
-          productId: created.id,
-        });
+        await this.productImageService.create(
+          { ...image, productId: created.id },
+          actorId,
+        );
       }
 
       for (const variant of variants) {
-        await this.productVariantService.create({
-          ...variant,
-          productId: created.id,
-        });
+        await this.productVariantService.create(
+          { ...variant, productId: created.id },
+          actorId,
+        );
       }
 
       return created;
@@ -119,7 +120,11 @@ export class ProductService {
     return product;
   }
 
-  async update(id: string, data: UpdateProductInput): Promise<Product> {
+  async update(
+    id: string,
+    data: UpdateProductInput,
+    actorId: ActorId,
+  ): Promise<Product> {
     return this.productRepository.transactional(async () => {
       const product = await this.findOne(id);
 
@@ -167,16 +172,16 @@ export class ProductService {
         product.slug = slugFrom(rest.name);
       }
 
-      await this.productRepository.save(product);
+      await this.productRepository.save(product, actorId);
 
       return product;
     });
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actorId: ActorId): Promise<void> {
     const product = await this.findOne(id);
     product.status = ProductStatus.ARCHIVED;
-    await this.productRepository.softDelete(product);
+    await this.productRepository.softDelete(product, actorId);
   }
 
   /**
