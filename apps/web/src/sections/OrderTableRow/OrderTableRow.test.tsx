@@ -1,48 +1,35 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import { PAYMENT_METHOD } from '@/types/checkout'
-import { ORDER_STATUS, SHIPPING_STATUS, type Order } from '@/types/order'
+import {
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+  ShippingStatus,
+} from '@repo/constants'
+
+import { dashboardOrderPath } from '@/constants/routes'
+import type { OrderSummary } from '@/types/order'
 
 import { OrderTableRow } from './index'
 
-function makeOrder(overrides: Partial<Order> = {}): Order {
+function makeOrder(overrides: Partial<OrderSummary> = {}): OrderSummary {
   return {
     id: 'ord-1',
     userId: 'user-1',
     orderNumber: 'SB-9281',
-    status: ORDER_STATUS.PENDING,
-    shippingStatus: SHIPPING_STATUS.SHIPPING,
-    paymentStatus: ORDER_STATUS.PENDING,
-    subTotal: 100,
-    tax: 10,
-    shippingFee: 5,
-    totalAmount: 115,
-    shippingMethodId: 'sm-1',
-    shippingMethodName: 'Standard',
-    paymentMethod: PAYMENT_METHOD.STRIPE,
-    user: {
-      id: 'user-1',
+    customer: {
+      firstName: 'Elena',
+      lastName: 'Vance',
       email: 'elena@example.com',
-      firstName: 'Elena',
-      lastName: 'Vance',
-      name: 'Elena Vance',
-      avatarUrl: null,
     },
-    addressSnapshot: {
-      firstName: 'Elena',
-      lastName: 'Vance',
-      phoneNumber: '0123',
-      addressLine: '1 Main',
-      city: 'HCMC',
-      district: 'D1',
-      ward: 'W1',
-      postalCode: '700000',
-    },
-    items: [],
-    deletedAt: null,
+    status: OrderStatus.PENDING,
+    shippingStatus: ShippingStatus.SHIPPING,
+    paymentStatus: OrderPaymentStatus.UNPAID,
+    paymentMethod: PaymentMethod.COD,
+    itemCount: 2,
+    totalAmount: 115,
     createdAt: '2023-10-24T12:00:00.000Z',
-    updatedAt: '2023-10-24T12:00:00.000Z',
     ...overrides,
   }
 }
@@ -65,33 +52,27 @@ describe('OrderTableRow', () => {
     const row = screen.getByRole('row')
     expect(within(row).getByText('Pending')).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /View order #SB-9281/i }),
-    ).toBeDisabled()
+      screen.getByRole('link', { name: /View order #SB-9281/i }),
+    ).toHaveAttribute('href', dashboardOrderPath('SB-9281'))
     expect(
       screen.getByRole('button', { name: /Delete order #SB-9281/i }),
     ).toBeDisabled()
   })
 
-  it('does not call onRequestView when view is clicked (disabled: order feature not implemented yet)', async () => {
-    const user = userEvent.setup()
-    const order = makeOrder()
-    const onRequestView = jest.fn()
-
+  it("OrderTableRow links View to the order's details page", () => {
     render(
       <table>
         <tbody>
           <tr>
-            <OrderTableRow order={order} onRequestView={onRequestView} />
+            <OrderTableRow order={makeOrder()} />
           </tr>
         </tbody>
       </table>,
     )
 
-    await user.click(
-      screen.getByRole('button', { name: /View order #SB-9281/i }),
-    )
-
-    expect(onRequestView).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('link', { name: 'View order #SB-9281' }),
+    ).toHaveAttribute('href', dashboardOrderPath('SB-9281'))
   })
 
   it('does not call onRequestDelete when delete is clicked (disabled: order feature not implemented yet)', async () => {
@@ -133,42 +114,45 @@ describe('OrderTableRow', () => {
     ).toBeDisabled()
   })
 
-  it('locks status, view, and delete actions for a deleted order', async () => {
-    const user = userEvent.setup()
-    const order = makeOrder({ deletedAt: '2026-01-02T00:00:00.000Z' })
-    const onRequestView = jest.fn()
-    const onRequestDelete = jest.fn()
-
+  it('renders number, date, customer name and email, status, shipping status and total', () => {
     render(
       <table>
         <tbody>
           <tr>
-            <OrderTableRow
-              order={order}
-              onRequestView={onRequestView}
-              onRequestDelete={onRequestDelete}
-            />
+            <OrderTableRow order={makeOrder()} />
+          </tr>
+        </tbody>
+      </table>,
+    )
+
+    const row = within(screen.getByRole('row'))
+    expect(row.getByRole('cell', { name: '#SB-9281' })).toBeInTheDocument()
+    expect(row.getByRole('cell', { name: 'Oct 24, 2023' })).toBeInTheDocument()
+    expect(row.getByRole('cell', { name: /Elena Vance/ })).toHaveTextContent(
+      'elena@example.com',
+    )
+    expect(row.getByRole('cell', { name: /Pending/ })).toBeInTheDocument()
+    expect(row.getByRole('cell', { name: 'Shipping' })).toBeInTheDocument()
+    expect(row.getByRole('cell', { name: '$115.00' })).toBeInTheDocument()
+  })
+
+  it('keeps Delete and the status dropdown disabled', () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <OrderTableRow order={makeOrder()} />
           </tr>
         </tbody>
       </table>,
     )
 
     expect(
-      screen.getByRole('button', { name: /Change order status for #SB-9281/i }),
+      screen.getByRole('button', { name: 'Delete order #SB-9281' }),
     ).toBeDisabled()
     expect(
-      screen.getByRole('button', { name: /Delete order #SB-9281/i }),
+      screen.getByRole('button', { name: 'Change order status for #SB-9281' }),
     ).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: /View order #SB-9281/i }),
-    ).toBeDisabled()
-
-    await user.click(
-      screen.getByRole('button', { name: /View order #SB-9281/i }),
-    )
-
-    expect(onRequestView).not.toHaveBeenCalled()
-    expect(onRequestDelete).not.toHaveBeenCalled()
   })
 
   it('sets title on truncated order id display', () => {

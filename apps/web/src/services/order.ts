@@ -9,23 +9,16 @@ import type {
   Response as ApiResponse,
   ResponseMeta,
 } from '@/types/api'
-import type { OrderStatus } from '@repo/constants'
-import type {
-  Order,
-  OrderDetail,
-  OrderSummary,
-  ORDER_STATUS,
-  PlacedOrder,
-  SHIPPING_STATUS,
-} from '@/types/order'
+import type { OrderStatus, ShippingStatus } from '@repo/constants'
+import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 
 export interface FetchOrdersOptions {
   getToken?: () => Promise<string | null>
   page?: number
   limit?: number
   search?: string
-  status?: string
-  shippingStatus?: string
+  status?: OrderStatus
+  shippingStatus?: ShippingStatus
 }
 
 const toApiErrorResponse = (input: {
@@ -76,24 +69,29 @@ export async function createOrder(
   return { ok: true, order: result.data }
 }
 
+/** Every order (`GET /orders?all=true`): the API answers 403 to anyone but an active admin. */
 export async function fetchOrders(
   options: FetchOrdersOptions = {},
 ): Promise<
-  | { ok: true; orders: Order[]; meta?: ResponseMeta }
+  | { ok: true; orders: OrderSummary[]; meta?: ResponseMeta }
   | { ok: false; error: ApiErrorResponse }
 > {
   const { getToken, page, limit, search, status, shippingStatus } = options
-  const result = await apiClient.get<ApiResponse<Order[]>>(API_ROUTES.ORDERS, {
-    getToken,
-    query: {
-      page,
-      limit,
-      search: search?.trim(),
-      status: status?.trim(),
-      shippingStatus: shippingStatus?.trim(),
+  const result = await apiClient.get<ApiResponse<OrderSummary[]>>(
+    API_ROUTES.ORDERS,
+    {
+      getToken,
+      query: {
+        all: 'true',
+        page,
+        limit,
+        search: search?.trim(),
+        status,
+        shippingStatus,
+      },
+      fallbackError: API_FALLBACK_ERRORS.ORDERS_LOAD,
     },
-    fallbackError: API_FALLBACK_ERRORS.ORDERS_LOAD,
-  })
+  )
   if (!result.ok) {
     return {
       ok: false,
@@ -127,7 +125,7 @@ export async function deleteOrder(
 
 export async function updateOrderStatus(
   id: string,
-  status: ORDER_STATUS,
+  status: OrderStatus,
   options: { getToken?: () => Promise<string | null> } = {},
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const orderId = id.trim()
@@ -150,7 +148,7 @@ export async function updateOrderStatus(
 
 export async function updateOrderShippingStatus(
   id: string,
-  shippingStatus: SHIPPING_STATUS,
+  shippingStatus: ShippingStatus,
   options: { getToken?: () => Promise<string | null> } = {},
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const orderId = id.trim()
@@ -203,7 +201,7 @@ export async function fetchMyOrders(
   return { ok: true, orders: data, meta }
 }
 
-/** One of the signed-in shopper's orders, by order number. */
+/** One order the caller may read (own, or any for an active admin), by order number. */
 export async function fetchOrderDetail(
   orderNumber: string,
   options: { getToken: () => Promise<string | null> },

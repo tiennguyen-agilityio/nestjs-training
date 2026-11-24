@@ -3,6 +3,7 @@ import {
   API_ROUTES,
   ROUTES,
   dashboardEditPath,
+  dashboardOrderPath,
   profileOrderPath,
 } from '@/constants/routes'
 
@@ -13,6 +14,15 @@ describe('routes', () => {
     )
     expect(profileOrderPath('a b/c')).toBe(
       `${ROUTES.USER_PROFILE}/orders/a%20b%2Fc`,
+    )
+  })
+
+  it('dashboardOrderPath encodes the order number under /dashboard/orders', () => {
+    expect(dashboardOrderPath('CH-261117-0001')).toBe(
+      `${ROUTES.DASHBOARD_ORDERS}/CH-261117-0001`,
+    )
+    expect(dashboardOrderPath('a b/c')).toBe(
+      `${ROUTES.DASHBOARD_ORDERS}/a%20b%2Fc`,
     )
   })
 

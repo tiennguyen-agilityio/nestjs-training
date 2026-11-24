@@ -10,11 +10,13 @@ import {
   tagItemErrorsWithLineRefs,
 } from '@/utils/order'
 import {
+  buildOrderDashboardStats,
   formatOrderCustomerName,
   formatOrderDateTime,
   getPaymentStatusPresentation,
 } from '@/utils/order'
-import type { Order } from '@/types/order'
+import type { OrderSummary } from '@/types/order'
+import { OrderStatus, ShippingStatus } from '@repo/constants'
 
 const values = (
   overrides: Partial<CheckoutFormValues> = {},
@@ -181,9 +183,48 @@ describe('getPaymentStatusPresentation', () => {
   })
 })
 
+const summaryOf = (overrides: Partial<OrderSummary> = {}): OrderSummary =>
+  ({
+    id: 'order-1',
+    orderNumber: 'CH-1',
+    customer: { firstName: 'Lan', lastName: 'Nguyen', email: 'lan@x.com' },
+    status: OrderStatus.PENDING,
+    shippingStatus: ShippingStatus.PENDING,
+    totalAmount: 10,
+    ...overrides,
+  }) as OrderSummary
+
 describe('formatOrderCustomerName', () => {
-  it('returns a dash for a list row without addressSnapshot', () => {
-    expect(formatOrderCustomerName({ id: 'order-1' } as Order)).toBe('—')
+  it('formatOrderCustomerName uses the customer', () => {
+    expect(formatOrderCustomerName(summaryOf())).toBe('Lan Nguyen')
+    expect(
+      formatOrderCustomerName(
+        summaryOf({ customer: { firstName: ' ', lastName: '', email: 'a' } }),
+      ),
+    ).toBe('—')
+  })
+})
+
+describe('buildOrderDashboardStats', () => {
+  it('buildOrderDashboardStats counts OrderSummary rows', () => {
+    const stats = buildOrderDashboardStats(
+      [
+        summaryOf({ totalAmount: 10 }),
+        summaryOf({
+          status: OrderStatus.CONFIRMED,
+          shippingStatus: ShippingStatus.SHIPPING,
+          totalAmount: 5.5,
+        }),
+      ],
+      { limit: 10, currentPage: 1, pageCount: 1, totalCount: 2 },
+    )
+
+    expect(stats.map(({ id, value }) => [id, value])).toEqual([
+      ['total-orders', 2],
+      ['processing', 1],
+      ['shipped', 1],
+      ['revenue', expect.stringContaining('15.50')],
+    ])
   })
 })
 

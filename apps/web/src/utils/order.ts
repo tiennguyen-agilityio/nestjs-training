@@ -13,21 +13,20 @@ import {
 import {
   ORDER_STATUS,
   SHIPPING_STATUS,
-  type Order,
+  type OrderSummary,
   type PlacedOrder,
 } from '@/types/order'
 
 import {
   OrderPaymentStatus,
-  type OrderStatus,
-  type ShippingStatus,
+  OrderStatus,
+  ShippingStatus,
 } from '@repo/constants'
 
 import { formatPrice } from './common'
 
-export function formatOrderCustomerName(order: Order): string {
-  // A `GET /orders` list row (OROW) has no addressSnapshot.
-  const { firstName, lastName } = order.addressSnapshot ?? {}
+export function formatOrderCustomerName(order: OrderSummary): string {
+  const { firstName, lastName } = order.customer
   const full = [firstName, lastName].map((s) => s?.trim()).filter(Boolean)
   return full.length > 0 ? full.join(' ') : '—'
 }
@@ -175,7 +174,7 @@ export function getPaymentStatusPresentation(status: OrderPaymentStatus): {
 }
 
 export function buildOrderDashboardStats(
-  orders: Order[],
+  orders: OrderSummary[],
   meta: ResponseMeta | null,
 ): StatCardItem[] {
   const totalCount = meta?.totalCount ?? orders.length
@@ -183,10 +182,10 @@ export function buildOrderDashboardStats(
     meta != null && orders.length > 0 && meta.totalCount > orders.length
 
   const processing = orders.filter(
-    (o) => o.status === ORDER_STATUS.PENDING,
+    (o) => o.status === OrderStatus.PENDING,
   ).length
   const shipped = orders.filter(
-    (o) => o.shippingStatus === SHIPPING_STATUS.SHIPPING,
+    (o) => o.shippingStatus === ShippingStatus.SHIPPING,
   ).length
   const revenueSum = orders.reduce(
     (sum, o) => sum + (Number.isFinite(o.totalAmount) ? o.totalAmount : 0),

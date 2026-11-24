@@ -4,7 +4,7 @@ import type {
   EntityRepository,
   FilterQuery,
 } from '@mikro-orm/core';
-import { ChangeSetType, LockMode, RequestContext } from '@mikro-orm/core';
+import { ChangeSetType, LockMode, raw, RequestContext } from '@mikro-orm/core';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { BaseEntity } from '../entities/base.entity.js';
 import type { AuditableEntity } from '../entities/auditable.entity.js';
@@ -13,6 +13,7 @@ import {
   FindOptions,
   Criteria,
   ListOptions,
+  SearchOptions,
 } from '../interfaces/repository-options.interface.js';
 import { PaginatedResult } from '../dto/pagination.dto.js';
 import { QueryParams } from '../dto/query-params.dto.js';
@@ -24,6 +25,9 @@ import { escapeLikePattern } from '../utils/like-pattern.util.js';
  * to a store written for that library, such as `Outbox.add()`.
  */
 export type TransactionHandle = unknown;
+
+/** A split search uses at most this many words, so a long term cannot build a huge query. */
+const MAX_SEARCH_WORDS = 10;
 
 function isAuditable(entity: object): entity is AuditableEntity {
   return 'updatedBy' in entity;
@@ -278,14 +282,76 @@ export abstract class BaseRepository<T extends BaseEntity> {
   }: ListOptions<T>): FilterQuery<T> {
     const conditions: Record<string, unknown> = { ...where };
     if (search?.term) {
-      const pattern = `%${escapeLikePattern(search.term)}%`;
-      conditions.$or = search.fields.map((field) => ({
-        [field]: { $ilike: pattern },
-      }));
+      const words = this.searchWordsOf(search);
+      if (words.length === 1) {
+        conditions.$or = this.searchFieldsMatch(search, words[0]);
+      } else if (words.length > 1) {
+        conditions.$and = words.map((word) => ({
+          $or: this.searchFieldsMatch(search, word),
+        }));
+      }
     }
     if (excludeId) conditions.id = { $ne: excludeId };
 
     return conditions as FilterQuery<T>;
+  }
+
+  private searchWordsOf({ term = '', splitWords }: SearchOptions<T>): string[] {
+    if (!splitWords) return [term];
+
+    return term
+      .trim()
+      .replace(/^#/, '')
+      .split(/\s+/)
+      .filter((word) => word.length > 0)
+      .slice(0, MAX_SEARCH_WORDS);
+  }
+
+  /** One condition per field: the field contains the word (LIKE characters escaped). */
+  private searchFieldsMatch(
+    { fields, ignoreAccents }: SearchOptions<T>,
+    word: string,
+  ): Record<string, unknown>[] {
+    const pattern = `%${escapeLikePattern(word)}%`;
+
+    return fields.map((field) => {
+      const [first, nested] = field.split('.') as [string, string?];
+      const property = nested ?? first;
+      const match = ignoreAccents
+        ? this.unaccentMatch(nested ? first : null, property, pattern)
+        : { [property]: { $ilike: pattern } };
+
+      return nested ? { [first]: match } : match;
+    });
+  }
+
+  /** `unaccent(<alias>.<column>) ilike unaccent(?)` on this entity or one relation. */
+  private unaccentMatch(
+    relation: string | null,
+    property: string,
+    pattern: string,
+  ): Record<string, unknown> {
+    let meta = this.em.getMetadata().get(this.entity);
+    if (relation) {
+      // Discovery sets `targetMeta` on every relation property.
+      meta = (
+        meta.properties[relation as never] as unknown as {
+          targetMeta: typeof meta;
+        }
+      ).targetMeta;
+    }
+    const properties = meta.properties as Record<
+      string,
+      { fieldNames: string[] }
+    >;
+    const column = properties[property].fieldNames[0];
+
+    return {
+      [raw(
+        (alias: string) => `unaccent(${alias}."${column}") ilike unaccent(?)`,
+        [pattern],
+      )]: [],
+    };
   }
 
   private buildFindOptions(

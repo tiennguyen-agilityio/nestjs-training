@@ -7,6 +7,7 @@ describe('orderQuerySchema', () => {
       limit: 10,
       sort: 'createdAt',
       order: 'DESC',
+      all: false,
     });
   });
 
@@ -23,6 +24,7 @@ describe('orderQuerySchema', () => {
       ...query,
       page: 1,
       limit: 10,
+      all: false,
     });
   });
 
@@ -37,9 +39,19 @@ describe('orderQuerySchema', () => {
     expect(result.error?.issues[0].path).toEqual([field]);
   });
 
-  it('drops search', () => {
-    expect(orderQuerySchema.parse({ search: 'x' })).not.toHaveProperty(
-      'search',
-    );
+  it('keeps search', () => {
+    expect(orderQuerySchema.parse({ search: 'lan' })).toMatchObject({
+      search: 'lan',
+    });
+  });
+
+  it('parses all "true"/"false", defaults it to false and rejects "1"', () => {
+    expect(orderQuerySchema.parse({ all: 'true' }).all).toBe(true);
+    expect(orderQuerySchema.parse({ all: 'false' }).all).toBe(false);
+    expect(orderQuerySchema.parse({}).all).toBe(false);
+
+    const result = orderQuerySchema.safeParse({ all: '1' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].path).toEqual(['all']);
   });
 });

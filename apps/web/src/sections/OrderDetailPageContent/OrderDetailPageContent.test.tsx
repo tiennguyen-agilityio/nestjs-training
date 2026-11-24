@@ -18,7 +18,10 @@ import { formatPrice } from '@/utils/common'
 import { formatOrderDateTime } from '@/utils/order'
 import type { OrderDetail, OrderPayment } from '@/types/order'
 
-jest.mock('next/navigation', () => ({ useParams: jest.fn() }))
+jest.mock('next/navigation', () => ({
+  useParams: jest.fn(),
+  usePathname: jest.fn(() => '/dashboard/orders/CH-261117-0001'),
+}))
 
 jest.mock('@/hooks/useOrder', () => ({ useOrderDetail: jest.fn() }))
 
@@ -83,6 +86,11 @@ const order: OrderDetail = {
     },
   ],
   payments: [charge],
+  customer: {
+    firstName: 'Lan',
+    lastName: 'Nguyen',
+    email: 'lan@example.com',
+  },
   createdAt: '2026-11-17T09:00:00.000Z',
   updatedAt: '2026-11-17T09:00:00.000Z',
 }
@@ -109,6 +117,47 @@ describe('OrderDetailPageContent', () => {
 
   afterEach(() => {
     jest.clearAllMocks()
+  })
+
+  it('OrderDetailPageContent dashboard variant shows the customer and links back to Orders', () => {
+    render(<OrderDetailPageContent variant="dashboard" />)
+
+    const customer = section('Customer')
+    expect(within(customer).getByText('Lan Nguyen')).toBeInTheDocument()
+    expect(within(customer).getByText('lan@example.com')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Back to orders' }),
+    ).toHaveAttribute('href', ROUTES.DASHBOARD_ORDERS)
+    expect(screen.getByRole('link', { name: 'Orders' })).toHaveAttribute(
+      'href',
+      ROUTES.DASHBOARD_ORDERS,
+    )
+    expect(
+      screen.getByRole('heading', { level: 1, name: /CH-261117-0001/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Cancel order' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Profile' })).toBeNull()
+  })
+
+  it('OrderDetailPageContent dashboard variant shows not found with a link back to Orders', () => {
+    mockUseOrderDetail.mockReturnValue(
+      state({ order: null, isError: true, isNotFound: true }),
+    )
+
+    render(<OrderDetailPageContent variant="dashboard" />)
+
+    expect(screen.getByText(ERROR_MESSAGES.ORDER_NOT_FOUND)).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Back to orders' }),
+    ).toHaveAttribute('href', ROUTES.DASHBOARD_ORDERS)
+    expect(screen.queryByRole('link', { name: 'Profile' })).toBeNull()
+  })
+
+  it('the profile variant shows no Customer panel', () => {
+    render(<OrderDetailPageContent />)
+
+    expect(screen.queryByRole('region', { name: 'Customer' })).toBeNull()
   })
 
   it('shows the header with a Profile link, the order number and the placed time', () => {

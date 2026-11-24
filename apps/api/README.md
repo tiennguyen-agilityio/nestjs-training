@@ -518,10 +518,12 @@ The signed-in user's own cart; every success returns the whole cart.
 
 ### Orders
 
-| Method | Path                   | Auth | Description                                                                                                                                                                                                                                                                                  |
-| :----- | :--------------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST` | `/orders`              | 🔒   | Place an order from my cart (`Idempotency-Key` required): holds the stock (`reserved_quantity` + a `RESERVE` movement), copies names, prices and the method's fee, adds 10% tax, creates a PENDING CHARGE and empties the cart; any 400 saves nothing                                        |
-| `POST` | `/orders/:id/payments` | 🔒   | Start the online payment of my CARD order: opens a card-only Stripe Checkout Session and returns `{ paymentId, checkoutUrl, expiresAt }`; the same URL while it is open. 404 for another user's order, 400 `paymentMethodNotOnline` for COD, 409 `paymentNotPayable` / `paymentOrderExpired` |
+| Method | Path                       | Auth | Description                                                                                                                                                                                                                                                                                  |
+| :----- | :------------------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/orders`                  | 🔒   | Place an order from my cart (`Idempotency-Key` required): holds the stock (`reserved_quantity` + a `RESERVE` movement), copies names, prices and the method's fee, adds 10% tax, creates a PENDING CHARGE and empties the cart; any 400 saves nothing                                        |
+| `POST` | `/orders/:id/payments`     | 🔒   | Start the online payment of my CARD order: opens a card-only Stripe Checkout Session and returns `{ paymentId, checkoutUrl, expiresAt }`; the same URL while it is open. 404 for another user's order, 400 `paymentMethodNotOnline` for COD, 409 `paymentNotPayable` / `paymentOrderExpired` |
+| `GET`  | `/orders`                  | 🔒   | My orders; an active admin with `all=true` gets every order (anyone else: 403). `search` (every word, accents ignored: order number, recipient, customer name or email), `status`, `shippingStatus`, `paymentStatus`, `sort`, `order`; paginated, newest first                               |
+| `GET`  | `/orders/:idOrOrderNumber` | 🔒   | My order (by id or order number) with its items, payments and customer; an active admin reads any order; otherwise 404                                                                                                                                                                       |
 
 ### Health
 
@@ -561,6 +563,10 @@ pnpm run seeder:run         # run seeders
 The transactional outbox (`@nestjs/outbox`) keeps its tables in the `nest_outbox` schema, created by a
 migration like any other table. The store checks that schema at startup: until `migration:up` has run
 on a database (local, `.env.test`'s e2e database, develop), the API does not start.
+
+The order search needs Postgres's `unaccent` extension, created by a migration
+(`create extension if not exists unaccent`). Until `migration:up` has run on a database (local,
+`.env.test`'s e2e database, develop, production), `GET /orders?search=…` returns a 500.
 
 ## Testing
 

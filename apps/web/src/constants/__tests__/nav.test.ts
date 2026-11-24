@@ -15,12 +15,12 @@ describe('nav constants', () => {
     expect(MENU_DISABLED_HINT).toBe('Coming soon')
   })
 
-  it('only disables favorites, orders, and settings entries in dashboard', () => {
+  it('only disables favorites and settings entries in dashboard', () => {
     const disabledByLabel = DASHBOARD_MENU.filter((item) => item.disabled).map(
       (item) => item.label,
     )
 
-    expect(disabledByLabel).toEqual(['Favorites', 'Orders', 'Settings'])
+    expect(disabledByLabel).toEqual(['Favorites', 'Settings'])
   })
 
   it('lists an enabled Shipping methods entry right after Products', () => {

@@ -14,7 +14,7 @@ import type { OrderDetail, OrderPayment } from '@/types/order'
 import { EMPTY_IMAGE } from '@/constants/images'
 import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
 import { PAYMENT_METHOD_LABELS } from '@/constants/order'
-import { ROUTES } from '@/constants/routes'
+import { ROUTES, dashboardOrderPath } from '@/constants/routes'
 
 // Hooks
 import { useOrderDetail } from '@/hooks/useOrder'
@@ -32,9 +32,12 @@ import {
 // Components
 import { Button } from '@/components/ui/button'
 import Loading from '@/components/Loading'
+import PageHeader from '@/components/PageHeader'
 
 export interface OrderDetailPageContentProps {
   className?: string
+  /** `dashboard`: the admin's page (breadcrumbs, Customer panel, no Cancel panel). */
+  variant?: 'profile' | 'dashboard'
 }
 
 const PILL_CLASS = 'inline-flex rounded-full px-3 py-1 text-xs font-semibold'
@@ -369,6 +372,31 @@ function CancelPanel({ order }: { order: OrderDetail }) {
   )
 }
 
+function CustomerPanel({ order }: { order: OrderDetail }) {
+  const { firstName, lastName, email } = order.customer
+  return (
+    <Panel title="Customer">
+      <div className="flex flex-col gap-1 text-sm">
+        <p className="break-words font-semibold">
+          {[firstName, lastName].filter(Boolean).join(' ')}
+        </p>
+        <p className="break-words text-on-surface-variant">{email}</p>
+      </div>
+    </Panel>
+  )
+}
+
+function BackToOrdersLink() {
+  return (
+    <Link
+      href={ROUTES.DASHBOARD_ORDERS}
+      className="text-xs font-semibold uppercase tracking-widest text-primary underline-offset-4 hover:underline"
+    >
+      Back to orders
+    </Link>
+  )
+}
+
 function ProfileLink() {
   return (
     <Link
@@ -382,19 +410,31 @@ function ProfileLink() {
 
 export default function OrderDetailPageContent({
   className,
+  variant = 'profile',
 }: OrderDetailPageContentProps) {
   const { orderNumber = '' } = useParams<{ orderNumber: string }>()
   const { order, isLoading, isError, isNotFound, errorMessage, refetch } =
     useOrderDetail(orderNumber || null)
+  const isDashboard = variant === 'dashboard'
+  const BackLink = isDashboard ? BackToOrdersLink : ProfileLink
 
   return (
-    <div className={cn('bg-background text-on-background', className)}>
-      <div className="mx-auto max-w-7xl px-8 pb-24 pt-16 md:pt-20">
+    <div
+      className={cn(
+        !isDashboard && 'bg-background text-on-background',
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          !isDashboard && 'mx-auto max-w-7xl px-8 pb-24 pt-16 md:pt-20',
+        )}
+      >
         {isLoading ? (
           <Loading size="lg" label="Loading order" />
         ) : isNotFound ? (
           <div className="flex flex-col items-start gap-4">
-            <ProfileLink />
+            <BackLink />
             <p className="text-lg text-on-surface">
               {ERROR_MESSAGES.ORDER_NOT_FOUND}
             </p>
@@ -417,24 +457,48 @@ export default function OrderDetailPageContent({
           </div>
         ) : order ? (
           <>
-            <header className="mb-10 flex flex-col gap-2">
-              <ProfileLink />
-              <h1 className="font-headline text-4xl text-on-surface md:text-5xl">
-                Order <span className="font-mono">{order.orderNumber}</span>
-              </h1>
-              <p className="text-on-surface-variant">
-                Placed {formatOrderDateTime(order.createdAt)}
-              </p>
-            </header>
+            {isDashboard ? (
+              <div className="mb-6 flex flex-col gap-4">
+                <PageHeader
+                  breadcrumbItems={[
+                    { label: 'Dashboard', href: ROUTES.DASHBOARD },
+                    { label: 'Orders', href: ROUTES.DASHBOARD_ORDERS },
+                    {
+                      label: `#${order.orderNumber}`,
+                      href: dashboardOrderPath(order.orderNumber),
+                    },
+                  ]}
+                  title={
+                    <>
+                      Order{' '}
+                      <span className="font-mono">{order.orderNumber}</span>
+                    </>
+                  }
+                  description={`Placed ${formatOrderDateTime(order.createdAt)}`}
+                />
+                <BackToOrdersLink />
+              </div>
+            ) : (
+              <header className="mb-10 flex flex-col gap-2">
+                <ProfileLink />
+                <h1 className="font-headline text-4xl text-on-surface md:text-5xl">
+                  Order <span className="font-mono">{order.orderNumber}</span>
+                </h1>
+                <p className="text-on-surface-variant">
+                  Placed {formatOrderDateTime(order.createdAt)}
+                </p>
+              </header>
+            )}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
               <div className="flex min-w-0 flex-col gap-6">
                 <ItemsPanel order={order} />
                 <ProgressPanel order={order} />
               </div>
               <div className="flex min-w-0 flex-col gap-6">
+                {isDashboard && <CustomerPanel order={order} />}
                 <PaymentPanel order={order} />
                 <ShipToPanel order={order} />
-                <CancelPanel order={order} />
+                {!isDashboard && <CancelPanel order={order} />}
               </div>
             </div>
           </>

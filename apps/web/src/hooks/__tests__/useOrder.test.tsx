@@ -2,10 +2,10 @@ import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuth } from '@clerk/nextjs'
-import { OrderStatus, PaymentMethod } from '@repo/constants'
+import { OrderStatus, PaymentMethod, ShippingStatus } from '@repo/constants'
 import type { PlaceOrderPayload } from '@repo/schemas'
 
-import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
+import { CLERK_SESSION_TEMPLATE, PAGE_SIZE } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import {
   orderDetailRetry,
@@ -13,8 +13,14 @@ import {
   useCreateOrder,
   useMyOrders,
   useOrderDetail,
+  useOrders,
 } from '@/hooks/useOrder'
-import { createOrder, fetchMyOrders, fetchOrderDetail } from '@/services/order'
+import {
+  createOrder,
+  fetchMyOrders,
+  fetchOrderDetail,
+  fetchOrders,
+} from '@/services/order'
 import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 import { ServiceError } from '@/utils/query'
 
@@ -142,6 +148,7 @@ describe('useCreateOrder', () => {
 const mockUseAuth = jest.mocked(useAuth)
 const mockFetchMyOrders = jest.mocked(fetchMyOrders)
 const mockFetchOrderDetail = jest.mocked(fetchOrderDetail)
+const mockFetchOrders = jest.mocked(fetchOrders)
 
 const clerkGetToken = jest.fn().mockResolvedValue('clerk-token')
 
@@ -188,6 +195,82 @@ describe('ordersQueryKeys', () => {
       'u1',
       'CH-1',
     ])
+  })
+})
+
+describe('ordersQueryKeys.all', () => {
+  it('ordersQueryKeys.all carries the user id and the filters', () => {
+    expect(ordersQueryKeys.all('u1', {})).toEqual([
+      'orders',
+      'all',
+      'u1',
+      1,
+      PAGE_SIZE,
+      '',
+      '',
+      '',
+    ])
+    expect(
+      ordersQueryKeys.all('u2', {
+        page: 3,
+        limit: 20,
+        search: 'lan',
+        status: OrderStatus.PENDING,
+        shippingStatus: ShippingStatus.SHIPPING,
+      }),
+    ).toEqual(['orders', 'all', 'u2', 3, 20, 'lan', 'PENDING', 'SHIPPING'])
+  })
+})
+
+describe('useOrders', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('useOrders waits for Clerk and a signed-in user', async () => {
+    signedIn('u1', false)
+
+    const { result } = renderWithClient(() => useOrders({ page: 1 }))
+
+    expect(result.current.isLoading).toBe(true)
+    expect(mockFetchOrders).not.toHaveBeenCalled()
+  })
+
+  it('useOrders passes the filters and the session token to fetchOrders', async () => {
+    signedIn()
+    mockFetchOrders.mockResolvedValue({ ok: true, orders: [summaryRow], meta })
+
+    const { result } = renderWithClient(() =>
+      useOrders({ page: 2, search: 'lan', status: OrderStatus.PENDING }),
+    )
+
+    await waitFor(() => expect(result.current.orders).toEqual([summaryRow]))
+    expect(mockFetchOrders).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 2,
+        search: 'lan',
+        status: OrderStatus.PENDING,
+      }),
+    )
+    const passed = mockFetchOrders.mock.calls[0][0]?.getToken
+    await passed?.()
+    expect(clerkGetToken).toHaveBeenCalledWith({
+      template: CLERK_SESSION_TEMPLATE,
+    })
+    expect(result.current.meta).toEqual(meta)
+  })
+
+  it('useOrders exposes the service error message', async () => {
+    signedIn()
+    mockFetchOrders.mockResolvedValue({
+      ok: false,
+      error: { statusCode: 403, message: 'Forbidden', errors: [] },
+    })
+
+    const { result } = renderWithClient(() => useOrders({ page: 1 }))
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.errorMessage).toBe('Forbidden')
   })
 })
 
