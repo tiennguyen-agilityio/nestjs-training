@@ -111,6 +111,9 @@ export const NOTICE_MESSAGES = {
     MESSAGE: 'This product has been deleted, so it can no longer be edited.',
     ACTION: 'Back to products',
   },
+  SHIPPING_METHODS_EMPTY: {
+    MESSAGE: 'No delivery options available right now.',
+  },
   SHIPPING_METHOD_DELETED_LOCKED: 'Deleted shipping methods cannot be modified',
 }
 

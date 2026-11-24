@@ -1,4 +1,4 @@
-import type { ShippingMethodStatus } from '@repo/constants'
+import { ShippingMethodStatus, VALIDATION_RULES } from '@repo/constants'
 import type {
   CreateShippingMethodPayload,
   UpdateShippingMethodPayload,
@@ -123,4 +123,35 @@ export async function deleteShippingMethod(
   if (!result.ok) return result
 
   return { ok: true }
+}
+
+/**
+ * The methods a shopper can pick at checkout: a public read, no token. The
+ * session cookie still reaches the API, which lists every method to an active
+ * admin, so the query asks for ACTIVE ones and the result keeps only those.
+ */
+export async function fetchActiveShippingMethods(): Promise<
+  | { ok: true; shippingMethods: ShippingMethod[] }
+  | { ok: false; error: string; status?: number }
+> {
+  const result = await apiClient.get<ApiResponse<ShippingMethod[]>>(
+    API_ROUTES.SHIPPING_METHODS,
+    {
+      skipAuth: true,
+      query: {
+        limit: VALIDATION_RULES.PAGINATION.MAX_LIMIT,
+        status: ShippingMethodStatus.ACTIVE,
+      },
+      fallbackError: API_FALLBACK_ERRORS.SHIPPING_METHODS_LOAD,
+    },
+  )
+  if (!result.ok) return result
+
+  const shippingMethods = result.data.data.filter(
+    (method) =>
+      method.status === ShippingMethodStatus.ACTIVE &&
+      method.deletedAt === null,
+  )
+
+  return { ok: true, shippingMethods }
 }

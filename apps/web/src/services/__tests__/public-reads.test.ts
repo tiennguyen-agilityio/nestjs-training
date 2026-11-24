@@ -1,6 +1,7 @@
 import { setDefaultTokenGetter } from '@/services/api'
 import { fetchCategories, fetchCategoryById } from '@/services/category'
 import { fetchProductById, fetchProducts } from '@/services/product'
+import { fetchActiveShippingMethods } from '@/services/shippingMethod'
 import { fetchUsers } from '@/services/user'
 
 const authorizationOf = (fetchMock: jest.Mock): string | null => {
@@ -43,6 +44,11 @@ describe('public reads never carry the session token', () => {
       'fetchCategoryById',
       () => fetchCategoryById('c-1'),
       { data: { id: 'c-1' } },
+    ],
+    [
+      'fetchActiveShippingMethods',
+      () => fetchActiveShippingMethods(),
+      { data: [] },
     ],
   ])('%s sends no Authorization header', async (_name, call, body) => {
     const fetchMock = mockJson(body)

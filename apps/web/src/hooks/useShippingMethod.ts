@@ -17,6 +17,7 @@ import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import {
   createShippingMethod,
   deleteShippingMethod,
+  fetchActiveShippingMethods,
   fetchShippingMethodById,
   fetchShippingMethods,
   updateShippingMethod,
@@ -29,6 +30,7 @@ import {
   listQueryOptions,
   throwIfServiceFailed,
   toQueryResult,
+  type QueryResultState,
 } from '@/utils/query'
 
 type ShippingMethodListParams = Omit<ShippingMethodListOptions, 'getToken'>
@@ -224,4 +226,39 @@ export function useDeleteShippingMethod() {
       await invalidateShippingMethods(queryClient)
     },
   })
+}
+
+export interface UseActiveShippingMethodsResult extends QueryResultState {
+  shippingMethods: ShippingMethod[]
+}
+
+const NO_SHIPPING_METHODS: ShippingMethod[] = []
+
+/**
+ * Not under `['shipping-methods', 'list']`: the admin list caches another
+ * shape there, and `updateCachedLists` rewrites every query with that prefix.
+ */
+export function activeShippingMethodsQueryKey() {
+  return ['shipping-methods', 'active'] as const
+}
+
+/** The methods a shopper can pick at checkout (a public read, no token). */
+export const useActiveShippingMethods = (): UseActiveShippingMethodsResult => {
+  const query = useQuery({
+    queryKey: activeShippingMethodsQueryKey(),
+    queryFn: async () => {
+      const result = await fetchActiveShippingMethods()
+      if (!result.ok) throwIfServiceFailed(result)
+      return result.shippingMethods
+    },
+    ...listQueryOptions,
+  })
+
+  return {
+    shippingMethods: query.data ?? NO_SHIPPING_METHODS,
+    ...toQueryResult(query),
+    // Pending, not fetching: a request paused offline has no answer yet, so
+    // checkout must not read it as "no delivery options".
+    isLoading: query.isPending,
+  }
 }

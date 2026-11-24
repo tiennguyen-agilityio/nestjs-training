@@ -36,21 +36,6 @@ export const ORDERS = [
   },
 ]
 
-export const DELIVERY_SPEED = [
-  {
-    id: '9a227cdd-9e98-4c3d-99e4-ff74a2c5ffa6',
-    name: 'Artisanal Standard',
-    description: '3-5 business days',
-    price: 0,
-  },
-  {
-    id: '7f7ebc14-0a2a-4b47-9423-7b107a00f35d',
-    name: 'Roast Express',
-    description: '1-2 business days',
-    price: 12,
-  },
-]
-
 export const ALL_ORDER_STATUSES_VALUE = 'all'
 
 export const ORDER_STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [

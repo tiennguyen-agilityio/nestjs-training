@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 
 import { CheckoutOrderSummary } from '@/components/CheckoutOrderSummary'
 import { CheckoutPaymentMethod } from '@/components/CheckoutPaymentMethod'
+import CheckoutShippingMethods from '@/components/CheckoutShippingMethods'
 import { Input } from '@/components/Input'
 import { Button } from '@/components/ui/button'
 // import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
@@ -22,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
+import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
 // import { useCreateOrder } from '@/hooks/useOrder'
 import { parseCheckoutValues } from '@/schemas/checkout'
 import {
@@ -47,13 +49,11 @@ import {
   type OrderPayload,
 } from '@/types/order'
 import type { User } from '@/types/user'
-import { DELIVERY_SPEED } from '@/constants/order'
 import {
   mapItemFieldErrorsToLineIdMessages,
   omitSubmitErrorsForRemovedLine,
   // tagItemErrorsWithLineRefs,
 } from '@/utils/order'
-import { formatPrice } from '@/utils/common'
 import { isCartItemOutOfStock } from '@/utils/inventory'
 
 type CheckoutFieldErrors = Partial<Record<keyof CheckoutFormValues, string>>
@@ -84,9 +84,7 @@ const CheckoutPageContent = () => {
     null,
   )
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState(
-    DELIVERY_SPEED[0]?.id ?? '',
-  )
+  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState('')
   const [addressSuggestions, setAddressSuggestions] = useState<
     MapboxAddressSuggestion[]
   >([])
@@ -110,15 +108,27 @@ const CheckoutPageContent = () => {
     removeItem,
   } = useCartStore()
   // const { mutate: createOrder } = useCreateOrder()
+  const {
+    shippingMethods,
+    isLoading: isShippingMethodsLoading,
+    isError: isShippingMethodsError,
+    errorMessage: shippingMethodsErrorMessage,
+    refetch: refetchShippingMethods,
+  } = useActiveShippingMethods()
 
   const hasItems = items.length > 0
   const hasOutOfStockItems = items.some(isCartItemOutOfStock)
   // const showCardFields = values.paymentMethod === PAYMENT_METHOD.STRIPE
+  // The shopper's pick while it is still listed; otherwise the first method.
+  const selectedShippingMethod =
+    shippingMethods.find((method) => method.id === selectedShippingMethodId) ??
+    shippingMethods[0]
   const isPlaceOrderDisabled =
-    isLoading || isSubmitting || !hasItems || hasOutOfStockItems
-  const selectedShippingMethod = DELIVERY_SPEED.find(
-    (method) => method.id === selectedShippingMethodId,
-  )
+    isLoading ||
+    isSubmitting ||
+    !hasItems ||
+    hasOutOfStockItems ||
+    !selectedShippingMethod
   const shippingFee = selectedShippingMethod?.price ?? 0
   const checkoutTotals: CartTotals = {
     ...totals,
@@ -334,7 +344,7 @@ const CheckoutPageContent = () => {
         postalCode: result.data.postalCode,
       },
       paymentMethod: result.data.paymentMethod,
-      shippingMethodId: selectedShippingMethodId,
+      shippingMethodId: selectedShippingMethod?.id ?? '',
       items: orderItemPayloads,
     }
 
@@ -373,7 +383,7 @@ const CheckoutPageContent = () => {
       tax: checkoutTotals.tax,
       shippingFee,
       totalAmount: checkoutTotals.total,
-      shippingMethodId: selectedShippingMethodId,
+      shippingMethodId: selectedShippingMethod?.id ?? '',
       shippingMethodName: selectedShippingMethod?.name ?? '',
       paymentMethod: orderPayload.paymentMethod,
       addressSnapshot: orderPayload.shippingAddress,
@@ -754,48 +764,16 @@ const CheckoutPageContent = () => {
             )} */}
           </section>
 
-          <section aria-label="Delivery Speed">
-            <div className="flex items-center justify-start gap-2">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ring text-sm font-semibold text-primary-foreground">
-                3
-              </div>
-              <h2 className="text-2xl font-medium text-on-surface">
-                Delivery Speed
-              </h2>
-            </div>
-            <div className="mt-5 space-y-3">
-              {DELIVERY_SPEED.map(({ id, name, description, price }) => (
-                <label
-                  key={id}
-                  className="flex cursor-pointer items-center justify-between rounded-3xl border border-outline-variant/70 bg-surface-container-low px-4 py-4"
-                  htmlFor={id}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      id={id}
-                      type="radio"
-                      name="delivery-speed"
-                      value={id}
-                      aria-label={name}
-                      checked={selectedShippingMethodId === id}
-                      onChange={() => setSelectedShippingMethodId(id)}
-                      disabled={isSubmitting}
-                      className="size-4 accent-primary"
-                    />
-                    <div>
-                      <p className="font-semibold text-on-surface">{name}</p>
-                      <p className="text-sm text-on-surface-variant">
-                        {description}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="font-semibold text-on-surface">
-                    {price === 0 ? 'Free' : formatPrice(price)}
-                  </p>
-                </label>
-              ))}
-            </div>
-          </section>
+          <CheckoutShippingMethods
+            methods={shippingMethods}
+            selectedId={selectedShippingMethod?.id ?? ''}
+            onSelect={setSelectedShippingMethodId}
+            isLoading={isShippingMethodsLoading}
+            isError={isShippingMethodsError}
+            errorMessage={shippingMethodsErrorMessage}
+            onRetry={() => void refetchShippingMethods()}
+            disabled={isSubmitting}
+          />
         </form>
 
         <CheckoutOrderSummary
