@@ -2,7 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import type { PlaceOrderPayload } from '@repo/schemas'
+
 import { PAGE_SIZE } from '@/constants/common'
+import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import {
   createOrder,
   deleteOrder,
@@ -14,30 +17,49 @@ import {
 import type { ResponseMeta } from '@/types/api'
 import type {
   Order,
-  OrderPayload,
   ORDER_STATUS,
+  PlacedOrder,
   SHIPPING_STATUS,
 } from '@/types/order'
-import { listQueryOptions, toQueryResult } from '@/utils/query'
+import {
+  listQueryOptions,
+  throwIfServiceFailed,
+  toQueryResult,
+} from '@/utils/query'
 
+export const ordersQueryKeys = {
+  root: ['orders'] as const,
+}
+
+const ordersQueryRoot = ordersQueryKeys.root
+
+/**
+ * Places the order. A retry of the same values reuses the `Idempotency-Key`,
+ * so a lost response never places a second order; a failure throws a
+ * `ServiceError` carrying the API's `errors[]`.
+ */
 export function useCreateOrder() {
+  const queryClient = useQueryClient()
+  const idempotency = useIdempotencyKey()
+
   return useMutation({
     mutationFn: async (input: {
-      body: OrderPayload
-      getToken?: () => Promise<string | null>
-    }): Promise<Order> => {
-      const result = await createOrder(input.body, { getToken: input.getToken })
-      if (!result.ok) {
-        throw Object.assign(new Error(result.error.message), {
-          response: { data: result.error },
-        })
-      }
+      body: PlaceOrderPayload
+      getToken: () => Promise<string | null>
+    }): Promise<PlacedOrder> => {
+      const idempotencyKey = idempotency.keyFor(input.body)
+      const result = await sendUntilSettled(() =>
+        createOrder(input.body, { getToken: input.getToken, idempotencyKey }),
+      )
+      if (!result.ok) throwIfServiceFailed(result)
       return result.order
+    },
+    onSuccess: () => {
+      idempotency.clear()
+      void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })
     },
   })
 }
-
-const ordersQueryRoot = ['orders'] as const
 
 export function useDeleteOrder() {
   const queryClient = useQueryClient()

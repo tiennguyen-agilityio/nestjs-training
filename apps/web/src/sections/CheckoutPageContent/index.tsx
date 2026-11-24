@@ -1,7 +1,8 @@
 'use client'
 
 // import { Lock } from 'lucide-react'
-// import { useAuth as useClerkAuth } from '@clerk/nextjs'
+import { useAuth as useClerkAuth } from '@clerk/nextjs'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import {
   useEffect,
@@ -18,15 +19,18 @@ import { CheckoutPaymentMethod } from '@/components/CheckoutPaymentMethod'
 import CheckoutShippingMethods from '@/components/CheckoutShippingMethods'
 import { Input } from '@/components/Input'
 import { Button } from '@/components/ui/button'
-// import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
-// import { ERROR_MESSAGES } from '@/constants/messages'
-import { API_FALLBACK_ERRORS } from '@/constants/messages'
+import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
+import {
+  API_FALLBACK_ERRORS,
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
+} from '@/constants/messages'
 import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
-import { useCart } from '@/hooks/useCart'
+import { cartQueryKeys, useCart } from '@/hooks/useCart'
+import { useCreateOrder } from '@/hooks/useOrder'
 import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
-// import { useCreateOrder } from '@/hooks/useOrder'
 import { parseCheckoutValues } from '@/schemas/checkout'
 import {
   findMapboxAddressSuggestions,
@@ -34,8 +38,8 @@ import {
   type MapboxAddressSuggestion,
 } from '@/services/mapboxGeocode'
 import { useCartStore } from '@/store/useCartStore'
-import type { ApiErrorResponse } from '@/types/api'
-import type { CartTotals } from '@/types/cart'
+import type { ApiErrorResponse, ErrorDetail } from '@/types/api'
+import type { CartItem, CartTotals } from '@/types/cart'
 import {
   PAYMENT_METHOD,
   type CheckoutFormValues,
@@ -43,19 +47,15 @@ import {
   type PaymentMethod,
 } from '@/types/checkout'
 import Loading from '@/components/Loading'
+import { calculateTotal, formatCurrency } from '@/utils/cart'
 import {
-  ORDER_STATUS,
-  SHIPPING_STATUS,
-  type Order,
-  type OrderItem,
-  type OrderPayload,
-} from '@/types/order'
-import type { User } from '@/types/user'
-import {
+  buildPlaceOrderPayload,
   mapItemFieldErrorsToLineIdMessages,
   omitSubmitErrorsForRemovedLine,
-  // tagItemErrorsWithLineRefs,
+  PLACE_ORDER_ERR_CODES,
+  tagItemErrorsWithLineRefs,
 } from '@/utils/order'
+import { ServiceError } from '@/utils/query'
 import { isCartItemBlocked } from '@/utils/inventory'
 
 type CheckoutFieldErrors = Partial<Record<keyof CheckoutFormValues, string>>
@@ -75,10 +75,79 @@ const DEFAULT_VALUES: CheckoutFormValues = {
   cvc: '',
 }
 
+const LINE_ERR_CODES = new Set<string>([
+  PLACE_ORDER_ERR_CODES.OUT_OF_STOCK,
+  PLACE_ORDER_ERR_CODES.ITEM_UNAVAILABLE,
+])
+
+type TaggedLineError = ErrorDetail & {
+  submitLineId?: string
+  submitProductId?: string
+}
+
+/** The same match the row errors use (`mapItemFieldErrorsToLineMessages`). */
+const isErrorOfLine = (error: TaggedLineError, line: CartItem): boolean =>
+  error.submitLineId === line.id &&
+  (error.submitProductId === undefined ||
+    error.submitProductId === line.productId)
+
+const LINE_MESSAGES = [
+  [PLACE_ORDER_ERR_CODES.OUT_OF_STOCK, ERROR_MESSAGES.ORDER_OUT_OF_STOCK],
+  [
+    PLACE_ORDER_ERR_CODES.ITEM_UNAVAILABLE,
+    ERROR_MESSAGES.ORDER_ITEM_UNAVAILABLE,
+  ],
+] as const
+
+/**
+ * The page-level message for the line errors still kept: it names the shown
+ * lines they match, and says the cart changed when one matches no shown line
+ * (gone or replaced after the refetch), so a failed order always says so.
+ */
+const lineErrorMessages = (
+  errors: ErrorDetail[] | undefined,
+  lines: readonly CartItem[],
+): string[] => {
+  const tagged = (errors ?? []) as TaggedLineError[]
+  const messages = LINE_MESSAGES.map(([errCode, message]) => {
+    const names = lines
+      .filter((line) =>
+        tagged.some(
+          (error) => error.errCode === errCode && isErrorOfLine(error, line),
+        ),
+      )
+      .map((line) => line.name)
+    return names.length > 0 ? message(names.join(', ')) : null
+  }).filter((message): message is string => Boolean(message))
+  const hasUnmatched = tagged.some(
+    (error) => !lines.some((line) => isErrorOfLine(error, line)),
+  )
+  if (hasUnmatched) messages.push(ERROR_MESSAGES.ORDER_ITEMS_CHANGED)
+  return messages
+}
+
+/**
+ * The page-level message for an error that names no line. Only mapped codes
+ * get their own text: the API's `description` of other errors can be its
+ * developer message (the exception filter copies it there).
+ */
+const placeOrderErrorMessage = (errors: ErrorDetail[]): string => {
+  const errCodes = new Set(errors.map((error) => error.errCode))
+  if (errCodes.has(PLACE_ORDER_ERR_CODES.CART_EMPTY)) {
+    return ERROR_MESSAGES.ORDER_CART_EMPTY
+  }
+  if (errCodes.has(PLACE_ORDER_ERR_CODES.SHIPPING_METHOD_UNAVAILABLE)) {
+    return ERROR_MESSAGES.ORDER_SHIPPING_METHOD_UNAVAILABLE
+  }
+  return API_FALLBACK_ERRORS.ORDER_CREATE
+}
+
 const CheckoutPageContent = () => {
   const router = useRouter()
-  // const { getToken } = useClerkAuth()
+  const queryClient = useQueryClient()
+  const { getToken } = useClerkAuth()
   const { user } = useAuth()
+  const { mutateAsync: createOrder } = useCreateOrder()
 
   const [values, setValues] = useState<CheckoutFormValues>(DEFAULT_VALUES)
   const [fieldErrors, setFieldErrors] = useState<CheckoutFieldErrors>({})
@@ -87,6 +156,12 @@ const CheckoutPageContent = () => {
   )
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState('')
+  // After the API rejected the method, the shopper picks one again: no fallback.
+  const [mustPickShippingMethod, setMustPickShippingMethod] = useState(false)
+  const [placeOrderError, setPlaceOrderError] = useState<string | null>(null)
+  const [hasPlacedOrder, setHasPlacedOrder] = useState(false)
+  // A line error the API sent for a line Checkout does not show (cart changed).
+  const [hasUnmatchedLineError, setHasUnmatchedLineError] = useState(false)
   const [addressSuggestions, setAddressSuggestions] = useState<
     MapboxAddressSuggestion[]
   >([])
@@ -108,9 +183,8 @@ const CheckoutPageContent = () => {
     refetch,
     removeItem,
   } = useCart()
-  // The mocked Place Order keeps writing the browser store only (#28).
-  const { clearCart, setItemSnapshots } = useCartStore()
-  // const { mutate: createOrder } = useCreateOrder()
+  // Order success reads the placed order from the browser store.
+  const { setItemSnapshots } = useCartStore()
   const {
     shippingMethods,
     isLoading: isShippingMethodsLoading,
@@ -122,10 +196,17 @@ const CheckoutPageContent = () => {
   const hasItems = items.length > 0
   const hasOutOfStockItems = items.some(isCartItemBlocked)
   // const showCardFields = values.paymentMethod === PAYMENT_METHOD.STRIPE
-  // The shopper's pick while it is still listed; otherwise the first method.
+  // The shopper's pick while it is still listed; otherwise the first method,
+  // unless the API rejected the method and the shopper must pick again.
   const selectedShippingMethod =
     shippingMethods.find((method) => method.id === selectedShippingMethodId) ??
-    shippingMethods[0]
+    (mustPickShippingMethod ? undefined : shippingMethods[0])
+
+  const handleSelectShippingMethod = (methodId: string) => {
+    setSelectedShippingMethodId(methodId)
+    setMustPickShippingMethod(false)
+    setPlaceOrderError(null)
+  }
   const isPlaceOrderDisabled =
     isLoading ||
     isSubmitting ||
@@ -136,13 +217,14 @@ const CheckoutPageContent = () => {
   const checkoutTotals: CartTotals = {
     ...totals,
     shipping: shippingFee,
-    total: totals.subtotal + totals.tax + shippingFee,
+    // In cents, as the API adds subTotal + shippingFee + tax.
+    total: calculateTotal({
+      subtotal: totals.subtotal,
+      shipping: shippingFee,
+      tax: totals.tax,
+    }),
   }
 
-  const normalizedTotal = useMemo(
-    () => checkoutTotals.total.toFixed(2),
-    [checkoutTotals.total],
-  )
   const initialUserValues = useMemo<AddressSnapshot>(() => {
     const userAddress = user?.address
 
@@ -321,144 +403,86 @@ const CheckoutPageContent = () => {
       return
     }
 
+    if (isSubmitting || !selectedShippingMethod) {
+      return
+    }
+
     setFieldErrors({})
+    setPlaceOrderError(null)
+    setHasUnmatchedLineError(false)
     setIsSubmitting(true)
+    // The API names failing lines by index, in the order shown at submit.
+    const linesAtSubmit = items
 
-    const orderItemPayloads = items.map((item) => ({
-      variantId: item.variantId,
-      productId: item.productId,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-    }))
-    // const linesAtSubmit = items.map((item) => ({
-    //   id: item.id,
-    //   productId: item.productId,
-    // }))
+    try {
+      const order = await createOrder({
+        body: buildPlaceOrderPayload(result.data, selectedShippingMethod.id),
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+      })
+      setItemSnapshots(order)
+      toast.success(SUCCESS_MESSAGES.ORDER_PLACED, {
+        description: SUCCESS_MESSAGES.ORDER_TOTAL(
+          formatCurrency(order.totalAmount),
+        ),
+      })
+      // Keeps the empty-cart state from flashing while the route changes.
+      setHasPlacedOrder(true)
+      router.push(ROUTES.ORDER_SUCCESS)
+      // The API emptied the server cart: read it again (header count → 0).
+      void queryClient.invalidateQueries({ queryKey: cartQueryKeys.root })
+    } catch (error) {
+      const errors = error instanceof ServiceError ? error.errors : []
+      const errCodes = new Set(errors.map((detail) => detail.errCode))
+      const lineErrors = errors.filter((detail) =>
+        LINE_ERR_CODES.has(detail.errCode),
+      )
 
-    const orderPayload: OrderPayload = {
-      shippingAddress: {
-        firstName: result.data.firstName,
-        lastName: result.data.lastName,
-        phoneNumber: result.data.phoneNumber,
-        addressLine: result.data.addressLine,
-        city: result.data.city,
-        district: result.data.district,
-        ward: result.data.ward,
-        postalCode: result.data.postalCode,
-      },
-      paymentMethod: result.data.paymentMethod,
-      shippingMethodId: selectedShippingMethod?.id ?? '',
-      items: orderItemPayloads,
+      const lineRefs = linesAtSubmit.map((line) => ({
+        id: line.id,
+        productId: line.productId,
+      }))
+      const tagged = tagItemErrorsWithLineRefs(
+        lineErrors,
+        lineRefs,
+      ) as TaggedLineError[]
+      // Only errors tied to a shown line are kept: an untagged one would fall
+      // back to its raw index and flag whatever line the refetch puts there.
+      const taggedLineErrors = tagged.filter(
+        (detail) => detail.submitLineId !== undefined,
+      )
+      const otherErrors = errors.filter(
+        (detail) => !LINE_ERR_CODES.has(detail.errCode),
+      )
+      setHasUnmatchedLineError(taggedLineErrors.length < tagged.length)
+      // Tagged line errors get their banner from the lines still shown (render).
+      setPlaceOrderError(
+        otherErrors.length > 0 || lineErrors.length === 0
+          ? placeOrderErrorMessage(otherErrors)
+          : null,
+      )
+      setSubmitErrors(
+        taggedLineErrors.length > 0
+          ? {
+              statusCode: 400,
+              message: API_FALLBACK_ERRORS.ORDER_CREATE,
+              errors: taggedLineErrors,
+            }
+          : null,
+      )
+      if (
+        lineErrors.length > 0 ||
+        errCodes.has(PLACE_ORDER_ERR_CODES.CART_EMPTY)
+      ) {
+        // The cart changed on the server: show what it holds now.
+        void queryClient.invalidateQueries({ queryKey: cartQueryKeys.root })
+      }
+      if (errCodes.has(PLACE_ORDER_ERR_CODES.SHIPPING_METHOD_UNAVAILABLE)) {
+        setSelectedShippingMethodId('')
+        setMustPickShippingMethod(true)
+        void refetchShippingMethods()
+      }
+      setIsSubmitting(false)
     }
-
-    const fallbackUser: User = {
-      id: '',
-      email: null,
-      firstName: null,
-      lastName: null,
-      name: null,
-      avatarUrl: null,
-    }
-
-    const orderItems: OrderItem[] = items.map((item) => ({
-      id: item.id,
-      productId: item.productId,
-      variantId: item.variantId,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      productName: item.name,
-      productImage: item.imageUrl,
-      variantName: item.meta,
-      finalPrice: item.unitPrice,
-      subTotal: item.unitPrice * item.quantity,
-      discountAmount: 0,
-    }))
-
-    const now = new Date().toISOString()
-    const orderSnapshot: Order = {
-      id: crypto.randomUUID(),
-      userId: user?.id ?? '',
-      orderNumber: `#NB-${Date.now().toString().slice(-6)}`,
-      status: ORDER_STATUS.PENDING,
-      shippingStatus: SHIPPING_STATUS.PENDING,
-      paymentStatus: ORDER_STATUS.PENDING,
-      subTotal: checkoutTotals.subtotal,
-      tax: checkoutTotals.tax,
-      shippingFee,
-      totalAmount: checkoutTotals.total,
-      shippingMethodId: selectedShippingMethod?.id ?? '',
-      shippingMethodName: selectedShippingMethod?.name ?? '',
-      paymentMethod: orderPayload.paymentMethod,
-      addressSnapshot: orderPayload.shippingAddress,
-      items: orderItems,
-      user: user ?? fallbackUser,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-    }
-
-    setItemSnapshots(orderSnapshot)
-    toast.success('Order placed successfully', {
-      description: `Total charged: $${normalizedTotal}`,
-    })
-    router.push(ROUTES.ORDER_SUCCESS)
-    setIsSubmitting(false)
-    setTimeout(() => {
-      clearCart()
-    }, 1000)
-
-    // createOrder(
-    //   {
-    //     body: orderPayload,
-    //     getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
-    //   },
-    //   {
-    //     onSuccess: (data) => {
-    //       setItemSnapshots(data)
-    //       setSubmitErrors(null)
-    //       toast.success('Order placed successfully', {
-    //         description: `Total charged: $${normalizedTotal}`,
-    //       })
-    //       setIsSubmitting(false)
-    //       router.push(ROUTES.ORDER_SUCCESS)
-
-    //       setTimeout(() => {
-    //         clearCart()
-    //       }, 200)
-    //     },
-    //     onError: (error) => {
-    //       setIsSubmitting(false)
-    //       const defaultMessage =
-    //         error instanceof Error
-    //           ? error.message
-    //           : ERROR_MESSAGES.SOMETHING_WENT_WRONG
-
-    //       const responseData = (error as { response?: { data?: unknown } })
-    //         .response?.data
-
-    //       if (responseData && typeof responseData === 'object') {
-    //         const data = responseData as Partial<ApiErrorResponse>
-    //         const rawErrors = Array.isArray(data.errors) ? data.errors : []
-    //         setSubmitErrors({
-    //           statusCode:
-    //             typeof data.statusCode === 'number' ? data.statusCode : 400,
-    //           message:
-    //             typeof data.message === 'string'
-    //               ? data.message
-    //               : defaultMessage,
-    //           errors: tagItemErrorsWithLineRefs(rawErrors, linesAtSubmit),
-    //         })
-    //         return
-    //       }
-
-    //       setSubmitErrors({
-    //         statusCode: 400,
-    //         message: defaultMessage,
-    //         errors: [],
-    //       })
-    //     },
-    //   },
-    // )
   }
 
   const submitLineRefs = useMemo(
@@ -477,14 +501,8 @@ const CheckoutPageContent = () => {
     [items, itemQuantityErrors],
   )
 
-  const hasRootSubmissionError = Boolean(
-    submitErrors &&
-    (submitErrors.errors?.length ?? 0) === 0 &&
-    Boolean(submitErrors.message),
-  )
-
-  const hasBlockingItemErrors =
-    hasVisibleLineSubmitErrors || hasRootSubmissionError
+  // A page-level error leaves Place order enabled, so the shopper can retry.
+  const hasBlockingItemErrors = hasVisibleLineSubmitErrors
 
   // One removal at a time per line: a second DELETE would answer 404.
   const removingLineIds = useRef(new Set<string>())
@@ -494,24 +512,36 @@ const CheckoutPageContent = () => {
     removingLineIds.current.add(lineId)
     void removeItem(lineId)
       .then((result) => {
-        if (!result.ok) toast.error(result.error)
+        if (!result.ok) {
+          // The line stays, so its error and the banner stay too.
+          toast.error(result.error)
+          return
+        }
+        setSubmitErrors((previous) => {
+          const next = omitSubmitErrorsForRemovedLine(
+            previous,
+            lineId,
+            productId,
+          )
+          return (next?.errors?.length ?? 0) === 0 ? null : next
+        })
       })
       .catch(() => toast.error(API_FALLBACK_ERRORS.CART_REMOVE))
       .finally(() => removingLineIds.current.delete(lineId))
-    setSubmitErrors((previous) => {
-      if (!previous) {
-        return null
-      }
-      const next = omitSubmitErrorsForRemovedLine(previous, lineId, productId)
-      const remainingCount = next?.errors?.length ?? 0
-      if (remainingCount === 0) {
-        return null
-      }
-      return next
-    })
   }
 
-  if (isLoading) {
+  // One banner for the whole reply; the cart-changed notice shows once.
+  const submissionMessage =
+    [
+      ...new Set([
+        ...lineErrorMessages(submitErrors?.errors, items),
+        ...(hasUnmatchedLineError ? [ERROR_MESSAGES.ORDER_ITEMS_CHANGED] : []),
+        ...(placeOrderError ? [placeOrderError] : []),
+      ]),
+    ].join(' ') || null
+
+  // After a placed order the emptied cart shows the loader until the route changes.
+  if (isLoading || (hasPlacedOrder && !hasItems)) {
     return (
       <div
         className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-12"
@@ -780,7 +810,7 @@ const CheckoutPageContent = () => {
           <CheckoutShippingMethods
             methods={shippingMethods}
             selectedId={selectedShippingMethod?.id ?? ''}
-            onSelect={setSelectedShippingMethodId}
+            onSelect={handleSelectShippingMethod}
             isLoading={isShippingMethodsLoading}
             isError={isShippingMethodsError}
             errorMessage={shippingMethodsErrorMessage}
@@ -793,11 +823,7 @@ const CheckoutPageContent = () => {
           items={items}
           totals={checkoutTotals}
           onRemoveItem={handleRemoveCheckoutLine}
-          submissionErrorMessage={
-            submitErrors?.errors?.length === 0
-              ? (submitErrors.message ?? null)
-              : null
-          }
+          submissionErrorMessage={submissionMessage}
           itemQuantityErrors={itemQuantityErrors}
           hasBlockingItemErrors={hasBlockingItemErrors}
           onPlaceOrder={() => {

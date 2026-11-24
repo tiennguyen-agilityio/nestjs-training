@@ -1,3 +1,12 @@
+import type {
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod as ApiPaymentMethod,
+  PaymentStatus,
+  PaymentType,
+  ShippingStatus,
+} from '@repo/constants'
+
 import { type AddressSnapshot, type PaymentMethod } from './checkout'
 import { type User } from './user'
 
@@ -31,15 +40,12 @@ export interface OrderItem extends OrderItemPayload {
   discountAmount: number
 }
 
-export interface OrderPayload {
+/** An order in the admin dashboard. */
+export interface Order {
   shippingMethodId: string
   paymentMethod: PaymentMethod
-  shippingAddress: AddressSnapshot
   note?: string
-  items: OrderItemPayload[]
-}
-
-export interface Order extends Omit<OrderPayload, 'shippingAddress'> {
+  items: OrderItem[]
   id: string
   userId: string
   orderNumber: string
@@ -52,9 +58,66 @@ export interface Order extends Omit<OrderPayload, 'shippingAddress'> {
   totalAmount: number
   shippingMethodName: string
   addressSnapshot: AddressSnapshot
-  items: OrderItem[]
   user: User
   createdAt: string
   updatedAt: string
   deletedAt: string | null
+}
+
+/** A line of the API's `ResponseOrderDto` (`POST /orders`). */
+export interface PlacedOrderItem {
+  id: string
+  productVariantId: string
+  productName: string
+  productImage: string
+  variantName: string
+  unitPrice: number
+  discountAmount: number
+  quantity: number
+  lineTotal: number
+}
+
+/** A payment of the API's `ResponseOrderDto`. */
+export interface PlacedOrderPayment {
+  id: string
+  orderId: string
+  type: PaymentType
+  method: ApiPaymentMethod
+  status: PaymentStatus
+  amount: number
+  currency: string
+  transactionId: string | null
+  completedAt: string | null
+  failureReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** The API's `ResponseOrderDto`: the order `POST /orders` saved. */
+export interface PlacedOrder {
+  id: string
+  orderNumber: string
+  userId: string
+  shippingMethodId: string
+  status: OrderStatus
+  shippingStatus: ShippingStatus
+  paymentStatus: OrderPaymentStatus
+  recipientName: string
+  recipientPhone: string
+  addressLine: string
+  ward: string
+  district: string
+  city: string
+  postalCode: string
+  shippingMethodName: string
+  shippingFee: number
+  tax: number
+  subTotal: number
+  totalAmount: number
+  note: string | null
+  expiresAt: string | null
+  items: PlacedOrderItem[]
+  payments: PlacedOrderPayment[]
+  createdAt: string
+  updatedAt: string
 }

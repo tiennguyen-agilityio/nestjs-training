@@ -63,8 +63,21 @@ describe('cart totals helpers', () => {
     expect(buildCartTotals(cartItemsFixture)).toEqual({
       subtotal: 169,
       shipping: null,
-      tax: 0,
-      total: 169,
+      tax: 16.9,
+      total: 185.9,
+    })
+  })
+
+  it('buildCartTotals adds TAX_PERCENT of the subtotal in cents', () => {
+    const items = [
+      { ...cartItemsFixture[0], id: 'a', unitPrice: 0.1 },
+      { ...cartItemsFixture[0], id: 'b', unitPrice: 0.2 },
+    ] as CartItem[]
+    expect(buildCartTotals(items)).toEqual({
+      subtotal: 0.3,
+      shipping: null,
+      tax: 0.03,
+      total: 0.33,
     })
   })
 })
@@ -129,10 +142,21 @@ describe('toCartItem', () => {
       unitPrice: 12.6,
       quantity: 2,
       maxQuantity: 5,
+      listPrice: 14,
       lineTotal: 25.2,
       isUnavailable: false,
       exceedsStock: false,
     })
+  })
+
+  it('toCartItem maps the variant price to listPrice', () => {
+    const item = toCartItem(
+      serverLine({
+        variant: { ...serverLine().variant, price: 20, salePrice: 15 },
+      }),
+    )
+    expect(item.unitPrice).toBe(15)
+    expect(item.listPrice).toBe(20)
   })
 
   it('uses the empty image when the product has none', () => {

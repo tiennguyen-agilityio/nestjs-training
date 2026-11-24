@@ -38,6 +38,17 @@ export const ERROR_MESSAGES = {
   CART_MERGE_SKIPPED: (name: string) => `${name} (out of stock)`,
   CART_LINE_EXCEEDS_STOCK: (left: number, have: number) =>
     `Only ${left} left · you have ${have}`,
+  ORDER_LINE_ERROR:
+    'This item cannot be ordered. Update your cart and try again.',
+  ORDER_OUT_OF_STOCK: (names: string) =>
+    `${names} is out of stock in the quantity you chose. Update your cart and try again.`,
+  ORDER_ITEM_UNAVAILABLE: (names: string) =>
+    `${names} can no longer be bought. Remove it from your cart and try again.`,
+  ORDER_ITEMS_CHANGED:
+    'Some items in your cart changed. Review your cart and try again.',
+  ORDER_CART_EMPTY: 'Your cart is empty. Add an item before checking out.',
+  ORDER_SHIPPING_METHOD_UNAVAILABLE:
+    'This shipping method is no longer available. Choose another one.',
 } as const
 
 // Form validation copy shown by the web forms, in place of the packages'
@@ -94,6 +105,8 @@ export const API_FALLBACK_ERRORS = {
 } as const
 
 export const SUCCESS_MESSAGES = {
+  ORDER_PLACED: 'Order placed successfully',
+  ORDER_TOTAL: (total: string) => `Order total: ${total}`,
   SIGNED_OUT: 'Signed out successfully',
   CATEGORY_CREATED: 'Category created',
   CATEGORY_UPDATED: 'Category updated',

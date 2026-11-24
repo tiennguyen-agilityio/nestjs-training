@@ -1,3 +1,4 @@
+import { VALIDATION_MESSAGES, VALIDATION_RULES } from '@repo/constants'
 import { z } from 'zod'
 
 import { ERROR_MESSAGES } from '@/constants/messages'
@@ -11,7 +12,14 @@ export const checkoutSchema = z
   .object({
     firstName: z.string().trim().min(1, ERROR_MESSAGES.FIRST_NAME_REQUIRED),
     lastName: z.string().trim().min(1, ERROR_MESSAGES.LAST_NAME_REQUIRED),
-    phoneNumber: z.string().trim().min(1, ERROR_MESSAGES.PHONE_NUMBER_REQUIRED),
+    phoneNumber: z
+      .string()
+      .trim()
+      .min(1, ERROR_MESSAGES.PHONE_NUMBER_REQUIRED)
+      .regex(
+        VALIDATION_RULES.PHONE.REGEX,
+        VALIDATION_MESSAGES.invalidFormat('Phone'),
+      ),
     addressLine: z.string().trim().min(1, ERROR_MESSAGES.ADDRESS_REQUIRED),
     city: z.string().trim().min(1, ERROR_MESSAGES.CITY_REQUIRED),
     district: z.string().trim().min(1, ERROR_MESSAGES.DISTRICT_REQUIRED),

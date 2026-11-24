@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
+import SalePrice from '@/components/SalePrice'
 import { Carousel } from '@/components/Carousel'
 import { ProductDetailRatingRow } from '@/components/ProductDetailRatingRow'
 import { ProductDetailSpecGrid } from '@/components/ProductDetailSpecGrid'
@@ -17,9 +18,8 @@ import { OUT_OF_STOCK_LABEL } from '@/constants/order'
 import { SERIES_KICKER } from '@/constants/product'
 import { useProductById } from '@/hooks/useProduct'
 import { type ProductImage } from '@/types/product'
-import { formatPrice } from '@/utils/common'
 import { isProductOutOfStock } from '@/utils/inventory'
-import { getProductListPrice } from '@/utils/product'
+import { getProductPricing } from '@/utils/product'
 import { cn } from '@/utils/styles'
 
 const ROASTS_LIST_HREF = '/roasts'
@@ -85,7 +85,7 @@ export default function RoastDetailPageContent() {
     )
   }
 
-  const listPrice = getProductListPrice(product)
+  const { listPrice, salePrice } = getProductPricing(product)
   const desc = product.description?.trim()
   const tasting = product.tastingNotes?.trim()
 
@@ -158,7 +158,11 @@ export default function RoastDetailPageContent() {
 
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
               <p className="text-3xl font-bold text-primary md:text-4xl">
-                {formatPrice(listPrice)}
+                <SalePrice
+                  price={salePrice}
+                  listPrice={listPrice}
+                  listPriceClassName="text-xl md:text-2xl"
+                />
               </p>
               {product.variants[0]?.name ? (
                 <p className="text-on-surface-variant">

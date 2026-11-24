@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { AlertTriangle, ShoppingBag, Trash2 } from 'lucide-react'
 
+import SalePrice from '@/components/SalePrice'
 import { Button } from '@/components/ui/button'
 import { OUT_OF_STOCK_LABEL } from '@/constants/order'
 import type { CartItem, CartTotals } from '@/types/cart'
@@ -82,7 +83,10 @@ export const CheckoutOrderSummary = ({
                   {item.meta}
                 </p>
                 <p className="mt-1 font-semibold text-primary">
-                  {formatCurrency(item.unitPrice)}
+                  <SalePrice
+                    price={item.unitPrice}
+                    listPrice={item.listPrice}
+                  />
                 </p>
                 {lineOutOfStock && (
                   <p className="mt-1 text-xs font-medium text-destructive">
