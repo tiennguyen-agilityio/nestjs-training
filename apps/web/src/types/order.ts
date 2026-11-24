@@ -66,6 +66,12 @@ export interface PlacedOrderPayment {
   updatedAt: string
 }
 
+export interface PaymentCheckout {
+  paymentId: string
+  checkoutUrl: string
+  expiresAt: string
+}
+
 /** The API's `ResponseOrderDto`: the order `POST /orders` saved. */
 export interface PlacedOrder {
   id: string

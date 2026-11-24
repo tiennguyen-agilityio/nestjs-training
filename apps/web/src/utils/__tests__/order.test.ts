@@ -1,6 +1,12 @@
-import { OrderPaymentStatus, PaymentMethod } from '@repo/constants'
+import {
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
+} from '@repo/constants'
 
-import { ERROR_MESSAGES } from '@/constants/messages'
+import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
 import type { ErrorDetail } from '@/types/api'
 import { PAYMENT_METHOD, type CheckoutFormValues } from '@/types/checkout'
 import {
@@ -14,11 +20,15 @@ import {
   formatOrderCustomerName,
   formatOrderDateTime,
   getCancelOrderErrorMessage,
+  getOrderSuccessPaymentView,
   getPaymentStatusPresentation,
+  PAYMENT_ERR_CODES,
+  paymentErrorMessage,
 } from '@/utils/order'
 import type { OrderSummary } from '@/types/order'
-import { OrderStatus, ShippingStatus } from '@repo/constants'
+import { ShippingStatus } from '@repo/constants'
 import { ServiceError } from '@/utils/query'
+import type { OrderDetail } from '@/types/order'
 
 const values = (
   overrides: Partial<CheckoutFormValues> = {},
@@ -254,6 +264,203 @@ describe('formatOrderDateTime', () => {
       `${pad(d.getDate())} ${month}, ${pad(d.getHours())}:${pad(d.getMinutes())}`,
     )
     expect(formatOrderDateTime('not a date')).toBe('—')
+  })
+})
+
+const charge = (method: PaymentMethod, status: PaymentStatus) => ({
+  id: 'pay-1',
+  orderId: 'o-1',
+  type: PaymentType.CHARGE,
+  method,
+  status,
+  amount: 20,
+  currency: 'usd',
+  transactionId: null,
+  completedAt: null,
+  failureReason: null,
+  createdAt: '2026-11-24T00:00:00.000Z',
+  updatedAt: '2026-11-24T00:00:00.000Z',
+})
+
+const orderOf = (
+  paymentStatus: OrderPaymentStatus,
+  overrides: Partial<OrderDetail> = {},
+): OrderDetail =>
+  ({
+    id: 'o-1',
+    orderNumber: 'NB-000123',
+    status: OrderStatus.PENDING,
+    paymentStatus,
+    payments: [charge(PaymentMethod.CARD, PaymentStatus.PENDING)],
+    ...overrides,
+  }) as OrderDetail
+
+const viewOf = (
+  order: OrderDetail,
+  input: Partial<{
+    hasSessionId: boolean
+    paymentError: string | null
+    isPollExhausted: boolean
+  }> = {},
+) =>
+  getOrderSuccessPaymentView({
+    order,
+    hasSessionId: false,
+    paymentError: null,
+    isPollExhausted: false,
+    ...input,
+  })
+
+describe('paymentErrorMessage', () => {
+  it('paymentErrorMessage maps each PAYMENT_ERR_CODES value', () => {
+    expect(paymentErrorMessage(PAYMENT_ERR_CODES.ORDER_EXPIRED)).toBe(
+      ERROR_MESSAGES.PAYMENT_ORDER_EXPIRED,
+    )
+    expect(paymentErrorMessage(PAYMENT_ERR_CODES.NOT_PAYABLE)).toBe(
+      ERROR_MESSAGES.PAYMENT_NOT_PAYABLE,
+    )
+    expect(paymentErrorMessage(PAYMENT_ERR_CODES.GATEWAY_UNAVAILABLE)).toBe(
+      ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE,
+    )
+    expect(paymentErrorMessage(PAYMENT_ERR_CODES.GATEWAY_REJECTED)).toBe(
+      ERROR_MESSAGES.PAYMENT_GATEWAY_REJECTED,
+    )
+    expect(paymentErrorMessage(PAYMENT_ERR_CODES.METHOD_UNAVAILABLE)).toBe(
+      ERROR_MESSAGES.PAYMENT_METHOD_UNAVAILABLE,
+    )
+  })
+
+  it('an unknown code gives the generic message', () => {
+    for (const code of ['<b>hi</b>', '', null, undefined]) {
+      expect(paymentErrorMessage(code)).toBe(API_FALLBACK_ERRORS.PAYMENT_START)
+    }
+  })
+})
+
+describe('getOrderSuccessPaymentView', () => {
+  it('PAID is paid', () => {
+    for (const hasSessionId of [true, false]) {
+      expect(
+        viewOf(orderOf(OrderPaymentStatus.PAID), { hasSessionId }),
+      ).toEqual({
+        kind: 'paid',
+        badgeStatus: OrderPaymentStatus.PAID,
+        canPayNow: false,
+        errorMessage: null,
+      })
+    }
+  })
+
+  it('a PAID order ignores paymentError', () => {
+    expect(
+      viewOf(orderOf(OrderPaymentStatus.PAID), {
+        paymentError: PAYMENT_ERR_CODES.GATEWAY_UNAVAILABLE,
+      }).errorMessage,
+    ).toBeNull()
+  })
+
+  it('PENDING or FAILED with a session is confirming', () => {
+    for (const status of [
+      OrderPaymentStatus.PENDING,
+      OrderPaymentStatus.FAILED,
+    ]) {
+      expect(viewOf(orderOf(status), { hasSessionId: true })).toEqual(
+        expect.objectContaining({
+          kind: 'confirming',
+          badgeStatus: OrderPaymentStatus.PENDING,
+          canPayNow: false,
+        }),
+      )
+    }
+  })
+
+  it('PENDING with a session after the last poll is stillConfirming without Pay now', () => {
+    expect(
+      viewOf(orderOf(OrderPaymentStatus.PENDING), {
+        hasSessionId: true,
+        isPollExhausted: true,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        kind: 'stillConfirming',
+        badgeStatus: OrderPaymentStatus.PENDING,
+        canPayNow: false,
+      }),
+    )
+  })
+
+  it('FAILED with a session after the last poll is failed with Pay now', () => {
+    expect(
+      viewOf(orderOf(OrderPaymentStatus.FAILED), {
+        hasSessionId: true,
+        isPollExhausted: true,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        kind: 'failed',
+        badgeStatus: OrderPaymentStatus.FAILED,
+        canPayNow: true,
+      }),
+    )
+  })
+
+  it('PENDING or UNPAID without a session is not completed with Pay now', () => {
+    for (const status of [
+      OrderPaymentStatus.PENDING,
+      OrderPaymentStatus.UNPAID,
+    ]) {
+      expect(viewOf(orderOf(status))).toEqual({
+        kind: 'notCompleted',
+        badgeStatus: status,
+        canPayNow: true,
+        errorMessage: null,
+      })
+    }
+  })
+
+  it('unpaid with a paymentError shows its reason and Pay now', () => {
+    expect(
+      viewOf(orderOf(OrderPaymentStatus.UNPAID), {
+        paymentError: PAYMENT_ERR_CODES.GATEWAY_UNAVAILABLE,
+      }),
+    ).toEqual({
+      kind: 'notCompleted',
+      badgeStatus: OrderPaymentStatus.UNPAID,
+      canPayNow: true,
+      errorMessage: ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE,
+    })
+  })
+
+  it('FAILED without a session is failed with Pay now', () => {
+    expect(viewOf(orderOf(OrderPaymentStatus.FAILED))).toEqual(
+      expect.objectContaining({
+        kind: 'failed',
+        badgeStatus: OrderPaymentStatus.FAILED,
+        canPayNow: true,
+      }),
+    )
+  })
+
+  it('a non-CARD order never offers Pay now', () => {
+    for (const method of [PaymentMethod.COD, PaymentMethod.PAYPAL]) {
+      const order = orderOf(OrderPaymentStatus.UNPAID, {
+        payments: [charge(method, PaymentStatus.PENDING)],
+      })
+      expect(viewOf(order).canPayNow).toBe(false)
+    }
+  })
+
+  it('an order no longer PENDING never offers Pay now', () => {
+    const order = orderOf(OrderPaymentStatus.FAILED, {
+      status: OrderStatus.CONFIRMED,
+    })
+    expect(viewOf(order).canPayNow).toBe(false)
+  })
+
+  it('a refund status is badgeOnly', () => {
+    expect(viewOf(orderOf(OrderPaymentStatus.REFUNDED))).toEqual(
+      expect.objectContaining({ kind: 'badgeOnly', canPayNow: false }),
+    )
   })
 })
 

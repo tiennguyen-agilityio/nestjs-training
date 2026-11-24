@@ -2,6 +2,7 @@
 
 import { useAuth } from '@clerk/nextjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import {
   VALIDATION_RULES,
   type OrderStatus,
@@ -11,6 +12,7 @@ import {
 import type { PlaceOrderPayload } from '@repo/schemas'
 
 import { CLERK_SESSION_TEMPLATE, PAGE_SIZE } from '@/constants/common'
+import { ORDER_PAYMENT_POLL } from '@/constants/order'
 import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import {
   cancelOrder,
@@ -268,16 +270,39 @@ export interface UseOrderDetailResult {
   isNotFound: boolean
   errorMessage: string | null
   refetch: () => Promise<void>
+  isPollExhausted?: boolean
 }
+
+export interface UseOrderDetailOptions {
+  pollWhile?: (order: OrderDetail) => boolean
+}
+
+const fetchesOf = (
+  state: { dataUpdateCount: number; errorUpdateCount: number } | undefined,
+): number => (state ? state.dataUpdateCount + state.errorUpdateCount : 0)
+
+const pollsRunOf = (fetchCount: number, baseCount: number): number =>
+  Math.max(fetchCount - Math.max(baseCount, 1), 0)
 
 /** One order the caller may read (own, or any for an active admin); nothing is fetched without an order number. */
 export function useOrderDetail(
   orderNumber: string | null,
+  options: UseOrderDetailOptions = {},
 ): UseOrderDetailResult {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth()
+  const queryClient = useQueryClient()
+  const { pollWhile } = options
+  const queryKey = ordersQueryKeys.detail(userId ?? '', orderNumber ?? '')
+  const keyId = queryKey.join('|')
+  const countOf = () => fetchesOf(queryClient.getQueryState(queryKey))
+  const [pollBase, setPollBase] = useState(() => ({
+    keyId,
+    hasData: queryClient.getQueryData(queryKey) !== undefined,
+    count: countOf(),
+  }))
 
   const query = useQuery({
-    queryKey: ordersQueryKeys.detail(userId ?? '', orderNumber ?? ''),
+    queryKey,
     queryFn: async () => {
       const result = await fetchOrderDetail(orderNumber ?? '', {
         getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
@@ -292,11 +317,29 @@ export function useOrderDetail(
     enabled: Boolean(isLoaded && isSignedIn && userId && orderNumber),
     ...detailQueryOptions,
     retry: orderDetailRetry,
+    refetchInterval: (current) => {
+      const order = current.state.data
+      if (!pollWhile || !order || !pollWhile(order)) return false
+      return pollsRunOf(fetchesOf(current.state), pollBase.count) <
+        ORDER_PAYMENT_POLL.MAX_TRIES
+        ? ORDER_PAYMENT_POLL.INTERVAL_MS
+        : false
+    },
   })
+  const hasData = query.data !== undefined
+  if (pollBase.keyId !== keyId || (hasData && !pollBase.hasData)) {
+    setPollBase({ keyId, hasData, count: countOf() })
+  }
   const { isError, errorMessage, refetch } = toQueryResult(query)
 
   return {
     order: query.data ?? null,
+    isPollExhausted: Boolean(
+      pollWhile &&
+      query.data &&
+      pollWhile(query.data) &&
+      pollsRunOf(countOf(), pollBase.count) >= ORDER_PAYMENT_POLL.MAX_TRIES,
+    ),
     isNotFound:
       (query.error as { statusCode?: number } | null)?.statusCode === 404,
     isLoading:
