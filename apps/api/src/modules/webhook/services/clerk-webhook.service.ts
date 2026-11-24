@@ -10,7 +10,7 @@ import {
   AuthProvider,
   type AuthWebhookEvent,
 } from '../../../common/providers/auth.provider.js';
-import { UserRole, UserStatus } from '@repo/constants';
+import { UserRole, UserStatus, VALIDATION_RULES } from '@repo/constants';
 
 const ClerkWebhookEventType = {
   USER_CREATED: 'user.created',
@@ -86,9 +86,7 @@ export class ClerkWebhookService {
         email: primaryEmail.email_address,
         firstName: data.first_name ?? '',
         lastName: data.last_name ?? '',
-        phoneNumber: data.phone_numbers.find(
-          (phone) => phone.id === data.primary_phone_number_id,
-        )?.phone_number,
+        phoneNumber: this.primaryPhone(data),
         avatarUrl: data.image_url,
         role: publicMetadata.role,
       });
@@ -117,9 +115,7 @@ export class ClerkWebhookService {
     await this.userService.update(existing.id, {
       firstName: data.first_name ?? '',
       lastName: data.last_name ?? '',
-      phoneNumber: data.phone_numbers.find(
-        (phone) => phone.id === data.primary_phone_number_id,
-      )?.phone_number,
+      phoneNumber: this.primaryPhone(data),
       avatarUrl: data.image_url,
       role: publicMetadata.role,
       status:
@@ -142,6 +138,28 @@ export class ClerkWebhookService {
     }
 
     await this.userService.remove(existing.id);
+  }
+
+  /**
+   * The primary phone when it fits the field specification (exactly 10
+   * digits, `users.phone_number` is varchar(10)); `undefined` when Clerk has
+   * none. Any other value (an E.164 `+84…`, a number with spaces) is stored as
+   * null, so the webhook never fails on the column length. The number itself
+   * is never logged.
+   */
+  private primaryPhone(
+    data: UserCreatedOrUpdatedEvent['data'],
+  ): string | null | undefined {
+    const phone = data.phone_numbers.find(
+      ({ id }) => id === data.primary_phone_number_id,
+    )?.phone_number;
+    if (phone === undefined) return undefined;
+    if (VALIDATION_RULES.PHONE.REGEX.test(phone)) return phone;
+
+    this.logger.warn(
+      `Clerk user ${data.id} has a primary phone that is not exactly 10 digits, storing null`,
+    );
+    return null;
   }
 
   private async findByClerkIdOrNull(

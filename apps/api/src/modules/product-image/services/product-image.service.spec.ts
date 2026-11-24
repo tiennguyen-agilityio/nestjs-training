@@ -119,6 +119,18 @@ describe('ProductImageService', () => {
       expect(productImageRepository.softDelete).toHaveBeenCalledWith(image);
     });
 
+    it('soft-deletes the image and clears its sortOrder', async () => {
+      const image = buildImage();
+      image.sortOrder = 2;
+      productImageRepository.findById.mockResolvedValue(image);
+
+      await service.remove('image-id-1');
+
+      expect(productImageRepository.softDelete).toHaveBeenCalledWith(
+        expect.objectContaining({ sortOrder: null }),
+      );
+    });
+
     it('throws ItemNotFoundException for a missing id, without calling softDelete', async () => {
       productImageRepository.findById.mockResolvedValue(null);
 

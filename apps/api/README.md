@@ -220,9 +220,9 @@ erDiagram
         clerk_id string
         email string
         role string "ADMIN | USER"
-        first_name string
-        last_name string
-        phone_number string
+        first_name string "max 120"
+        last_name string "max 120"
+        phone_number string "10 digits"
         avatar_url string
         status string "ACTIVE | INACTIVE"
         created_at timestamp
@@ -232,7 +232,7 @@ erDiagram
 
     CATEGORY {
         id uuid PK
-        name string
+        name string "max 120"
         slug string
         created_at timestamp
         updated_at timestamp
@@ -242,7 +242,7 @@ erDiagram
     PRODUCT {
         id uuid PK
         category_id uuid FK
-        name string
+        name string "max 120"
         slug string
         description string
         roast_level string "LIGHT | MEDIUM | DARK"
@@ -262,7 +262,7 @@ erDiagram
         product_id uuid FK
         url string
         is_primary boolean
-        sort_order int
+        sort_order int "unique per product, null when deleted"
         created_at timestamp
         updated_at timestamp
         deleted_at timestamp

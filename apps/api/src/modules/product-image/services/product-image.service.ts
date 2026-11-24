@@ -41,6 +41,8 @@ export class ProductImageService {
 
   async remove(id: string): Promise<void> {
     const image = await this.findOne(id);
+    // A deleted image holds no position (product_images unique key).
+    image.sortOrder = null;
     await this.productImageRepository.softDelete(image);
   }
 }

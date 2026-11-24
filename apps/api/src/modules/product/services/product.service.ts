@@ -294,7 +294,10 @@ export class ProductService {
 
     const removedAt = new Date();
     for (const image of current) {
-      if (removing.has(image.id)) image.deletedAt = removedAt;
+      if (!removing.has(image.id)) continue;
+      image.deletedAt = removedAt;
+      // A deleted image holds no position (product_images unique key).
+      image.sortOrder = null;
     }
 
     for (const image of remaining) {
@@ -320,7 +323,7 @@ export class ProductService {
     patchById: Map<string, { sortOrder?: number }>,
     addImages: Array<{ sortOrder?: number }>,
   ): void {
-    const seen = new Set<number>();
+    const seen = new Set<number | null>();
 
     for (const image of remaining) {
       const effective = patchById.get(image.id)?.sortOrder ?? image.sortOrder;
@@ -332,16 +335,15 @@ export class ProductService {
       seen.add(effective);
     }
 
+    // An added image without a sortOrder is stored at 0, so it counts as 0.
     for (const data of addImages) {
-      const order = data.sortOrder;
-      if (order !== undefined) {
-        if (seen.has(order)) {
-          throw new BadRequestException(
-            ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS,
-          );
-        }
-        seen.add(order);
+      const order = data.sortOrder ?? 0;
+      if (seen.has(order)) {
+        throw new BadRequestException(
+          ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS,
+        );
       }
+      seen.add(order);
     }
   }
 

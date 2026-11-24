@@ -163,6 +163,20 @@ describe('ProductService', () => {
       expect(result).toBe(refetched);
     });
 
+    it('rejects two added images without sortOrder, without persisting', async () => {
+      await expect(
+        service.create({
+          ...createData,
+          images: [
+            { url: 'https://example.com/a.jpg', isPrimary: true },
+            { url: 'https://example.com/b.jpg' },
+          ],
+        }),
+      ).rejects.toThrow(ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS);
+      expect(productRepository.create).not.toHaveBeenCalled();
+      expect(productImageService.create).not.toHaveBeenCalled();
+    });
+
     it('rejects more than one primary image, without checking the name or persisting', async () => {
       await expect(
         service.create({
@@ -474,17 +488,48 @@ describe('ProductService', () => {
         return { product, images, add };
       };
 
-      it('soft-deletes the removed images and saves once', async () => {
+      it('soft-deletes the removed images, clears their sortOrder and saves once', async () => {
         const { images } = productWithImages([
-          buildImage(idA),
-          buildImage(idB, { isPrimary: true }),
+          buildImage(idA, { sortOrder: 0 }),
+          buildImage(idB, { isPrimary: true, sortOrder: 1 }),
         ]);
 
         await service.update('product-id-1', { removeImageIds: [idA] });
 
         expect(images[0].deletedAt).toBeInstanceOf(Date);
+        expect(images[0].sortOrder).toBeNull();
         expect(images[1].deletedAt).toBeNull();
+        expect(images[1].sortOrder).toBe(1);
         expect(productRepository.save).toHaveBeenCalledTimes(1);
+      });
+
+      it('rejects two added images without sortOrder', async () => {
+        const { add } = productWithImages([]);
+
+        await expect(
+          service.update('product-id-1', {
+            addImages: [
+              { url: 'https://example.com/a.png', isPrimary: true },
+              { url: 'https://example.com/b.png' },
+            ],
+          }),
+        ).rejects.toThrow(ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS);
+        expect(add).not.toHaveBeenCalled();
+        expect(productRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('rejects an added image without sortOrder when a remaining image is at 0', async () => {
+        const { add } = productWithImages([
+          buildImage(idA, { isPrimary: true, sortOrder: 0 }),
+        ]);
+
+        await expect(
+          service.update('product-id-1', {
+            addImages: [{ url: 'https://example.com/added.png' }],
+          }),
+        ).rejects.toThrow(ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS);
+        expect(add).not.toHaveBeenCalled();
+        expect(productRepository.save).not.toHaveBeenCalled();
       });
 
       it('patches only the supplied fields of an image', async () => {
@@ -520,7 +565,7 @@ describe('ProductService', () => {
 
       it('adds new images to the product with defaults', async () => {
         const { product, add } = productWithImages([
-          buildImage(idA, { isPrimary: true }),
+          buildImage(idA, { isPrimary: true, sortOrder: 1 }),
         ]);
 
         await service.update('product-id-1', {
@@ -539,7 +584,7 @@ describe('ProductService', () => {
       it('applies remove, update and add together', async () => {
         const { images, add } = productWithImages([
           buildImage(idA, { isPrimary: true }),
-          buildImage(idB),
+          buildImage(idB, { sortOrder: 1 }),
         ]);
 
         await service.update('product-id-1', {

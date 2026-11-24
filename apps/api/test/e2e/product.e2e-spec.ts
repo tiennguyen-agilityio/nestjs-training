@@ -28,6 +28,7 @@ import type { Category } from './../../src/modules/category/entities/category.en
 import type { Product } from './../../src/modules/product/entities/product.entity.js';
 import { ProductVariant } from './../../src/modules/product-variant/entities/product-variant.entity.js';
 import { ERROR_CODES } from './../../src/common/constants/error-code.constant.js';
+import { ERROR_MESSAGES } from './../../src/common/constants/message.constant.js';
 import { slugFrom } from './../../src/common/utils/slug.util.js';
 
 vi.mock('@clerk/express', async () => {
@@ -85,9 +86,13 @@ describe('ProductController (e2e)', () => {
   const uniqueName = (base: string): string =>
     `${base} ${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  const validImages = (): Array<{ url: string; isPrimary?: boolean }> => [
-    { url: 'https://example.com/1.jpg', isPrimary: true },
-    { url: 'https://example.com/2.jpg' },
+  const validImages = (): Array<{
+    url: string;
+    isPrimary?: boolean;
+    sortOrder?: number;
+  }> => [
+    { url: 'https://example.com/1.jpg', isPrimary: true, sortOrder: 0 },
+    { url: 'https://example.com/2.jpg', sortOrder: 1 },
   ];
 
   const requiredProductFields = (): {
@@ -787,8 +792,12 @@ describe('ProductController (e2e)', () => {
           name,
           ...requiredProductFields(),
           images: [
-            { url: 'https://example.com/coffee.jpg', isPrimary: true },
-            { url: 'https://example.com/coffee-2.jpg' },
+            {
+              url: 'https://example.com/coffee.jpg',
+              isPrimary: true,
+              sortOrder: 0,
+            },
+            { url: 'https://example.com/coffee-2.jpg', sortOrder: 1 },
           ],
           variants: [
             {
@@ -1217,8 +1226,8 @@ describe('ProductController (e2e)', () => {
           name: uniqueName('Long Image Url E2E'),
           ...requiredProductFields(),
           images: [
-            { url: longUrl, isPrimary: true },
-            { url: 'https://example.com/short.jpg' },
+            { url: longUrl, isPrimary: true, sortOrder: 0 },
+            { url: 'https://example.com/short.jpg', sortOrder: 1 },
           ],
           variants: [validVariant('SKU-URL')],
         })
@@ -1278,6 +1287,134 @@ describe('ProductController (e2e)', () => {
           ['min', 'variants.0.weight'],
         ],
       );
+    });
+
+    describe('PATCH /products/:id images', () => {
+      type ImageBody = { id: string; url: string; sortOrder: number };
+
+      // An ACTIVE product with one image per sort order (0 is primary).
+      const createProductWithImages = async (
+        count: number,
+      ): Promise<{ productId: string; imageIds: string[] }> => {
+        const category = await createTestCategory();
+        const product = await RequestContext.create(orm.em, () =>
+          productService.create({
+            categoryId: category.id,
+            name: uniqueName('Image Order Product E2E'),
+            status: ProductStatus.ACTIVE,
+            ...requiredProductFields(),
+            images: Array.from({ length: count }, (_, sortOrder) => ({
+              url: `https://example.com/order-${sortOrder}.jpg`,
+              isPrimary: sortOrder === 0,
+              sortOrder,
+            })),
+            variants: [
+              {
+                sku: uniqueName('SKU-IMAGES'),
+                weight: '250',
+                unit: ProductUnit.G,
+                price: '100',
+              },
+            ],
+          }),
+        );
+        createdProductIds.push(product.id);
+        const imageIds = [...product.images.getItems()]
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+          .map((image) => image.id);
+        return { productId: product.id, imageIds };
+      };
+
+      const patchAsAdmin = async (productId: string, body: object) => {
+        const admin = await createTestUser(UserRole.ADMIN);
+        mockSessionFor(admin.clerkId);
+        return request(app.getHttpServer())
+          .patch(`${API_BASE_PATH}/products/${productId}`)
+          .send(body);
+      };
+
+      const positions = (images: ImageBody[]) =>
+        [...images]
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map(({ id, sortOrder }) => ({ id, sortOrder }));
+
+      const getImages = async (productId: string): Promise<ImageBody[]> => {
+        mockSessionFor(null);
+        const response = await request(app.getHttpServer())
+          .get(`${API_BASE_PATH}/products/${productId}`)
+          .expect(200);
+        return (response.body as { data: { images: ImageBody[] } }).data.images;
+      };
+
+      it('PATCH /products/:id swaps two image positions in one update', async () => {
+        const {
+          productId,
+          imageIds: [a, b],
+        } = await createProductWithImages(2);
+
+        const response = await patchAsAdmin(productId, {
+          updateImages: [
+            { id: a, sortOrder: 1 },
+            { id: b, sortOrder: 0 },
+          ],
+        });
+
+        expect(response.status).toBe(200);
+        const expected = [
+          { id: b, sortOrder: 0 },
+          { id: a, sortOrder: 1 },
+        ];
+        expect(
+          positions(
+            (response.body as { data: { images: ImageBody[] } }).data.images,
+          ),
+        ).toEqual(expected);
+        expect(positions(await getImages(productId))).toEqual(expected);
+      });
+
+      it('PATCH /products/:id moves an image into a position freed in the same update', async () => {
+        const {
+          productId,
+          imageIds: [a, b, c],
+        } = await createProductWithImages(3);
+
+        const response = await patchAsAdmin(productId, {
+          removeImageIds: [c],
+          updateImages: [{ id: b, sortOrder: 2 }],
+        });
+
+        expect(response.status).toBe(200);
+        expect(positions(await getImages(productId))).toEqual([
+          { id: a, sortOrder: 0 },
+          { id: b, sortOrder: 2 },
+        ]);
+      });
+
+      it('POST /products responds 400 for two images without sortOrder', async () => {
+        const admin = await createTestUser(UserRole.ADMIN);
+        const category = await createTestCategory();
+        mockSessionFor(admin.clerkId);
+
+        const response = await request(app.getHttpServer())
+          .post(`${API_BASE_PATH}/products`)
+          .set('Idempotency-Key', randomUUID())
+          .send({
+            categoryId: category.id,
+            name: uniqueName('No Sort Order E2E'),
+            ...requiredProductFields(),
+            images: [
+              { url: 'https://example.com/a.jpg', isPrimary: true },
+              { url: 'https://example.com/b.jpg' },
+            ],
+            variants: [validVariant('SKU-NO-SORT')],
+          })
+          .expect(400);
+
+        expect(
+          (response.body as { errors: Array<{ message: string }> }).errors[0]
+            .message,
+        ).toBe(ERROR_MESSAGES.PRODUCT.DUPLICATE_SORT_ORDERS);
+      });
     });
 
     describe('PATCH /products/:id updateVariants', () => {
