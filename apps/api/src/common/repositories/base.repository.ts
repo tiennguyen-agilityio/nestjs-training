@@ -127,11 +127,6 @@ export abstract class BaseRepository<T extends BaseEntity> {
     );
   }
 
-  /**
-   * Reads one row and holds a write lock on it (`SELECT … FOR UPDATE`) until
-   * the open transaction ends, so concurrent writers of the same row take
-   * turns. Must run inside `transactional`.
-   */
   protected findOneForUpdate(
     where: Criteria<T>,
     options?: Pick<ListOptions<T>, 'relations'>,
@@ -142,11 +137,6 @@ export abstract class BaseRepository<T extends BaseEntity> {
     });
   }
 
-  /**
-   * Inserts a row unless one already holds the same `conflictFields` values
-   * (`INSERT … ON CONFLICT (…) DO NOTHING`): two first writers never fail on
-   * the unique key, and the caller reads the row that won.
-   */
   protected async insertIgnoringConflict(
     data: Record<string, unknown>,
     conflictFields: (keyof T & string)[],
@@ -158,7 +148,6 @@ export abstract class BaseRepository<T extends BaseEntity> {
     });
   }
 
-  /** Deletes the matching rows for good (no soft delete); returns the count. */
   protected deleteWhere(where: Criteria<T>): Promise<number> {
     return this.em.nativeDelete(this.entity, where as FilterQuery<T>);
   }

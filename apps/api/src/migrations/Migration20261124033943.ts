@@ -1,10 +1,8 @@
 import { Migration } from '@mikro-orm/migrations';
 
 /**
- * The cart a signed-in shopper keeps on the server (ERD R4, R5, R6): one
- * `carts` row per user, one `cart_items` line per variant per cart, and a
- * quantity of at least 1. The "≤ stock" rule spans tables, so the service
- * checks it. The FKs cascade, although rows are only soft-deleted today.
+ * One `carts` row per user and one `cart_items` line per variant per cart.
+ * The "≤ stock" rule spans tables, so the service checks it.
  */
 export class Migration20261124033943 extends Migration {
   override name = 'Migration20261124033943';

@@ -63,11 +63,6 @@ export class ProductVariantService {
     return variant;
   }
 
-  /**
-   * A variant a shopper can buy: it and its product exist, neither is
-   * deleted, and the product is ACTIVE. Anything else reads as not found on
-   * `field`, so a Draft product is never revealed (cart AC4).
-   */
   async findPurchasable(id: string, field: string): Promise<ProductVariant> {
     const variant = await this.productVariantRepository.findWithProduct(id);
     const product = variant?.product;

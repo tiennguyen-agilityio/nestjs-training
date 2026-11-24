@@ -18,8 +18,6 @@ import { ProductService } from './../../src/modules/product/services/product.ser
 import { CartRepository } from './../../src/modules/cart/repositories/cart.repository.js';
 import { CartItemRepository } from './../../src/modules/cart/repositories/cart-item.repository.js';
 
-// The database rules of the carts and cart_items tables (design › Data), and
-// the cart repositories' locking and deletes, against the real database.
 describe('carts and cart_items (e2e)', () => {
   let app: INestApplication<App>;
   let orm: MikroORM;

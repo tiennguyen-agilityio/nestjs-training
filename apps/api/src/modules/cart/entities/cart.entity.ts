@@ -5,7 +5,6 @@ import { BaseEntity } from '../../../common/entities/base.entity.js';
 import { User } from '../../user/entities/user.entity.js';
 import { CartItem } from './cart-item.entity.js';
 
-// One cart per user (R4). Totals are worked out on read, never stored.
 @Entity({ tableName: 'carts' })
 export class Cart extends BaseEntity {
   @OneToOne(() => User, {

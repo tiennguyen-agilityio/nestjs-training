@@ -28,7 +28,6 @@ export class CartItemVariantDto {
   discountValue!: number;
   salePrice!: number;
 
-  // stockQuantity until reserved stock exists (#27: stock − reserved).
   availableQuantity!: number;
 }
 
@@ -39,10 +38,8 @@ export class ResponseCartItemDto {
   product!: CartItemProductDto;
   variant!: CartItemVariantDto;
 
-  // availableQuantity ≥ quantity.
   inStock!: boolean;
 
-  // The product is ACTIVE and neither it nor the variant was deleted.
   isAvailable!: boolean;
 
   lineTotal!: number;
@@ -53,7 +50,6 @@ export class ResponseCartItemDto {
     const variant = item.productVariant;
     const product = variant.product;
     const pricing = pricingOf(variant);
-    // A removed image keeps isPrimary, so only live images count.
     const primaryImage = product.images
       .getItems()
       .find((image) => image.isPrimary && !image.deletedAt);
@@ -121,7 +117,6 @@ export class ResponseCartDto {
     return dto;
   }
 
-  /** A user who has no cart yet: no row is created on read. */
   static empty(userId: string): ResponseCartDto {
     const dto = new ResponseCartDto();
     dto.id = null;

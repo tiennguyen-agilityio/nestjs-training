@@ -12,7 +12,6 @@ export class ProductVariantRepository extends BaseRepository<ProductVariant> {
     return this.findOneBy({ sku });
   }
 
-  /** The variant and its product, deleted or not: the caller decides. */
   findWithProduct(id: string): Promise<ProductVariant | null> {
     return this.findOneBy(
       { id },

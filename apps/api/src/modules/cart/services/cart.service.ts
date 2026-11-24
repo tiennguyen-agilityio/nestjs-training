@@ -19,11 +19,6 @@ import {
   ERROR_MESSAGES,
 } from '../../../common/constants/message.constant.js';
 
-/**
- * The signed-in user's own cart. Every write runs in one transaction that
- * first locks the user's `carts` row, so the user's concurrent writes take
- * turns and no write leaves a line above the stock (design › Concurrency).
- */
 @Injectable()
 export class CartService {
   constructor(
@@ -136,7 +131,6 @@ export class CartService {
       : ResponseCartDto.empty(userId);
   }
 
-  /** The caller's line, behind the cart lock; another user's line is not found. */
   private async lockLine(
     userId: string,
     id: string,
@@ -156,7 +150,6 @@ export class CartService {
     return { cart, line };
   }
 
-  // Line writes leave the carts row alone, so its updatedAt is moved by hand.
   private async touch(cart: Cart, userId: string): Promise<void> {
     cart.updatedAt = new Date();
     await this.cartRepository.save(cart, userId);

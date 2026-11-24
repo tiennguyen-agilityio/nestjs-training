@@ -89,7 +89,6 @@ describe('CartController (e2e)', () => {
       return { id: user.id, clerkId };
     });
 
-  // A product with one variant priced 10, no discount, stock 3 by default.
   const createProduct = (
     options: { status?: ProductStatus; stockQuantity?: number } = {},
   ): Promise<{ productId: string; variantId: string }> =>

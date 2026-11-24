@@ -38,10 +38,8 @@ import {
 } from '../../../common/constants/message.constant.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 
-// The Swagger example for the 409: a variant with 3 left.
 const OUT_OF_STOCK_EXAMPLE = 3;
 
-// AuthGuard's 401 (no user) and 403 (INACTIVE account), on every route.
 const ApiAuthErrors = (): MethodDecorator =>
   applyDecorators(
     ApiErrorResponse(
@@ -54,7 +52,6 @@ const ApiAuthErrors = (): MethodDecorator =>
     ),
   );
 
-/** The signed-in user's own cart (any ACTIVE user, USER or ADMIN). */
 @ApiTags('cart')
 @Controller('cart')
 @UseGuards(AuthGuard)
@@ -123,8 +120,6 @@ export class CartController {
     HttpStatus.BAD_REQUEST,
     ERROR_MESSAGES.EXCEPTION.VALIDATION_FAILED,
   )
-  // Not in my cart (cartItemNotFound), or its product is no longer buyable
-  // (productVariantNotFound, field id): one example per status.
   @ApiErrorResponse(
     HttpStatus.NOT_FOUND,
     `${ERROR_MESSAGES.CART_ITEM.NOT_FOUND} / ${ERROR_MESSAGES.PRODUCT_VARIANT.NOT_FOUND}`,

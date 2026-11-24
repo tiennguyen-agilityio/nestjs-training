@@ -6,7 +6,6 @@ export const addCartItemSchema = z.object({
   quantity: cartQuantityField.default(1),
 });
 
-// Sets the line's quantity; removing a line has its own route.
 export const updateCartItemSchema = z.object({
   quantity: cartQuantityField,
 });
