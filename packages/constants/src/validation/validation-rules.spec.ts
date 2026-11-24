@@ -16,6 +16,7 @@ describe('VALIDATION_RULES', () => {
       PRICE: { MIN: 1, MAX: 99999999.99 },
       SIZE: { MIN: 1, MAX: 99999999.99 },
       DISCOUNT: { MIN: 0, MAX: 99999999.99, PERCENT_MAX: 100 },
+      SHIPPING_PRICE: { MIN: 0, MAX: 99999999.99, STEP: 0.01 },
       PAGINATION: {
         MIN_PAGE: 1,
         DEFAULT_PAGE: 1,
@@ -35,5 +36,13 @@ describe('VALIDATION_RULES', () => {
     });
     expect(VALIDATION_RULES).not.toHaveProperty('WEIGHT');
     expect(VALIDATION_RULES).not.toHaveProperty('QUANTITY');
+  });
+
+  it('SHIPPING_PRICE allows 0 up to MAX_DECIMAL in cents', () => {
+    expect(VALIDATION_RULES.SHIPPING_PRICE).toEqual({
+      MIN: 0,
+      MAX: 99999999.99,
+      STEP: 0.01,
+    });
   });
 });

@@ -298,6 +298,20 @@ erDiagram
         deleted_by uuid FK
     }
 
+    SHIPPING_METHOD {
+        id uuid PK
+        name string "max 120, unique (case-insensitive)"
+        description string
+        price number "0 - 99,999,999.99"
+        status string "ACTIVE | INACTIVE"
+        created_at timestamp
+        updated_at timestamp
+        deleted_at timestamp
+        created_by uuid FK
+        updated_by uuid FK
+        deleted_by uuid FK
+    }
+
     CATEGORY ||--o{ PRODUCT : "contains"
     PRODUCT ||--o{ PRODUCT_IMAGE : "has"
     PRODUCT ||--o{ PRODUCT_VARIANT : "has"
@@ -305,6 +319,7 @@ erDiagram
     USER |o--o{ PRODUCT : "created, updated, deleted by"
     USER |o--o{ PRODUCT_IMAGE : "created, updated, deleted by"
     USER |o--o{ PRODUCT_VARIANT : "created, updated, deleted by"
+    USER |o--o{ SHIPPING_METHOD : "created, updated, deleted by"
     USER |o--o{ USER : "created, updated, deleted by"
 ```
 
@@ -344,6 +359,16 @@ erDiagram
 | `POST`   | `/products`     | 👑   | Create product (2–6 images with one primary, at least one variant)                                       |
 | `PATCH`  | `/products/:id` | 👑   | Update product (add/update/remove images; update variant size, unit, price, discount, stock quantity)   |
 | `DELETE` | `/products/:id` | 👑   | Archive + soft-delete product                                                                            |
+
+### Shipping methods
+
+| Method   | Path                    | Auth | Description                                                                                                                                 |
+| :------- | :---------------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/shipping-methods`     | 🔓   | List shipping methods (search, sort by name/price, pagination; guests and users see ACTIVE only; admins can filter by status incl. DELETED) |
+| `GET`    | `/shipping-methods/:id` | 👑   | Get shipping method by ID                                                                                                                   |
+| `POST`   | `/shipping-methods`     | 👑   | Create shipping method                                                                                                                      |
+| `PATCH`  | `/shipping-methods/:id` | 👑   | Update shipping method (name, description, price, status)                                                                                   |
+| `DELETE` | `/shipping-methods/:id` | 👑   | Soft-delete shipping method                                                                                                                 |
 
 ### Health
 

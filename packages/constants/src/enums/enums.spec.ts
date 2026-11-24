@@ -1,6 +1,7 @@
 import { ProductSortBy, ProductStatus, RoastLevel } from './product.enum.js';
 import { DiscountType, ProductUnit } from './product-variant.enum.js';
 import { UserRole, UserStatus } from './user.enum.js';
+import { ShippingMethodStatus } from './shipping-method.enum.js';
 
 describe('shared enums', () => {
   it('DiscountType has the API values', () => {
@@ -39,5 +40,9 @@ describe('shared enums', () => {
 
   it('UserStatus has the API values', () => {
     expect(Object.values(UserStatus)).toEqual(['ACTIVE', 'INACTIVE']);
+  });
+
+  it('ShippingMethodStatus has the API values', () => {
+    expect(Object.values(ShippingMethodStatus)).toEqual(['ACTIVE', 'INACTIVE']);
   });
 });
