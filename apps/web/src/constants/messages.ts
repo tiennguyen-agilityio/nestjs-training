@@ -72,6 +72,7 @@ export const API_FALLBACK_ERRORS = {
   ORDER_STATUS_UPDATE: 'Could not update order status',
   ORDER_SHIPPING_STATUS_UPDATE: 'Could not update shipping status',
   ORDERS_LOAD: 'Could not load orders',
+  SHIPPING_METHODS_LOAD: 'Could not load delivery options',
 } as const
 
 export const SUCCESS_MESSAGES = {
@@ -97,6 +98,9 @@ export const NOTICE_MESSAGES = {
   PRODUCT_DELETED: {
     MESSAGE: 'This product has been deleted, so it can no longer be edited.',
     ACTION: 'Back to products',
+  },
+  SHIPPING_METHODS_EMPTY: {
+    MESSAGE: 'No delivery options available right now.',
   },
 }
 

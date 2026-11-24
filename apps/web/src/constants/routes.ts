@@ -34,4 +34,5 @@ export const API_ROUTES = {
   CATEGORIES: `${API_BASE_URL}/api/v1/categories`,
   PRODUCTS: `${API_BASE_URL}/api/v1/products`,
   ORDERS: `${API_BASE_URL}/api/v1/orders`,
+  SHIPPING_METHODS: `${API_BASE_URL}/api/v1/shipping-methods`,
 }
