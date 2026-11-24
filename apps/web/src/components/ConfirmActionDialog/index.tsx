@@ -18,6 +18,9 @@ interface ConfirmActionDialogProps<T extends { id?: string }> {
   title: string
   renderDescription: (item: T | null) => ReactNode
   textAction: string
+  textCancel?: string
+  /** Turns a failed mutation's error into the shown text (default `getErrorMessage`). */
+  formatError?: (error: unknown) => string
   actionVariant?: ComponentProps<typeof AlertDialog>['actionVariant']
   children?: ReactNode
   'data-testid'?: string
@@ -37,6 +40,8 @@ const ConfirmActionDialog = <T extends { id?: string }>({
   title,
   renderDescription,
   textAction,
+  textCancel,
+  formatError = getErrorMessage,
   actionVariant,
   children,
   'data-testid': dataTestId,
@@ -60,6 +65,7 @@ const ConfirmActionDialog = <T extends { id?: string }>({
       title={title}
       description={renderDescription(item)}
       textAction={textAction}
+      textCancel={textCancel}
       actionVariant={actionVariant}
       onClickAction={() => {
         const id = item?.id
@@ -70,7 +76,7 @@ const ConfirmActionDialog = <T extends { id?: string }>({
             toast.success(successMessage)
             close()
           },
-          onError: (error) => setErrorMessage(getErrorMessage(error)),
+          onError: (error) => setErrorMessage(formatError(error)),
         })
       }}
     >

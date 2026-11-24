@@ -56,6 +56,8 @@ export const ERROR_MESSAGES = {
     ITEM_UNAVAILABLE: 'This item can no longer be bought',
     OUT_OF_STOCK: (available: number, sku: string) =>
       `Only ${available} left for ${sku}`,
+    NOT_CANCELLABLE: (state: string) =>
+      `Order cannot be cancelled: it is ${state}`,
   },
   PAYMENT: {
     METHOD_NOT_ONLINE: 'This order is paid on delivery, not online',
@@ -177,6 +179,10 @@ export const ERROR_DESCRIPTIONS = {
       'The method does not exist or is not ACTIVE. Pick another method.',
     ITEM_UNAVAILABLE: 'Remove it from the cart and try again.',
     OUT_OF_STOCK: 'Update your cart and try again.',
+    NOT_CANCELLABLE:
+      'Only a pending order can be cancelled. Contact the shop to cancel a confirmed order.',
+    NOT_CANCELLABLE_PAID:
+      'The order is already paid. Contact the shop to cancel it.',
   },
   PAYMENT: {
     METHOD_NOT_ONLINE: 'Only CARD and PAYPAL orders are paid online.',

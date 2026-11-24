@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
@@ -12,18 +12,24 @@ import type { OrderDetail, OrderPayment } from '@/types/order'
 
 // Constants
 import { EMPTY_IMAGE } from '@/constants/images'
-import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
+import {
+  API_FALLBACK_ERRORS,
+  DIALOG_MESSAGES,
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
+} from '@/constants/messages'
 import { PAYMENT_METHOD_LABELS } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
 
 // Hooks
-import { useOrderDetail } from '@/hooks/useOrder'
+import { useCancelOrder, useOrderDetail } from '@/hooks/useOrder'
 
 // Utils
 import { cn } from '@/utils/styles'
 import { formatPrice } from '@/utils/common'
 import {
   formatOrderDateTime,
+  getCancelOrderErrorMessage,
   getOrderStatusPresentation,
   getPaymentStatusPresentation,
   getShippingStatusPresentation,
@@ -32,6 +38,7 @@ import {
 // Components
 import { Button } from '@/components/ui/button'
 import Loading from '@/components/Loading'
+import ConfirmActionDialog from '@/components/ConfirmActionDialog'
 
 export interface OrderDetailPageContentProps {
   className?: string
@@ -341,8 +348,11 @@ function ShipToPanel({ order }: { order: OrderDetail }) {
   )
 }
 
-/** UI only: cancelling is card #30, which wires the API and enables the button. */
+/** Cancels a PENDING order after a confirm; other statuses get a line of text. */
 function CancelPanel({ order }: { order: OrderDetail }) {
+  const [confirming, setConfirming] = useState<OrderDetail | null>(null)
+  const { mutate, isPending } = useCancelOrder()
+
   return (
     <Panel title="Cancel order">
       {order.status === OrderStatus.PENDING ? (
@@ -351,8 +361,13 @@ function CancelPanel({ order }: { order: OrderDetail }) {
             You can cancel while the order is still pending. Its items go back
             into stock.
           </p>
-          <Button type="button" variant="outline" className="w-full" disabled>
-            Cancel order
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setConfirming(order)}
+          >
+            {DIALOG_MESSAGES.ORDER.CANCEL.ACTION}
           </Button>
         </>
       ) : order.status === OrderStatus.CANCELLED ? (
@@ -365,6 +380,24 @@ function CancelPanel({ order }: { order: OrderDetail }) {
           {getOrderStatusPresentation(order.status).label.toLowerCase()}.
         </p>
       )}
+      {/* Stays mounted while open: a 409's refetch can move the order out of PENDING. */}
+      <ConfirmActionDialog
+        item={confirming}
+        onClose={() => setConfirming(null)}
+        mutate={mutate}
+        isPending={isPending}
+        successMessage={SUCCESS_MESSAGES.ORDER_CANCELLED}
+        title={DIALOG_MESSAGES.ORDER.CANCEL.TITLE}
+        renderDescription={(current) =>
+          DIALOG_MESSAGES.ORDER.CANCEL.DESCRIPTION(
+            current?.orderNumber ?? order.orderNumber,
+          )
+        }
+        textAction={DIALOG_MESSAGES.ORDER.CANCEL.ACTION}
+        textCancel={DIALOG_MESSAGES.ORDER.CANCEL.KEEP}
+        actionVariant="destructive"
+        formatError={getCancelOrderErrorMessage}
+      />
     </Panel>
   )
 }

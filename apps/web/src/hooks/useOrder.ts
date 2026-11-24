@@ -11,6 +11,7 @@ import { CLERK_SESSION_TEMPLATE, PAGE_SIZE } from '@/constants/common'
 import { ORDER_PAYMENT_POLL } from '@/constants/order'
 import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import {
+  cancelOrder,
   createOrder,
   deleteOrder,
   fetchMyOrders,
@@ -73,6 +74,29 @@ export function useCreateOrder() {
     },
     onSuccess: () => {
       idempotency.clear()
+      void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })
+    },
+  })
+}
+
+/**
+ * Cancels one of the shopper's PENDING orders. Success or failure, the orders
+ * are refetched, so a 409 (confirmed or paid meanwhile) shows the current
+ * state; a failure throws a `ServiceError` carrying the API's `errors[]`.
+ */
+export function useCancelOrder() {
+  const queryClient = useQueryClient()
+  const { getToken } = useAuth()
+
+  return useMutation({
+    mutationFn: async (orderId: string): Promise<OrderDetail> => {
+      const result = await cancelOrder(orderId, {
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+      })
+      if (!result.ok) throwIfServiceFailed(result)
+      return result.order
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })
     },
   })

@@ -11,17 +11,24 @@ import { ORDER_PAYMENT_POLL } from '@/constants/order'
 import {
   orderDetailRetry,
   ordersQueryKeys,
+  useCancelOrder,
   useCreateOrder,
   useMyOrders,
   useOrderDetail,
 } from '@/hooks/useOrder'
-import { createOrder, fetchMyOrders, fetchOrderDetail } from '@/services/order'
+import {
+  cancelOrder,
+  createOrder,
+  fetchMyOrders,
+  fetchOrderDetail,
+} from '@/services/order'
 import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 import { ServiceError } from '@/utils/query'
 
 jest.mock('@clerk/nextjs', () => ({ useAuth: jest.fn() }))
 
 jest.mock('@/services/order', () => ({
+  cancelOrder: jest.fn(),
   createOrder: jest.fn(),
   deleteOrder: jest.fn(),
   fetchOrders: jest.fn(),
@@ -592,5 +599,92 @@ describe('useOrderDetail polling', () => {
     expect(mockFetchOrderDetail).toHaveBeenCalledTimes(3)
     expect(result.current.order?.paymentStatus).toBe(OrderPaymentStatus.PAID)
     expect(result.current.isPollExhausted).toBe(false)
+  })
+})
+
+describe('useCancelOrder', () => {
+  const mockCancelOrder = jest.mocked(cancelOrder)
+  const conflict = {
+    ok: false as const,
+    status: 409,
+    error: 'Order cannot be cancelled: it is confirmed',
+    errorResponse: {
+      statusCode: 409,
+      message: 'Conflict',
+      errors: [
+        {
+          errCode: 'statusNotAllowed',
+          field: 'status',
+          message: 'Order cannot be cancelled: it is confirmed',
+          description: 'Contact the shop to cancel a confirmed order.',
+        },
+      ],
+    },
+  }
+
+  const setupCancel = () => {
+    signedIn()
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidate = jest.spyOn(client, 'invalidateQueries')
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    return { ...renderHook(() => useCancelOrder(), { wrapper }), invalidate }
+  }
+
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('useCancelOrder invalidates the orders root on success and on failure', async () => {
+    mockCancelOrder.mockResolvedValueOnce({ ok: true, order: detail })
+    const { result, invalidate } = setupCancel()
+
+    await act(async () => {
+      await result.current.mutateAsync('order-1')
+    })
+    expect(mockCancelOrder).toHaveBeenCalledWith('order-1', {
+      getToken: expect.any(Function),
+    })
+    await mockCancelOrder.mock.calls[0]?.[1].getToken()
+    expect(clerkGetToken).toHaveBeenCalledWith({
+      template: CLERK_SESSION_TEMPLATE,
+    })
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ordersQueryKeys.root,
+      }),
+    )
+
+    invalidate.mockClear()
+    mockCancelOrder.mockResolvedValueOnce(conflict)
+    await act(async () => {
+      await result.current.mutateAsync('order-1').catch(() => undefined)
+    })
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ordersQueryKeys.root,
+      }),
+    )
+  })
+
+  it('useCancelOrder throws a ServiceError carrying the API errors', async () => {
+    mockCancelOrder.mockResolvedValueOnce(conflict)
+    const { result } = setupCancel()
+
+    let caught: unknown
+    await act(async () => {
+      caught = await result.current
+        .mutateAsync('order-1')
+        .catch((error: unknown) => error)
+    })
+
+    expect(caught).toBeInstanceOf(ServiceError)
+    expect((caught as ServiceError).errors[0]?.errCode).toBe('statusNotAllowed')
   })
 })

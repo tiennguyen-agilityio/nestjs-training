@@ -18,11 +18,13 @@ import {
 import {
   formatOrderCustomerName,
   formatOrderDateTime,
+  getCancelOrderErrorMessage,
   getOrderSuccessPaymentView,
   getPaymentStatusPresentation,
   PAYMENT_ERR_CODES,
   paymentErrorMessage,
 } from '@/utils/order'
+import { ServiceError } from '@/utils/query'
 import type { Order, OrderDetail } from '@/types/order'
 
 const values = (
@@ -416,6 +418,30 @@ describe('getOrderSuccessPaymentView', () => {
   it('a refund status is badgeOnly', () => {
     expect(viewOf(orderOf(OrderPaymentStatus.REFUNDED))).toEqual(
       expect.objectContaining({ kind: 'badgeOnly', canPayNow: false }),
+    )
+  })
+})
+
+describe('getCancelOrderErrorMessage', () => {
+  it('getCancelOrderErrorMessage maps statusNotAllowed to ORDER_NOT_CANCELLABLE and falls back to the error message', () => {
+    const conflict = new ServiceError('Order cannot be cancelled: it is paid', [
+      {
+        errCode: 'statusNotAllowed',
+        field: 'paymentStatus',
+        message: 'Order cannot be cancelled: it is paid',
+        description:
+          'The order is already paid. Contact the shop to cancel it.',
+      },
+    ])
+
+    expect(getCancelOrderErrorMessage(conflict)).toBe(
+      ERROR_MESSAGES.ORDER_NOT_CANCELLABLE,
+    )
+    expect(
+      getCancelOrderErrorMessage(new Error('Could not cancel order')),
+    ).toBe('Could not cancel order')
+    expect(getCancelOrderErrorMessage('boom')).toBe(
+      ERROR_MESSAGES.NETWORK_ERROR,
     )
   })
 })

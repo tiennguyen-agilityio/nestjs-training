@@ -43,6 +43,11 @@ export interface VerifiedWebhook {
 export abstract class PaymentGateway {
   abstract createCheckout(request: CheckoutRequest): Promise<CheckoutSession>;
   abstract findCheckout(sessionId: string): Promise<CheckoutSession | null>;
+  /**
+   * Closes a checkout session so it can no longer be paid. A session that is
+   * already closed or missing is done; any other failure rejects.
+   */
+  abstract expireCheckout(sessionId: string): Promise<void>;
   abstract parseWebhook(
     rawBody: Buffer | undefined,
     headers: IncomingHttpHeaders,

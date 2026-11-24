@@ -190,6 +190,86 @@ describe('StripePaymentGateway', () => {
     });
   });
 
+  describe('expireCheckout', () => {
+    it('expireCheckout expires an open session', async () => {
+      vi.spyOn(stripe.checkout.sessions, 'retrieve').mockResolvedValue(
+        session() as never,
+      );
+      const expire = vi
+        .spyOn(stripe.checkout.sessions, 'expire')
+        .mockResolvedValue(session({ status: 'expired' }) as never);
+
+      await expect(
+        gateway.expireCheckout('cs_test_1'),
+      ).resolves.toBeUndefined();
+      expect(expire).toHaveBeenCalledWith('cs_test_1');
+    });
+
+    it('expireCheckout does nothing for a session that is not open or is missing', async () => {
+      const expire = vi.spyOn(stripe.checkout.sessions, 'expire');
+      vi.spyOn(stripe.checkout.sessions, 'retrieve')
+        .mockResolvedValueOnce(session({ status: 'expired' }) as never)
+        .mockResolvedValueOnce(session({ status: 'complete' }) as never)
+        .mockRejectedValueOnce(
+          new Stripe.errors.StripeInvalidRequestError({
+            message: 'No such checkout.session',
+            code: 'resource_missing',
+          }),
+        );
+
+      for (let i = 0; i < 3; i++) {
+        await expect(
+          gateway.expireCheckout('cs_test_1'),
+        ).resolves.toBeUndefined();
+      }
+      expect(expire).not.toHaveBeenCalled();
+    });
+
+    it('expireCheckout treats an invalid-request error on a session that just closed as done', async () => {
+      const retrieve = vi
+        .spyOn(stripe.checkout.sessions, 'retrieve')
+        .mockResolvedValueOnce(session() as never)
+        .mockResolvedValueOnce(session({ status: 'complete' }) as never);
+      vi.spyOn(stripe.checkout.sessions, 'expire').mockRejectedValue(
+        new Stripe.errors.StripeInvalidRequestError({
+          message:
+            'Only Checkout Sessions with a status in ["open"] can be expired.',
+        }),
+      );
+
+      await expect(
+        gateway.expireCheckout('cs_test_1'),
+      ).resolves.toBeUndefined();
+      expect(retrieve).toHaveBeenCalledTimes(2);
+    });
+
+    it('expireCheckout rejects an invalid-request error while the session is still open', async () => {
+      vi.spyOn(stripe.checkout.sessions, 'retrieve').mockResolvedValue(
+        session() as never,
+      );
+      vi.spyOn(stripe.checkout.sessions, 'expire').mockRejectedValue(
+        new Stripe.errors.StripeInvalidRequestError({ message: 'Bad request' }),
+      );
+
+      await expect(gateway.expireCheckout('cs_test_1')).rejects.toBeInstanceOf(
+        InvalidRequestException,
+      );
+    });
+
+    it('expireCheckout rethrows a connection error so the outbox retries', async () => {
+      vi.spyOn(stripe.checkout.sessions, 'retrieve').mockResolvedValue(
+        session() as never,
+      );
+      vi.spyOn(stripe.checkout.sessions, 'expire').mockRejectedValue(
+        new Stripe.errors.StripeConnectionError({ message: 'socket hang up' }),
+      );
+
+      await expect(gateway.expireCheckout('cs_test_1')).rejects.toBeInstanceOf(
+        DependencyUnavailableException,
+      );
+    });
+  });
+
   describe('parseWebhook', () => {
     it('parseWebhook throws UnauthenticatedException for a bad signature', () => {
       const payload = JSON.stringify(event('customer.created', {}));

@@ -25,6 +25,8 @@ import {
 } from '@repo/constants'
 
 import { formatPrice } from './common'
+import { getErrorMessage } from './form'
+import { ServiceError } from './query'
 
 export function formatOrderCustomerName(order: Order): string {
   // A `GET /orders` list row (OROW) has no addressSnapshot.
@@ -535,3 +537,10 @@ export function getOrderSuccessPaymentView(input: {
       isUnfinished && paymentError ? paymentErrorMessage(paymentError) : null,
   }
 }
+
+/** The cancel dialog's message: the API's `errCode`, never its `message`, picks it. */
+export const getCancelOrderErrorMessage = (error: unknown): string =>
+  error instanceof ServiceError &&
+  error.errors.some(({ errCode }) => errCode === 'statusNotAllowed')
+    ? ERROR_MESSAGES.ORDER_NOT_CANCELLABLE
+    : getErrorMessage(error)
