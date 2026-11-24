@@ -19,6 +19,7 @@ import { UserModule } from './modules/user/user.module.js';
 import { WebhookModule } from './modules/webhook/webhook.module.js';
 import { CategoryModule } from './modules/category/category.module.js';
 import { ProductModule } from './modules/product/product.module.js';
+import { ShippingMethodModule } from './modules/shipping-method/shipping-method.module.js';
 import { IdempotencyStoreModule } from './modules/idempotency/idempotency.module.js';
 import { OutboxStoreModule } from './modules/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -48,6 +49,7 @@ import { HEALTH_ROUTES } from './common/constants/env.constant.js';
     WebhookModule,
     CategoryModule,
     ProductModule,
+    ShippingMethodModule,
     HealthModule,
     ...(process.env.NODE_ENV !== 'production'
       ? [

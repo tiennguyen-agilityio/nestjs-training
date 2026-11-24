@@ -39,6 +39,10 @@ export const ERROR_CODES = {
   PRODUCT_IMAGE: {
     NOT_FOUND: 'productImageNotFound',
   },
+  SHIPPING_METHOD: {
+    NOT_FOUND: 'shippingMethodNotFound',
+    NAME_EXISTS: 'shippingMethodNameExists',
+  },
   PAGINATION: {
     PAGE_OUT_OF_RANGE: 'pageOutOfRange',
   },

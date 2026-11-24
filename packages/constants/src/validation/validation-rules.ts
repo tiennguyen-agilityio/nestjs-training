@@ -34,6 +34,12 @@ export const VALIDATION_RULES = {
     MAX: MAX_DECIMAL,
     PERCENT_MAX: 100,
   },
+  // A shipping fee may be 0 (free delivery); stored as numeric(10,2).
+  SHIPPING_PRICE: {
+    MIN: 0,
+    MAX: MAX_DECIMAL,
+    STEP: 0.01,
+  },
   PAGINATION: {
     MIN_PAGE: 1,
     DEFAULT_PAGE: 1,
