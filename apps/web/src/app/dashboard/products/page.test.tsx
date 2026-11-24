@@ -109,12 +109,13 @@ const productsFixture: Product[] = [
     variants: [
       {
         sku: 'SKU-1',
-        weight: 250,
+        size: 250,
         unit: ProductUnit.G,
+        name: '250g',
         price: 24,
         discountType: DiscountType.PERCENT,
         discountValue: 10,
-        quantity: 42,
+        stockQuantity: 42,
       },
     ],
     images: [],
@@ -137,12 +138,13 @@ const productsFixture: Product[] = [
     variants: [
       {
         sku: 'SKU-2',
-        weight: 1,
+        size: 1,
         unit: ProductUnit.KG,
+        name: '1kg',
         price: 85,
         discountType: null,
         discountValue: null,
-        quantity: 4,
+        stockQuantity: 4,
       },
     ],
     images: [],
@@ -165,12 +167,13 @@ const productsFixture: Product[] = [
     variants: [
       {
         sku: 'SKU-3',
-        weight: 500,
+        size: 500,
         unit: ProductUnit.G,
+        name: '500g',
         price: 18.5,
         discountType: DiscountType.FIXED,
         discountValue: 2,
-        quantity: 128,
+        stockQuantity: 128,
       },
     ],
     images: [],

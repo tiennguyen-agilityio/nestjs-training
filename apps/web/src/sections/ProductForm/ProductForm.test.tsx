@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { DiscountType, RoastLevel } from '@repo/constants'
+import { DiscountType, ProductUnit, RoastLevel } from '@repo/constants'
 import { toast } from 'sonner'
 
 import ProductForm, { type ProductFormProps, type ProductFormState } from '.'
@@ -36,12 +36,12 @@ const savedState: ProductFormState = {
     roastLevel: RoastLevel.MEDIUM,
     isOrganic: false,
     isFairTrade: true,
-    weight: '',
-    unit: '',
+    size: 250,
+    unit: ProductUnit.G,
     price: 20,
     discountType: DiscountType.PERCENT,
     discountValue: 0,
-    quantity: 5,
+    stockQuantity: 5,
     origin: 'Colombia',
     processingMethod: 'Washed',
   },
@@ -53,7 +53,7 @@ const savedState: ProductFormState = {
 
 const emptyState: ProductFormState = {
   ...savedState,
-  values: { ...savedState.values, weight: '', unit: '', price: '' },
+  values: { ...savedState.values, size: '', unit: '', price: '' },
   tastingNotes: [],
   primaryUrl: null,
   galleryItems: [],
@@ -233,16 +233,25 @@ describe('ProductForm', () => {
     expect(uploadImageToImgBB).not.toHaveBeenCalled()
   })
 
-  it('shows Weight and Unit only in create mode', () => {
-    const { unmount } = renderForm()
+  it('labels Size and Quantity', () => {
+    const { unmount } = renderForm({ mode: 'create', initialState: emptyState })
 
+    expect(screen.getByRole('textbox', { name: 'Size' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: 'Quantity' }),
+    ).toBeInTheDocument()
     expect(screen.queryByLabelText('Weight')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Unit')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/initial|stock/i)).not.toBeInTheDocument()
 
     unmount()
-    renderForm({ mode: 'create', initialState: emptyState })
+    renderForm()
 
-    expect(screen.getByLabelText('Weight')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Size' })).toBeInTheDocument()
     expect(screen.getByLabelText('Unit')).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: 'Quantity' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Weight')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/initial|stock/i)).not.toBeInTheDocument()
   })
 })

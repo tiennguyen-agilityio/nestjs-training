@@ -12,23 +12,26 @@ import type { Product, ProductVariantSummary } from '@/types/product'
 import {
   buildVariantUpdates,
   createProductErrorTarget,
+  formatVariantName,
   mapProductToEditFormValues,
   resolveEditedProductStatus,
   toCreateVariantPayload,
   updateProductErrorTarget,
 } from '@/utils/product'
+import { getPrimaryVariantQuantity } from '@/utils/inventory'
 
 const variant = (
   overrides: Partial<ProductVariantSummary> = {},
 ): ProductVariantSummary => ({
   id: 'variant-a',
   sku: 'SKU-A',
-  weight: 250,
+  size: 250,
   unit: ProductUnit.G,
+  name: '250g',
   price: 100,
   discountType: DiscountType.PERCENT,
   discountValue: 10,
-  quantity: 30,
+  stockQuantity: 30,
   ...overrides,
 })
 
@@ -68,7 +71,9 @@ describe('mapProductToEditFormValues', () => {
       price: 100,
       discountType: DiscountType.PERCENT,
       discountValue: 10,
-      quantity: 30,
+      stockQuantity: 30,
+      size: 250,
+      unit: ProductUnit.G,
     })
   })
 
@@ -85,7 +90,7 @@ describe('mapProductToEditFormValues', () => {
       price: 0,
       discountType: DiscountType.PERCENT,
       discountValue: 0,
-      quantity: 0,
+      stockQuantity: 0,
     })
   })
 })
@@ -100,10 +105,31 @@ describe('buildVariantUpdates', () => {
     ).toEqual([
       {
         id: 'variant-a',
+        size: 250,
+        unit: ProductUnit.G,
         price: 120,
         discountType: DiscountType.PERCENT,
         discountValue: 10,
-        quantity: 30,
+        stockQuantity: 30,
+      },
+    ])
+  })
+
+  it('sends size, unit and stockQuantity', () => {
+    expect(
+      buildVariantUpdates(
+        product([variant()]),
+        formValues({ size: 500, stockQuantity: 5 }),
+      ),
+    ).toEqual([
+      {
+        id: 'variant-a',
+        size: 500,
+        unit: 'G',
+        price: 100,
+        discountType: DiscountType.PERCENT,
+        discountValue: 10,
+        stockQuantity: 5,
       },
     ])
   })
@@ -133,23 +159,23 @@ describe('buildVariantUpdates', () => {
 
 describe('toCreateVariantPayload', () => {
   const values = {
-    weight: 250,
+    size: 250,
     unit: ProductUnit.G,
     price: 100,
     discountType: DiscountType.PERCENT,
     discountValue: 0,
-    quantity: 5,
+    stockQuantity: 5,
   }
 
   it('sends PERCENT 0 for no discount', () => {
     expect(toCreateVariantPayload(values, 'SKU-1')).toEqual({
       sku: 'SKU-1',
-      weight: 250,
+      size: 250,
       unit: ProductUnit.G,
       price: 100,
       discountType: DiscountType.PERCENT,
       discountValue: 0,
-      quantity: 5,
+      stockQuantity: 5,
     })
   })
 
@@ -176,9 +202,14 @@ describe('updateProductErrorTarget', () => {
   const target = (field: string, payload: UpdateProductPayload = {}) =>
     updateProductErrorTarget(field, payload)
 
+  it('maps updateVariants.0.size', () => {
+    expect(target('updateVariants.0.size')).toBe('size')
+    expect(target('updateVariants.0.stockQuantity')).toBe('stockQuantity')
+  })
+
   it('maps updateVariants.0 fields', () => {
     expect(target('updateVariants.0.discountValue')).toBe('discountValue')
-    expect(target('updateVariants.0.quantity')).toBe('quantity')
+    expect(target('updateVariants.0.stockQuantity')).toBe('stockQuantity')
     expect(target('updateVariants.0.id')).toBeUndefined()
   })
 
@@ -250,9 +281,10 @@ describe('createProductErrorTarget', () => {
     expect(target('variants.0.discountType')).toBeUndefined()
   })
 
-  it('maps a duplicate SKU to weight', () => {
-    expect(target('sku')).toBe('weight')
-    expect(target('variants.0.sku')).toBe('weight')
+  it('maps variants.0.size and sku to size', () => {
+    expect(target('variants.0.size')).toBe('size')
+    expect(target('sku')).toBe('size')
+    expect(target('variants.0.sku')).toBe('size')
   })
 
   it('maps images.N to avatar only when that entry is primary', () => {
@@ -283,5 +315,21 @@ describe('resolveEditedProductStatus', () => {
     [ProductStatus.DRAFT, ProductStatus.DRAFT],
   ])('sends %s → %s when not listed on the storefront', (current, expected) => {
     expect(resolveEditedProductStatus(current, false)).toBe(expected)
+  })
+})
+
+describe('formatVariantName', () => {
+  it('names a variant like the API', () => {
+    expect(formatVariantName(250, ProductUnit.G)).toBe('250g')
+    expect(formatVariantName(1.5, ProductUnit.KG)).toBe('1.5kg')
+    expect(formatVariantName(1, ProductUnit.L)).toBe('1l')
+  })
+})
+
+describe('getPrimaryVariantQuantity', () => {
+  it('reads stockQuantity', () => {
+    expect(
+      getPrimaryVariantQuantity(product([variant({ stockQuantity: 7 })])),
+    ).toBe(7)
   })
 })

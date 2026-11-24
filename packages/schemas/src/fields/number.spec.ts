@@ -1,13 +1,13 @@
 import {
   discountValueField,
   priceField,
-  quantityField,
-  weightField,
+  sizeField,
+  stockQuantityField,
 } from './number.js';
 
 describe('number fields', () => {
   it.each([
-    ['weightField', weightField, 1, 99999999.99, 0, 100000000],
+    ['sizeField', sizeField, 1, 99999999.99, 0, 100000000],
     ['priceField', priceField, 1, 99999999.99, 0, 100000000],
     ['discountValueField', discountValueField, 0, 99999999.99, -1, 100000000],
   ])(
@@ -28,13 +28,13 @@ describe('number fields', () => {
     },
   );
 
-  it('quantityField takes whole numbers from 0', () => {
-    expect(quantityField.safeParse(0).success).toBe(true);
-    expect(quantityField.safeParse(-1).error?.issues[0]).toMatchObject({
+  it('stockQuantityField takes whole numbers from 0', () => {
+    expect(stockQuantityField.safeParse(0).success).toBe(true);
+    expect(stockQuantityField.safeParse(-1).error?.issues[0]).toMatchObject({
       code: 'too_small',
       minimum: 0,
     });
-    expect(quantityField.safeParse(1.5).error?.issues[0]).toMatchObject({
+    expect(stockQuantityField.safeParse(1.5).error?.issues[0]).toMatchObject({
       code: 'invalid_type',
       expected: 'int',
     });

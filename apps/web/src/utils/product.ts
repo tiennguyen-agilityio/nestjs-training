@@ -24,6 +24,13 @@ import type {
 } from '@repo/schemas'
 import { getPrimaryVariantQuantity } from '@/utils/inventory'
 
+/**
+ * The variant name the API works out from size and unit ("250g", "1.5kg"),
+ * for a variant the web built itself (the API returns `name` otherwise).
+ */
+export const formatVariantName = (size: number, unit: ProductUnit): string =>
+  `${Number(size)}${unit.toLowerCase()}`
+
 export const LOW_STOCK_THRESHOLD = 10
 
 function formatProductRoastMeta(product: Product): string {
@@ -34,10 +41,9 @@ function formatProductRoastMeta(product: Product): string {
   }
   const origin = product.origin?.trim()
   const roast = levelLabel[product.roastLevel]
-  if (origin) {
-    return `${origin} | ${roast}`
-  }
-  return roast
+  const roastLine = origin ? `${origin} | ${roast}` : roast
+  const variantName = product.variants[0]?.name
+  return variantName ? `${variantName} · ${roastLine}` : roastLine
 }
 
 function productFlavorLine(product: Product): string {
@@ -107,10 +113,12 @@ export function mapProductToEditFormValues(
     roastLevel: product.roastLevel,
     isOrganic: product.isOrganic,
     isFairTrade: product.isFairTrade,
+    size: variant?.size ?? '',
+    unit: variant?.unit ?? '',
     price: variant?.price ?? 0,
     discountType: variant?.discountType ?? DiscountType.PERCENT,
     discountValue: variant?.discountValue ?? 0,
-    quantity: variant?.quantity ?? 0,
+    stockQuantity: variant?.stockQuantity ?? 0,
     origin: product.origin,
     processingMethod: product.processingMethod,
   }
@@ -143,10 +151,14 @@ export function buildVariantUpdates(
   return [
     {
       id,
+      ...(values.size !== '' && { size: values.size }),
+      ...(values.unit !== '' && { unit: values.unit }),
       price: values.price,
       discountType: values.discountType,
       discountValue: values.discountValue,
-      ...(values.quantity !== '' && { quantity: values.quantity }),
+      ...(values.stockQuantity !== '' && {
+        stockQuantity: values.stockQuantity,
+      }),
     },
   ]
 }
@@ -155,18 +167,18 @@ export function buildVariantUpdates(
 export function toCreateVariantPayload(
   values: Pick<
     ProductFormValues,
-    'weight' | 'price' | 'discountType' | 'discountValue'
-  > & { unit: ProductUnit; quantity: number },
+    'size' | 'price' | 'discountType' | 'discountValue'
+  > & { unit: ProductUnit; stockQuantity: number },
   sku: string,
 ): CreateProductVariantPayload {
   return {
     sku,
-    weight: Number(values.weight),
+    size: Number(values.size),
     unit: values.unit,
     price: Number(values.price),
     discountType: values.discountType,
     discountValue: Number(values.discountValue),
-    quantity: Number(values.quantity),
+    stockQuantity: Number(values.stockQuantity),
   }
 }
 
@@ -182,8 +194,8 @@ const PRODUCT_FORM_FIELDS = [
 const CREATE_VARIANT_FORM_FIELDS = [
   'price',
   'discountValue',
-  'quantity',
-  'weight',
+  'stockQuantity',
+  'size',
   'unit',
 ] as const
 
@@ -240,21 +252,19 @@ export function imageErrorTarget(
 
 /**
  * The Add form target for an API error path: a field, an image box, or
- * undefined for the fallback. A duplicate SKU goes to Weight, since the SKU
- * is built from Weight + Unit.
+ * undefined for the fallback. A duplicate SKU goes to Size, since the SKU
+ * is built from Size + Unit.
  */
 export function createProductErrorTarget(
   apiField: string,
   payload: CreateProductPayload,
 ): CreateProductErrorTarget | undefined {
   const [root, index, leaf] = apiField.split('.')
-  if (root === 'sku') return 'weight'
+  if (root === 'sku') return 'size'
   if (root === 'images') return imageErrorTarget(payload.images, index)
   if (root === 'variants') {
     if (index !== '0') return undefined
-    return leaf === 'sku'
-      ? 'weight'
-      : findField(CREATE_VARIANT_FORM_FIELDS, leaf)
+    return leaf === 'sku' ? 'size' : findField(CREATE_VARIANT_FORM_FIELDS, leaf)
   }
   return index === undefined ? findField(PRODUCT_FORM_FIELDS, root) : undefined
 }
@@ -262,13 +272,12 @@ export function createProductErrorTarget(
 const UPDATE_VARIANT_FORM_FIELDS = [
   'price',
   'discountValue',
-  'quantity',
+  'stockQuantity',
+  'size',
+  'unit',
 ] as const
 
-export type UpdateProductErrorTarget = Exclude<
-  CreateProductErrorTarget,
-  'weight' | 'unit'
->
+export type UpdateProductErrorTarget = CreateProductErrorTarget
 
 /**
  * The Edit form target for an API error path: a field, an image box, or
@@ -310,12 +319,12 @@ export function mapProductToFormValues(product: Product): ProductFormValues {
     roastLevel: product.roastLevel,
     isOrganic: product.isOrganic,
     isFairTrade: product.isFairTrade,
-    weight: variant?.weight ?? 0,
+    size: variant?.size ?? 0,
     unit: variant?.unit ?? '',
     price: variant?.price ?? 0,
     discountType,
     discountValue: hasDiscount ? (variant?.discountValue ?? 0) : 0,
-    quantity: variant?.quantity ?? 0,
+    stockQuantity: variant?.stockQuantity ?? 0,
     origin: product.origin,
     processingMethod: product.processingMethod,
   }

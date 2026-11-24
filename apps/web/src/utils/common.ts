@@ -37,21 +37,20 @@ export const getNameInitials = (
 }
 
 export const renderProductSku = ({
-  weight,
+  size,
   unit,
 }: {
-  weight: number
+  size: number
   unit: string
 }): string => {
-  const safeWeight =
-    Number.isFinite(weight) && weight > 0 ? String(weight) : '0'
+  const safeSize = Number.isFinite(size) && size > 0 ? String(size) : '0'
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   const suffix = Array.from({ length: 4 }, () => {
     return chars[Math.floor(Math.random() * chars.length)]
   }).join('')
   const safeUnit = unit.trim().toUpperCase() || 'U'
 
-  return `PRD-${safeWeight}${safeUnit}-${suffix}`
+  return `PRD-${safeSize}${safeUnit}-${suffix}`
 }
 
 export const ONLY_TEXT_REGEX = /^[A-Za-z/ ]+$/

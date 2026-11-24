@@ -272,13 +272,12 @@ erDiagram
         id uuid PK
         product_id uuid FK
         sku string
-        weight number
+        size number
         unit string
-        name string
         price number
         discount_type string "PERCENT | FIXED"
         discount_value number
-        quantity int
+        stock_quantity int
         created_at timestamp
         updated_at timestamp
         deleted_at timestamp
@@ -323,7 +322,7 @@ erDiagram
 | `GET`    | `/products`     | 🔓   | List products (filter by category/status/roastLevel/price range, sort by name/price, search, pagination) |
 | `GET`    | `/products/:id` | 🔓   | Get product by ID                                                                                        |
 | `POST`   | `/products`     | 👑   | Create product (2–6 images with one primary, at least one variant)                                       |
-| `PATCH`  | `/products/:id` | 👑   | Update product (add/update/remove images)                                                                |
+| `PATCH`  | `/products/:id` | 👑   | Update product (add/update/remove images; update variant size, unit, price, discount, stock quantity)   |
 | `DELETE` | `/products/:id` | 👑   | Archive + soft-delete product                                                                            |
 
 ### Health

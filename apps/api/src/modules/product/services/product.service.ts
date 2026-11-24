@@ -210,11 +210,13 @@ export class ProductService {
       }
 
       const next = {
+        size: patch.size ?? variant.size,
+        unit: patch.unit ?? variant.unit,
         price: patch.price ?? variant.price,
         discountType:
           patch.discountType ?? variant.discountType ?? DiscountType.PERCENT,
         discountValue: patch.discountValue ?? variant.discountValue ?? '0',
-        quantity: patch.quantity ?? variant.quantity,
+        stockQuantity: patch.stockQuantity ?? variant.stockQuantity,
       };
 
       const violation = findDiscountRuleViolation(next);

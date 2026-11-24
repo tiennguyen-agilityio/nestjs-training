@@ -137,7 +137,7 @@ describe('ProductService', () => {
         variants: [
           {
             sku: 'SKU-1',
-            weight: '250.000',
+            size: '250.000',
             unit: ProductUnit.G,
             price: '10.00',
           },
@@ -152,7 +152,7 @@ describe('ProductService', () => {
       expect(productVariantService.create).toHaveBeenCalledWith({
         productId: 'product-id-1',
         sku: 'SKU-1',
-        weight: '250.000',
+        size: '250.000',
         unit: ProductUnit.G,
         price: '10.00',
       });
@@ -789,7 +789,7 @@ describe('ProductService', () => {
           price: '100.00',
           discountType: DiscountType.PERCENT,
           discountValue: '10.00',
-          quantity: 30,
+          stockQuantity: 30,
           ...overrides,
         }) as ProductVariant;
 
@@ -811,18 +811,51 @@ describe('ProductService', () => {
         return error as ValidationException;
       };
 
+      it('applies size and unit from updateVariants', async () => {
+        const { variants } = productWithVariants([
+          buildVariant(idA, {
+            size: '250.00',
+            unit: ProductUnit.G,
+            stockQuantity: 37,
+          }),
+        ]);
+
+        await service.update('product-id-1', {
+          updateVariants: [{ id: idA, size: '500' }],
+        });
+        expect(variants[0]).toMatchObject({
+          size: '500',
+          unit: ProductUnit.G,
+          stockQuantity: 37,
+        });
+
+        variants[0].size = '250.00';
+        await service.update('product-id-1', {
+          updateVariants: [{ id: idA, unit: ProductUnit.KG }],
+        });
+        expect(variants[0]).toMatchObject({
+          size: '250.00',
+          unit: ProductUnit.KG,
+        });
+
+        await service.update('product-id-1', {
+          updateVariants: [{ id: idA, stockQuantity: 5 }],
+        });
+        expect(variants[0].stockQuantity).toBe(5);
+      });
+
       it('keeps price and discount on a quantity-only update', async () => {
         const { variants } = productWithVariants([buildVariant(idA)]);
 
         await service.update('product-id-1', {
-          updateVariants: [{ id: idA, quantity: 50 }],
+          updateVariants: [{ id: idA, stockQuantity: 50 }],
         });
 
         expect(variants[0]).toMatchObject({
           price: '100.00',
           discountType: DiscountType.PERCENT,
           discountValue: '10.00',
-          quantity: 50,
+          stockQuantity: 50,
         });
         expect(productRepository.save).toHaveBeenCalledTimes(1);
       });
@@ -921,7 +954,7 @@ describe('ProductService', () => {
 
         const error = await rejection(
           service.update('product-id-1', {
-            updateVariants: [{ id: idA, quantity: 50 }],
+            updateVariants: [{ id: idA, stockQuantity: 50 }],
           }),
         );
 
@@ -929,7 +962,7 @@ describe('ProductService', () => {
           errCode: ERROR_CODES.PRODUCT_VARIANT.MAX_FIXED_DISCOUNT_VALUE,
           field: 'updateVariants.0.discountValue',
         });
-        expect(variants[0].quantity).toBe(30);
+        expect(variants[0].stockQuantity).toBe(30);
       });
 
       it('rejects a discount value of 150 on a stored PERCENT discount', async () => {
@@ -952,13 +985,13 @@ describe('ProductService', () => {
         ]);
 
         await service.update('product-id-1', {
-          updateVariants: [{ id: idA, quantity: 50 }],
+          updateVariants: [{ id: idA, stockQuantity: 50 }],
         });
 
         expect(variants[0]).toMatchObject({
           discountType: DiscountType.PERCENT,
           discountValue: '0',
-          quantity: 50,
+          stockQuantity: 50,
         });
       });
 
@@ -1041,7 +1074,10 @@ describe('ProductService', () => {
         });
 
         expect(product.name).toBe('Renamed');
-        expect(variants[0]).toMatchObject({ price: '100.00', quantity: 30 });
+        expect(variants[0]).toMatchObject({
+          price: '100.00',
+          stockQuantity: 30,
+        });
         expect(productRepository.save).toHaveBeenCalledTimes(1);
       });
     });

@@ -15,7 +15,7 @@ const product = {
   variants: [
     {
       sku: 'SKU-001',
-      weight: 250,
+      size: 250,
       unit: ProductUnit.G,
       price: 12.5,
       discountType: DiscountType.PERCENT,

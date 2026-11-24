@@ -32,12 +32,12 @@ const INITIAL_STATE: ProductFormState = {
     roastLevel: RoastLevel.LIGHT,
     isOrganic: true,
     isFairTrade: false,
-    weight: '',
+    size: '',
     unit: '',
     price: '',
     discountType: DiscountType.PERCENT,
     discountValue: 0,
-    quantity: '',
+    stockQuantity: '',
     origin: '',
     processingMethod: '',
   },
@@ -61,8 +61,8 @@ const PageContent = () => {
     }: ProductFormSubmission,
     { handleServerError, finish, reset }: ProductFormActions,
   ) => {
-    const { weight, unit, price, quantity } = values
-    if (weight === '' || unit === '' || price === '' || quantity === '') {
+    const { size, unit, price, stockQuantity } = values
+    if (size === '' || unit === '' || price === '' || stockQuantity === '') {
       return finish()
     }
 
@@ -79,8 +79,8 @@ const PageContent = () => {
       processingMethod: values.processingMethod.trim(),
       variants: [
         toCreateVariantPayload(
-          { ...values, weight, unit, price, quantity },
-          renderProductSku({ weight, unit }),
+          { ...values, size, unit, price, stockQuantity },
+          renderProductSku({ size, unit }),
         ),
       ],
       images: buildProductImagesPayload({ avatarUrl: primaryUrl, galleryUrls }),

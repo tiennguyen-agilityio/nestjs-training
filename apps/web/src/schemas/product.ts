@@ -11,7 +11,7 @@ import { ERROR_MESSAGES, FORM_MESSAGES } from '@/constants/messages'
 import { QUANTITY_MAX } from '@/constants/product'
 import { formatNumberThousands } from '@/utils/number'
 
-const { NAME, PRICE, WEIGHT, DISCOUNT, QUANTITY } = VALIDATION_RULES
+const { NAME, PRICE, SIZE, DISCOUNT, STOCK_QUANTITY } = VALIDATION_RULES
 
 // Exact bound with thousand separators, e.g. 99999999.99 -> "99,999,999.99":
 // formatting is the UI's job, the shared message only interpolates it.
@@ -63,34 +63,53 @@ const processingMethodSchema = textFieldSchema(
   NAME.MIN_LENGTH,
 )
 
-// Quantity as the input holds it ('' when empty). `max` is the Add form's
-// web-only cap; Edit has none, like the API, so existing stock still saves.
-const quantitySchema = (max?: number) => {
-  let quantity = z
+// Stock quantity as the input holds it ('' when empty). `max` is the Add
+// form's web-only cap; Edit has none, like the API, so existing stock saves.
+const stockQuantitySchema = (max?: number) => {
+  let stock = z
     .number()
     .int({ message: FORM_MESSAGES.isInt('Quantity') })
-    .min(QUANTITY.MIN, {
-      message: FORM_MESSAGES.min('Quantity', QUANTITY.MIN),
+    .min(STOCK_QUANTITY.MIN, {
+      message: FORM_MESSAGES.min('Quantity', STOCK_QUANTITY.MIN),
     })
   if (max !== undefined) {
-    quantity = quantity.max(max, {
+    stock = stock.max(max, {
       message: FORM_MESSAGES.max('Quantity', max),
     })
   }
   return z
-    .union([z.literal(''), quantity], { error: ERROR_MESSAGES.FIELD_REQUIRED })
+    .union([z.literal(''), stock], { error: ERROR_MESSAGES.FIELD_REQUIRED })
     .refine((value) => value !== '', {
       message: ERROR_MESSAGES.FIELD_REQUIRED,
     })
 }
 
-// Price, discount and quantity of a product's (first) variant, shared by the
+// Size and unit of a product's (first) variant, shared by the Create and
+// Edit forms.
+const sizeFields = {
+  size: z
+    .union([z.literal(''), numberInRange('Size', SIZE.MIN, SIZE.MAX)], {
+      error: ERROR_MESSAGES.FIELD_REQUIRED,
+    })
+    .refine((value) => value !== '', {
+      message: ERROR_MESSAGES.FIELD_REQUIRED,
+    }),
+  unit: z
+    .union([z.literal(''), z.nativeEnum(ProductUnit)], {
+      error: ERROR_MESSAGES.FIELD_REQUIRED,
+    })
+    .refine((value) => value !== '', {
+      message: ERROR_MESSAGES.FIELD_REQUIRED,
+    }),
+}
+
+// Price, discount and stock of a product's (first) variant, shared by the
 // Create and Edit forms, with both discount rules on discountValue.
 const pricingFields = {
   price: numberInRange('Base price', PRICE.MIN, PRICE.MAX),
   discountType: z.nativeEnum(DiscountType),
   discountValue: numberInRange('Discount', DISCOUNT.MIN, DISCOUNT.MAX),
-  quantity: quantitySchema(),
+  stockQuantity: stockQuantitySchema(),
 }
 
 const refinePricing = (
@@ -125,16 +144,9 @@ export const createProductFormSchema = z
     roastLevel: z.nativeEnum(RoastLevel),
     isOrganic: z.boolean(),
     isFairTrade: z.boolean(),
-    weight: numberInRange('Weight', WEIGHT.MIN, WEIGHT.MAX),
-    unit: z
-      .union([z.literal(''), z.nativeEnum(ProductUnit)], {
-        error: ERROR_MESSAGES.FIELD_REQUIRED,
-      })
-      .refine((value) => value !== '', {
-        message: ERROR_MESSAGES.FIELD_REQUIRED,
-      }),
+    ...sizeFields,
     ...pricingFields,
-    quantity: quantitySchema(QUANTITY_MAX),
+    stockQuantity: stockQuantitySchema(QUANTITY_MAX),
     origin: originSchema,
     processingMethod: processingMethodSchema,
   })
@@ -153,11 +165,12 @@ export const editProductFormSchema = z
     roastLevel: z.nativeEnum(RoastLevel),
     isOrganic: z.boolean(),
     isFairTrade: z.boolean(),
+    ...sizeFields,
     ...pricingFields,
     origin: originSchema,
     processingMethod: processingMethodSchema,
   })
   .superRefine(refinePricing)
 
-// Form values as the inputs hold them: an empty Quantity is ''.
+// Form values as the inputs hold them: an empty Size or Stock is ''.
 export type EditProductFormValues = z.input<typeof editProductFormSchema>

@@ -12,12 +12,12 @@ const valid = {
   roastLevel: RoastLevel.LIGHT,
   isOrganic: false,
   isFairTrade: false,
-  weight: 1,
+  size: 1,
   unit: ProductUnit.KG,
   price: 10,
   discountType: DiscountType.PERCENT,
   discountValue: 0,
-  quantity: 1,
+  stockQuantity: 1,
   origin: 'Ethiopia',
   processingMethod: 'Washed',
 }
@@ -35,10 +35,10 @@ describe('createProductFormSchema', () => {
     expect(createProductFormSchema.safeParse(valid).success).toBe(true)
   })
 
-  it('rejects an initial quantity above 500', () => {
-    expect(messagesFor({ ...valid, quantity: 501 }, 'quantity')).toContain(
-      'Quantity must be at most 500',
-    )
+  it('rejects an initial stock above 500', () => {
+    expect(
+      messagesFor({ ...valid, stockQuantity: 501 }, 'stockQuantity'),
+    ).toContain('Quantity must be at most 500')
   })
 
   it('uses the screen label and a friendly max message for Base price', () => {
@@ -47,9 +47,9 @@ describe('createProductFormSchema', () => {
     )
   })
 
-  it('uses a friendly min message for Weight', () => {
-    expect(messagesFor({ ...valid, weight: 0 }, 'weight')).toContain(
-      'Weight must be at least 1',
+  it('uses a friendly min message for Size', () => {
+    expect(messagesFor({ ...valid, size: 0 }, 'size')).toContain(
+      'Size must be at least 1',
     )
   })
 
@@ -108,7 +108,9 @@ describe('editProductFormSchema', () => {
     price: 120,
     discountType: DiscountType.PERCENT,
     discountValue: 10,
-    quantity: 30,
+    stockQuantity: 30,
+    size: 250,
+    unit: ProductUnit.G,
   }
 
   function editMessagesFor(input: Record<string, unknown>, field: string) {
@@ -138,15 +140,23 @@ describe('editProductFormSchema', () => {
     ).toEqual(['Discount must be less than the base price'])
   })
 
-  it('rejects quantity -1 with a friendly min message', () => {
-    expect(editMessagesFor({ ...validEdit, quantity: -1 }, 'quantity')).toEqual(
-      ['Quantity must be at least 0'],
-    )
+  it('rejects stock -1 with a friendly min message', () => {
+    expect(
+      editMessagesFor({ ...validEdit, stockQuantity: -1 }, 'stockQuantity'),
+    ).toEqual(['Quantity must be at least 0'])
   })
 
-  it('accepts a quantity above 500, since the API has no maximum', () => {
+  it('checks Size and Unit on edit like on create', () => {
+    expect(editMessagesFor({ ...validEdit, size: 0 }, 'size')).toContain(
+      'Size must be at least 1',
+    )
+    expect(editMessagesFor({ ...validEdit, unit: '' }, 'unit')).not.toEqual([])
+  })
+
+  it('accepts a stock above 500, since the API has no maximum', () => {
     expect(
-      editProductFormSchema.safeParse({ ...validEdit, quantity: 501 }).success,
+      editProductFormSchema.safeParse({ ...validEdit, stockQuantity: 501 })
+        .success,
     ).toBe(true)
   })
 

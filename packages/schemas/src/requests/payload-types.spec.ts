@@ -14,7 +14,7 @@ describe('payload types', () => {
   it('reject a payload that does not match the body schema', () => {
     const variant = {
       sku: 'SKU-001',
-      weight: 250,
+      size: 250,
       unit: ProductUnit.G,
       price: 12.5,
       discountType: DiscountType.PERCENT,
@@ -36,7 +36,7 @@ describe('payload types', () => {
     const objectPrice: CreateProductVariantPayload = { ...variant, price: {} };
     // @ts-expect-error sku is required
     const noSku: CreateProductVariantPayload = {
-      weight: 250,
+      size: 250,
       unit: ProductUnit.G,
       price: 12.5,
     };

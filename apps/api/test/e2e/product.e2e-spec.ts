@@ -111,12 +111,12 @@ describe('ProductController (e2e)', () => {
     skuBase: string,
   ): {
     sku: string;
-    weight: number;
+    size: number;
     unit: ProductUnit;
     price: number;
   } => ({
     sku: uniqueName(skuBase),
-    weight: 250,
+    size: 250,
     unit: ProductUnit.G,
     price: 12.5,
   });
@@ -159,10 +159,10 @@ describe('ProductController (e2e)', () => {
     price: number;
     discountType: DiscountType;
     discountValue: number;
-    quantity: number;
+    stockQuantity: number;
   };
 
-  // A product with one variant priced 100, PERCENT 10, quantity 30, created
+  // A product with one variant priced 100, PERCENT 10, stock 30, created
   // through the service (no session needed).
   const createPricedProduct = async (
     variant: {
@@ -182,12 +182,12 @@ describe('ProductController (e2e)', () => {
         variants: [
           {
             sku: uniqueName('SKU-PRICED'),
-            weight: '250',
+            size: '250',
             unit: ProductUnit.G,
             price: '100',
             discountType: DiscountType.PERCENT,
             discountValue: '10',
-            quantity: 30,
+            stockQuantity: 30,
             ...variant,
           },
         ],
@@ -262,10 +262,10 @@ describe('ProductController (e2e)', () => {
           variants: [
             {
               sku: uniqueName('SKU-READ'),
-              weight: '250',
+              size: '250',
               unit: ProductUnit.G,
               price: '120',
-              quantity: 30,
+              stockQuantity: 30,
             },
           ],
         }),
@@ -284,6 +284,26 @@ describe('ProductController (e2e)', () => {
     ): Promise<number> =>
       orm.em.fork().nativeUpdate(ProductVariant, { id }, data);
 
+    it('GET /products/:id returns size, stockQuantity and name, and no weight or quantity', async () => {
+      const product = await createProductWithVariant();
+
+      const response = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/products/${product.id}`)
+        .expect(200);
+
+      const [variant] = (
+        response.body as { data: { variants: Record<string, unknown>[] } }
+      ).data.variants;
+      expect(variant).toMatchObject({
+        size: 250,
+        unit: ProductUnit.G,
+        stockQuantity: 30,
+        name: '250g',
+      });
+      expect(variant).not.toHaveProperty('weight');
+      expect(variant).not.toHaveProperty('quantity');
+    });
+
     it('GET /products/:id reads a stored null/null discount as PERCENT 0', async () => {
       const product = await createProductWithVariant();
       const [variant] = product.variants.getItems();
@@ -301,14 +321,14 @@ describe('ProductController (e2e)', () => {
           variants: Array<{
             discountType: string;
             discountValue: number;
-            quantity: number;
+            stockQuantity: number;
           }>;
         };
       };
       expect(body.data.variants[0]).toMatchObject({
         discountType: DiscountType.PERCENT,
         discountValue: 0,
-        quantity: 30,
+        stockQuantity: 30,
       });
     });
 
@@ -319,7 +339,7 @@ describe('ProductController (e2e)', () => {
         productVariantService.create({
           productId: product.id,
           sku: uniqueName('SKU-OLDER'),
-          weight: '500',
+          size: '500',
           unit: ProductUnit.G,
           price: '200',
         }),
@@ -444,7 +464,7 @@ describe('ProductController (e2e)', () => {
         variants: [
           {
             sku: uniqueName('SKU-10'),
-            weight: '250.000',
+            size: '250.000',
             unit: ProductUnit.G,
             price: '10.00',
           },
@@ -456,7 +476,7 @@ describe('ProductController (e2e)', () => {
         variants: [
           {
             sku: uniqueName('SKU-20'),
-            weight: '250.000',
+            size: '250.000',
             unit: ProductUnit.G,
             price: '20.00',
           },
@@ -472,13 +492,13 @@ describe('ProductController (e2e)', () => {
         variants: [
           {
             sku: uniqueName('SKU-GM-LOW'),
-            weight: '100.000',
+            size: '100.000',
             unit: ProductUnit.G,
             price: '5.00',
           },
           {
             sku: uniqueName('SKU-GM-HIGH'),
-            weight: '500.000',
+            size: '500.000',
             unit: ProductUnit.G,
             price: '18.00',
           },
@@ -490,7 +510,7 @@ describe('ProductController (e2e)', () => {
         variants: [
           {
             sku: uniqueName('SKU-SIMPLE'),
-            weight: '250.000',
+            size: '250.000',
             unit: ProductUnit.G,
             price: '12.00',
           },
@@ -802,7 +822,7 @@ describe('ProductController (e2e)', () => {
           variants: [
             {
               sku,
-              weight: 250,
+              size: 250,
               unit: ProductUnit.G,
               price: 12.5,
             },
@@ -829,7 +849,75 @@ describe('ProductController (e2e)', () => {
         url: 'https://example.com/coffee.jpg',
       });
       expect(variants).toHaveLength(1);
-      expect(variants[0]).toMatchObject({ sku, name: '250G' });
+      expect(variants[0]).toMatchObject({ sku, size: '250.00' });
+    });
+
+    it('POST /products saves size 250 and stockQuantity 10 and names the variant "250g"', async () => {
+      const admin = await createTestUser(UserRole.ADMIN);
+      const category = await createTestCategory();
+      mockSessionFor(admin.clerkId);
+
+      const response = await request(app.getHttpServer())
+        .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
+        .send({
+          categoryId: category.id,
+          name: uniqueName('Size Stock E2E'),
+          ...requiredProductFields(),
+          images: validImages(),
+          variants: [
+            {
+              sku: uniqueName('SKU-SIZE'),
+              size: 250,
+              unit: ProductUnit.G,
+              price: 12.5,
+              stockQuantity: 10,
+            },
+          ],
+        })
+        .expect(201);
+
+      const body = response.body as {
+        data: { id: string; variants: Record<string, unknown>[] };
+      };
+      createdProductIds.push(body.data.id);
+      expect(body.data.variants[0]).toMatchObject({
+        size: 250,
+        unit: ProductUnit.G,
+        stockQuantity: 10,
+        name: '250g',
+      });
+    });
+
+    it('rejects a variant size below the minimum with a Size message', async () => {
+      const admin = await createTestUser(UserRole.ADMIN);
+      const category = await createTestCategory();
+      mockSessionFor(admin.clerkId);
+
+      const response = await request(app.getHttpServer())
+        .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
+        .send({
+          categoryId: category.id,
+          name: uniqueName('Size Min E2E'),
+          ...requiredProductFields(),
+          images: validImages(),
+          variants: [
+            {
+              sku: uniqueName('SKU-SIZE-MIN'),
+              size: 0,
+              unit: ProductUnit.G,
+              price: 1,
+            },
+          ],
+        })
+        .expect(400);
+
+      const [error] = (
+        response.body as { errors: Array<{ field: string; message: string }> }
+      ).errors;
+      expect(error.field).toBe('variants.0.size');
+      expect(error.message).toMatch(/^Size must not be less than/);
     });
 
     it('POST /products responds 201 for a description over 255 characters', async () => {
@@ -928,7 +1016,7 @@ describe('ProductController (e2e)', () => {
           variants: [
             {
               sku: existingSku,
-              weight: '250',
+              size: '250',
               unit: ProductUnit.G,
               price: '10',
             },
@@ -949,14 +1037,14 @@ describe('ProductController (e2e)', () => {
           variants: [
             {
               sku: uniqueName('SKU-NEW'),
-              weight: 100,
+              size: 100,
               unit: ProductUnit.G,
               price: 5,
             },
             // Duplicates the pre-existing SKU above — fails after the first
             // variant (and the product row) were already written in this
             // same request, which must roll back atomically.
-            { sku: existingSku, weight: 100, unit: ProductUnit.G, price: 5 },
+            { sku: existingSku, size: 100, unit: ProductUnit.G, price: 5 },
           ],
         })
         .expect(409);
@@ -986,7 +1074,7 @@ describe('ProductController (e2e)', () => {
           variants: [
             {
               sku: uniqueName('SKU-OOR'),
-              weight: 1,
+              size: 1,
               unit: ProductUnit.G,
               price: 999999999,
             },
@@ -1011,7 +1099,7 @@ describe('ProductController (e2e)', () => {
           variants: [
             {
               sku: uniqueName('SKU-PCT'),
-              weight: 1,
+              size: 1,
               unit: ProductUnit.G,
               price: 10,
               discountType: DiscountType.PERCENT,
@@ -1148,7 +1236,7 @@ describe('ProductController (e2e)', () => {
           variants: [
             {
               sku: uniqueName('SKU-FIX'),
-              weight: 1,
+              size: 1,
               unit: ProductUnit.G,
               price: 600,
               discountType: DiscountType.FIXED,
@@ -1172,7 +1260,7 @@ describe('ProductController (e2e)', () => {
         .send({
           updateVariants: [
             { id: variantId, price: 10 },
-            { id: variantId, quantity: 1 },
+            { id: variantId, stockQuantity: 1 },
           ],
         })
         .expect(400);
@@ -1271,7 +1359,7 @@ describe('ProductController (e2e)', () => {
           name: 'x',
           ...requiredProductFields(),
           images: validImages(),
-          variants: [{ sku: 'A', weight: 0, unit: 'KG', price: 1 }],
+          variants: [{ sku: 'A', size: 0, unit: 'KG', price: 1 }],
         })
         .expect(400);
 
@@ -1284,7 +1372,7 @@ describe('ProductController (e2e)', () => {
         [
           ['isUuid', 'categoryId'],
           ['minLength', 'name'],
-          ['min', 'variants.0.weight'],
+          ['min', 'variants.0.size'],
         ],
       );
     });
@@ -1440,18 +1528,32 @@ describe('ProductController (e2e)', () => {
         });
       });
 
-      it('PATCH /products/:id with only quantity keeps price and discount', async () => {
+      it('PATCH /products/:id with updateVariants size 500 renames the variant "500g"', async () => {
+        const { productId, variantId } = await createPricedProduct();
+
+        const response = await patch(productId, {
+          updateVariants: [{ id: variantId, size: 500 }],
+        });
+
+        expect(response.status).toBe(200);
+        const variant = (
+          response.body as { data: { variants: Record<string, unknown>[] } }
+        ).data.variants.find((v) => v.id === variantId);
+        expect(variant).toMatchObject({ size: 500, name: '500g' });
+      });
+
+      it('PATCH /products/:id with only stockQuantity keeps price and discount', async () => {
         const { productId, variantId } = await createPricedProduct();
 
         await patch(productId, {
-          updateVariants: [{ id: variantId, quantity: 50 }],
+          updateVariants: [{ id: variantId, stockQuantity: 50 }],
         }).then((response) => expect(response.status).toBe(200));
 
         expect((await getVariants(productId))[0]).toMatchObject({
           price: 100,
           discountType: DiscountType.PERCENT,
           discountValue: 10,
-          quantity: 50,
+          stockQuantity: 50,
         });
       });
 
@@ -1584,7 +1686,7 @@ describe('ProductController (e2e)', () => {
           productVariantService.create({
             productId,
             sku: uniqueName('SKU-SECOND'),
-            weight: '500',
+            size: '500',
             unit: ProductUnit.G,
             price: '200',
           }),
@@ -1724,7 +1826,7 @@ describe('ProductController (e2e)', () => {
     const createWithStatus = async (
       label: string,
       status: ProductStatus,
-      quantity = 0,
+      stockQuantity = 0,
     ): Promise<Product> => {
       const product = await RequestContext.create(orm.em, () =>
         productService.create({
@@ -1733,7 +1835,7 @@ describe('ProductController (e2e)', () => {
           status,
           ...requiredProductFields(),
           images: [],
-          variants: [{ ...validVariant(`SKU-VIS-${label}`), quantity }],
+          variants: [{ ...validVariant(`SKU-VIS-${label}`), stockQuantity }],
         }),
       );
       createdProductIds.push(product.id);
@@ -1848,14 +1950,17 @@ describe('ProductController (e2e)', () => {
       ).not.toBeNull();
     });
 
-    it('returns the exact variant quantity to a visitor', async () => {
+    it('returns the exact variant stockQuantity to a visitor', async () => {
       mockSessionFor(null);
       const response = await request(app.getHttpServer())
         .get(`${API_BASE_PATH}/products/${pActive.id}`)
         .expect(200);
       expect(
-        (response.body as { data: { variants: Array<{ quantity: number }> } })
-          .data.variants[0].quantity,
+        (
+          response.body as {
+            data: { variants: Array<{ stockQuantity: number }> };
+          }
+        ).data.variants[0].stockQuantity,
       ).toBe(37);
     });
   });

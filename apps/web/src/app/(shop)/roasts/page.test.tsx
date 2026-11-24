@@ -55,12 +55,13 @@ const shopProductFixture: Product[] = [
     variants: [
       {
         sku: 'SKU-1',
-        weight: 250,
+        size: 250,
         unit: ProductUnit.G,
+        name: '250g',
         price: 24,
         discountType: DiscountType.PERCENT,
         discountValue: 10,
-        quantity: 42,
+        stockQuantity: 42,
       },
     ],
     images: [

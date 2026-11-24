@@ -24,12 +24,13 @@ const fixture: Product = {
   variants: [
     {
       sku: 's',
-      weight: 250,
+      size: 250,
       unit: ProductUnit.G,
+      name: '250g',
       price: 24,
       discountType: DiscountType.PERCENT,
       discountValue: 0,
-      quantity: 40,
+      stockQuantity: 40,
     },
   ],
   images: [],

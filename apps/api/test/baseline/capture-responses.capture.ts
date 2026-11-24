@@ -228,19 +228,19 @@ describe('API response capture', () => {
       variants: [
         {
           sku: 'BASELINE-ETH-250G',
-          weight: '250.000',
+          size: '250.000',
           unit: ProductUnit.G,
           price: '12.50',
-          quantity: 40,
+          stockQuantity: 40,
         },
         {
           sku: 'BASELINE-ETH-1KG',
-          weight: '1.000',
+          size: '1.000',
           unit: ProductUnit.KG,
           price: '40.00',
           discountType: DiscountType.PERCENT,
           discountValue: '10.00',
-          quantity: 12,
+          stockQuantity: 12,
         },
       ],
     });
@@ -252,10 +252,10 @@ describe('API response capture', () => {
       variants: [
         {
           sku: 'BASELINE-COL-500G',
-          weight: '500.000',
+          size: '500.000',
           unit: ProductUnit.G,
           price: '20.00',
-          quantity: 25,
+          stockQuantity: 25,
         },
       ],
     });
@@ -267,10 +267,10 @@ describe('API response capture', () => {
       variants: [
         {
           sku: 'BASELINE-SUM-250G',
-          weight: '250.000',
+          size: '250.000',
           unit: ProductUnit.G,
           price: '8.00',
-          quantity: 60,
+          stockQuantity: 60,
         },
       ],
     });
@@ -340,12 +340,12 @@ describe('API response capture', () => {
       variants: [
         {
           sku: 'BASELINE-GUA-250G',
-          weight: 250,
+          size: 250,
           unit: ProductUnit.G,
           price: 14.5,
           discountType: DiscountType.FIXED,
           discountValue: 1.5,
-          quantity: 30,
+          stockQuantity: 30,
         },
       ],
     });
@@ -389,7 +389,7 @@ describe('API response capture', () => {
       variants: [
         {
           sku: 'BASELINE-COL-DUP',
-          weight: 250,
+          size: 250,
           unit: ProductUnit.G,
           price: 10,
         },
