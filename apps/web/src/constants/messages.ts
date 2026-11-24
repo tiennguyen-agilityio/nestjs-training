@@ -52,6 +52,13 @@ export const ERROR_MESSAGES = {
   ORDER_CART_EMPTY: 'Your cart is empty. Add an item before checking out.',
   ORDER_SHIPPING_METHOD_UNAVAILABLE:
     'This shipping method is no longer available. Choose another one.',
+  PAYMENT_ORDER_EXPIRED: 'The time to pay for this order has passed.',
+  PAYMENT_NOT_PAYABLE: 'This order cannot be paid now.',
+  PAYMENT_GATEWAY_UNAVAILABLE:
+    'The payment provider cannot be reached. Try again in a moment.',
+  PAYMENT_GATEWAY_REJECTED: 'The payment provider refused this payment.',
+  PAYMENT_METHOD_UNAVAILABLE:
+    'Online payment is not available for this method yet.',
 } as const
 
 // Form validation copy shown by the web forms, in place of the packages'
@@ -97,6 +104,7 @@ export const API_FALLBACK_ERRORS = {
   ORDER_SHIPPING_STATUS_UPDATE: 'Could not update shipping status',
   ORDERS_LOAD: 'Could not load orders',
   ORDER_LOAD: 'Could not load order',
+  PAYMENT_START: 'Could not start the payment. Try again.',
   SHIPPING_METHODS_LOAD: 'Could not load shipping methods',
   SHIPPING_METHOD_LOAD: 'Could not load shipping method',
   SHIPPING_METHOD_CREATE: 'Could not create shipping method',
@@ -147,6 +155,14 @@ export const NOTICE_MESSAGES = {
     MESSAGE: 'No delivery options available right now.',
   },
   SHIPPING_METHOD_DELETED_LOCKED: 'Deleted shipping methods cannot be modified',
+  ORDER_PAYMENT: {
+    PAID: 'Payment received.',
+    CONFIRMING: 'Confirming your payment…',
+    STILL_CONFIRMING:
+      'We are still confirming your payment. Refresh this page in a moment.',
+    NOT_COMPLETED: 'Payment not completed.',
+    FAILED: 'Payment failed. Try another card.',
+  },
 }
 
 export const DIALOG_MESSAGES = {

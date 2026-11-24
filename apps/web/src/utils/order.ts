@@ -1,9 +1,9 @@
-import { PaymentMethod } from '@repo/constants'
+import { PaymentMethod, PaymentType } from '@repo/constants'
 import type { PlaceOrderPayload } from '@repo/schemas'
 import { Banknote, Package, Truck } from 'lucide-react'
 
 import type { StatCardItem } from '@/components/StatsCards'
-import { ERROR_MESSAGES } from '@/constants/messages'
+import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
 import type { ApiErrorResponse, ErrorDetail, ResponseMeta } from '@/types/api'
 import {
   PAYMENT_METHOD,
@@ -14,12 +14,13 @@ import {
   ORDER_STATUS,
   SHIPPING_STATUS,
   type Order,
+  type OrderDetail,
   type PlacedOrder,
 } from '@/types/order'
 
 import {
   OrderPaymentStatus,
-  type OrderStatus,
+  OrderStatus,
   type ShippingStatus,
 } from '@repo/constants'
 
@@ -440,6 +441,101 @@ export const isPlacedOrder = (value: unknown): value is PlacedOrder => {
     Array.isArray(order.items) &&
     order.items.every((item) => typeof item?.lineTotal === 'number')
   )
+}
+
+export const PAYMENT_ERR_CODES = {
+  ORDER_EXPIRED: 'paymentOrderExpired',
+  NOT_PAYABLE: 'paymentNotPayable',
+  GATEWAY_UNAVAILABLE: 'paymentGatewayUnavailable',
+  GATEWAY_REJECTED: 'paymentGatewayRejected',
+  METHOD_UNAVAILABLE: 'paymentMethodUnavailable',
+} as const
+
+const PAYMENT_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  [PAYMENT_ERR_CODES.ORDER_EXPIRED]: ERROR_MESSAGES.PAYMENT_ORDER_EXPIRED,
+  [PAYMENT_ERR_CODES.NOT_PAYABLE]: ERROR_MESSAGES.PAYMENT_NOT_PAYABLE,
+  [PAYMENT_ERR_CODES.GATEWAY_UNAVAILABLE]:
+    ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE,
+  [PAYMENT_ERR_CODES.GATEWAY_REJECTED]: ERROR_MESSAGES.PAYMENT_GATEWAY_REJECTED,
+  [PAYMENT_ERR_CODES.METHOD_UNAVAILABLE]:
+    ERROR_MESSAGES.PAYMENT_METHOD_UNAVAILABLE,
+}
+
+export function paymentErrorMessage(
+  errCode: string | null | undefined,
+): string {
+  return (
+    (errCode && Object.hasOwn(PAYMENT_ERROR_MESSAGES, errCode)
+      ? PAYMENT_ERROR_MESSAGES[errCode]
+      : undefined) ?? API_FALLBACK_ERRORS.PAYMENT_START
+  )
+}
+
+export type OrderSuccessPaymentKind =
+  | 'paid'
+  | 'confirming'
+  | 'stillConfirming'
+  | 'notCompleted'
+  | 'failed'
+  | 'badgeOnly'
+
+export interface OrderSuccessPaymentView {
+  kind: OrderSuccessPaymentKind
+  badgeStatus: OrderPaymentStatus
+  canPayNow: boolean
+  errorMessage: string | null
+}
+
+const chargeMethodOf = (order: OrderDetail): PaymentMethod | null => {
+  const charges = order.payments
+    .filter((payment) => payment.type === PaymentType.CHARGE)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return charges[0]?.method ?? null
+}
+
+const paymentKindOf = (
+  status: OrderPaymentStatus,
+  hasSessionId: boolean,
+  isPollExhausted: boolean,
+): OrderSuccessPaymentKind => {
+  switch (status) {
+    case OrderPaymentStatus.PAID:
+      return 'paid'
+    case OrderPaymentStatus.PENDING:
+      if (!hasSessionId) return 'notCompleted'
+      return isPollExhausted ? 'stillConfirming' : 'confirming'
+    case OrderPaymentStatus.FAILED:
+      return hasSessionId && !isPollExhausted ? 'confirming' : 'failed'
+    case OrderPaymentStatus.UNPAID:
+      return 'notCompleted'
+    default:
+      return 'badgeOnly'
+  }
+}
+
+export function getOrderSuccessPaymentView(input: {
+  order: OrderDetail
+  hasSessionId: boolean
+  paymentError: string | null
+  isPollExhausted: boolean
+}): OrderSuccessPaymentView {
+  const { order, hasSessionId, paymentError, isPollExhausted } = input
+  const kind = paymentKindOf(order.paymentStatus, hasSessionId, isPollExhausted)
+  const isUnfinished = kind === 'notCompleted' || kind === 'failed'
+  const isConfirming = kind === 'confirming' || kind === 'stillConfirming'
+
+  return {
+    kind,
+    badgeStatus: isConfirming
+      ? OrderPaymentStatus.PENDING
+      : order.paymentStatus,
+    canPayNow:
+      isUnfinished &&
+      order.status === OrderStatus.PENDING &&
+      chargeMethodOf(order) === PaymentMethod.CARD,
+    errorMessage:
+      isUnfinished && paymentError ? paymentErrorMessage(paymentError) : null,
+  }
 }
 
 /** The cancel dialog's message: the API's `errCode`, never its `message`, picks it. */

@@ -20,6 +20,15 @@ export const ROUTES = {
   ROASTS: '/roasts',
 }
 
+export function orderSuccessPath(
+  orderId: string,
+  paymentError?: string,
+): string {
+  const params = new URLSearchParams({ orderId })
+  if (paymentError !== undefined) params.set('paymentError', paymentError)
+  return `${ROUTES.ORDER_SUCCESS}?${params.toString()}`
+}
+
 /** The shopper's order details page. */
 export function profileOrderPath(orderNumber: string): string {
   return `${ROUTES.USER_PROFILE}/orders/${encodeURIComponent(orderNumber)}`
