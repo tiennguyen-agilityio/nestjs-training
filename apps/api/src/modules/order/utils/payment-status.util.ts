@@ -10,7 +10,15 @@ export interface PaymentFacts {
   status: PaymentStatus;
   amount: string;
   createdAt: Date;
+  checkoutSessionId: string | null;
 }
+
+const ONLINE_METHODS = new Set([PaymentMethod.CARD, PaymentMethod.PAYPAL]);
+
+const isUnpaid = (charge: PaymentFacts): boolean =>
+  charge.status === PaymentStatus.PENDING &&
+  (charge.method === PaymentMethod.COD ||
+    (ONLINE_METHODS.has(charge.method) && !charge.checkoutSessionId));
 
 const STATUS_OF_CHARGE: Record<PaymentStatus, OrderPaymentStatus> = {
   [PaymentStatus.PENDING]: OrderPaymentStatus.PENDING,
@@ -36,12 +44,6 @@ export const paymentStatusOf = (
   const newest = payments
     .filter((p) => p.type === PaymentType.CHARGE)
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-  if (!newest) return OrderPaymentStatus.UNPAID;
-  if (
-    newest.method === PaymentMethod.COD &&
-    newest.status === PaymentStatus.PENDING
-  ) {
-    return OrderPaymentStatus.UNPAID;
-  }
+  if (!newest || isUnpaid(newest)) return OrderPaymentStatus.UNPAID;
   return STATUS_OF_CHARGE[newest.status];
 };

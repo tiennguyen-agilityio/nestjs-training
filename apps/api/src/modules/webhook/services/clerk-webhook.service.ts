@@ -43,29 +43,27 @@ export class ClerkWebhookService {
     return this.authProvider.verifyWebhook(rawBody, headers);
   }
 
-  async handleEvent(authEvent: AuthWebhookEvent): Promise<void> {
+  async handleEvent(authEvent: AuthWebhookEvent): Promise<boolean> {
     // The Clerk-specific field shapes below (email_addresses, primary_email_address_id, ...)
     // are only valid once we know the provider is Clerk — this cast is the one place that
     // boundary is crossed; AuthProvider itself stays provider-agnostic.
     const event = authEvent as unknown as WebhookEvent;
     switch (event.type) {
       case ClerkWebhookEventType.USER_CREATED:
-        await this.handleUserCreated(event);
-        break;
+        return this.handleUserCreated(event);
       case ClerkWebhookEventType.USER_UPDATED:
-        await this.handleUserUpdated(event);
-        break;
+        return this.handleUserUpdated(event);
       case ClerkWebhookEventType.USER_DELETED:
-        await this.handleUserDeleted(event);
-        break;
+        return this.handleUserDeleted(event);
       default:
         this.logger.log(`Unhandled webhook event type: ${event.type}`);
+        return false;
     }
   }
 
   private async handleUserCreated(
     event: UserCreatedOrUpdatedEvent,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { data } = event;
     const primaryEmail = data.email_addresses.find(
       (address) => address.id === data.primary_email_address_id,
@@ -75,7 +73,7 @@ export class ClerkWebhookService {
       this.logger.warn(
         `Clerk user.created for ${data.id} has no primary email, skipping`,
       );
-      return;
+      return false;
     }
 
     const publicMetadata = data.public_metadata as { role?: UserRole };
@@ -90,12 +88,13 @@ export class ClerkWebhookService {
         avatarUrl: data.image_url,
         role: publicMetadata.role,
       });
+      return true;
     } catch (err) {
       if (err instanceof DuplicateResourceException) {
         this.logger.warn(
           `Clerk user.created for ${data.id} already synced, skipping`,
         );
-        return;
+        return false;
       }
       throw err;
     }
@@ -103,11 +102,11 @@ export class ClerkWebhookService {
 
   private async handleUserUpdated(
     event: UserCreatedOrUpdatedEvent,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { data } = event;
     const existing = await this.findByClerkIdOrNull(data.id);
     if (!existing) {
-      return;
+      return false;
     }
 
     const publicMetadata = data.public_metadata as { role?: UserRole };
@@ -121,23 +120,25 @@ export class ClerkWebhookService {
       status:
         data.banned || data.locked ? UserStatus.INACTIVE : UserStatus.ACTIVE,
     });
+    return true;
   }
 
   private async handleUserDeleted(
     event: Extract<UserWebhookEvent, { type: 'user.deleted' }>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const clerkId = event.data.id;
     if (!clerkId) {
       this.logger.warn('Clerk user.deleted received without an id, skipping');
-      return;
+      return false;
     }
 
     const existing = await this.findByClerkIdOrNull(clerkId);
     if (!existing) {
-      return;
+      return false;
     }
 
     await this.userService.remove(existing.id, null);
+    return true;
   }
 
   /**

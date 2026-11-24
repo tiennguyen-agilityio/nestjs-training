@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   Min,
   validateSync,
 } from 'class-validator';
@@ -71,6 +72,17 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   CLERK_PUBLISHABLE_KEY!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  STRIPE_SECRET_KEY!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  STRIPE_WEBHOOK_SECRET!: string;
+
+  @IsUrl({ require_tld: false })
+  WEB_APP_URL!: string;
 
   // Empty or 0 means unset: ClerkAuthProvider falls back to DEFAULT_CLERK_SYNC_TIMEOUT_MS.
   @IsOptional()

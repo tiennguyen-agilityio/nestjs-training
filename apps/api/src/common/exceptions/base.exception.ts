@@ -45,6 +45,16 @@ export class InvalidRequestException extends SingleErrorDomainException {
   }
 }
 
+export class UnauthenticatedException extends SingleErrorDomainException {
+  constructor(error: ErrorDetailDto) {
+    super(
+      HttpStatus.UNAUTHORIZED,
+      ERROR_MESSAGES.EXCEPTION.UNAUTHORIZED,
+      error,
+    );
+  }
+}
+
 export class ItemNotFoundException extends SingleErrorDomainException {
   constructor(error: ErrorDetailDto) {
     super(HttpStatus.NOT_FOUND, ERROR_MESSAGES.EXCEPTION.ITEM_NOT_FOUND, error);

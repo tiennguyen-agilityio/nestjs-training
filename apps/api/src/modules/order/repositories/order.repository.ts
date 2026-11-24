@@ -19,7 +19,7 @@ left join lateral (
          coalesce(sum(p.amount) filter (where p.type = 'CHARGE' and p.status = 'PAID'), 0) as charged
   from payments p where p.order_id = o.id and p.deleted_at is null) t on true
 left join lateral (
-  select p.method, p.status from payments p
+  select p.method, p.status, p.checkout_session_id from payments p
   where p.order_id = o.id and p.type = 'CHARGE' and p.deleted_at is null
   order by p.created_at desc limit 1) c on true
 where o.user_id = ? and o.deleted_at is null and (case
@@ -27,6 +27,7 @@ where o.user_id = ? and o.deleted_at is null and (case
   when t.refunded > 0 then 'PARTIALLY_REFUNDED'
   when c.status is null then 'UNPAID'
   when c.method = 'COD' and c.status = 'PENDING' then 'UNPAID'
+  when c.method in ('CARD', 'PAYPAL') and c.status = 'PENDING' and c.checkout_session_id is null then 'UNPAID'
   else c.status::text end) = ?`;
 
 export interface CreateOrderData {
@@ -67,6 +68,10 @@ export class OrderRepository extends BaseRepository<Order> {
     return (
       (await this.findOneBy({ orderNumber }, { includeDeleted: true })) !== null
     );
+  }
+
+  reload(order: Order): Promise<Order | null> {
+    return this.reloadEntity(order);
   }
 
   async findMine(

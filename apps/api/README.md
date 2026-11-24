@@ -115,6 +115,9 @@ PostgreSQL via MikroORM.
 | `GRACEFUL_SHUTDOWN_TIMEOUT_MS` | Wait after `SIGTERM` before shutting down, in milliseconds; health probes answer 503 meanwhile (default `5000`, `0` disables) |
 | `APP_KEY`                      | Nest Observe app key                                                                                                          |
 | `APP_SECRET`                   | Nest Observe app secret                                                                                                       |
+| `STRIPE_SECRET_KEY`            | Stripe secret key (sandbox)                                                                                                   |
+| `STRIPE_WEBHOOK_SECRET`        | Stripe webhook signing secret                                                                                                 |
+| `WEB_APP_URL`                  | Website URL Stripe Checkout returns the shopper to                                                                            |
 
 ### Running Locally
 
@@ -171,6 +174,24 @@ pnpm run docker:prod:down
   quantity are worked out on every read; a line whose stock fell below its quantity
   (`inStock: false`) or whose product is no longer buyable (`isAvailable: false`) is kept and
   flagged.
+
+### Payments
+
+- **Stripe Checkout** — the owner of a CARD order starts the payment; the API opens a card-only
+  Stripe Checkout Session (USD) and returns its URL, so card numbers never reach the shop. The
+  session ends with the order's `expires_at` (24 h after placing the order). A second call while
+  the session is open returns the same URL.
+- **Webhook outcome** — `POST /webhooks/stripe`, verified by the `Stripe-Signature` header on the
+  raw body: a paid session sets the payment PAID (`transaction_id` = the PaymentIntent id,
+  `completed_at`) and the order CONFIRMED; a declined card or an expired session sets it FAILED
+  with the reason. PAID never changes again, so repeated events change nothing.
+- **Gateway-neutral rules** — `PaymentService` talks to gateways through `PaymentGateway`; PayPal
+  adds a gateway, not new rules.
+
+> **Running locally:** a payment is recorded only after Stripe's webhook reaches
+> `POST /webhooks/stripe` (Stripe signature). Forward it with the Stripe CLI and use the `whsec_…`
+> it prints as `STRIPE_WEBHOOK_SECRET`:
+> `stripe listen --forward-to localhost:<PORT>/webhooks/stripe --events checkout.session.completed,checkout.session.expired,payment_intent.payment_failed`.
 
 ### Cross-cutting
 
@@ -497,9 +518,10 @@ The signed-in user's own cart; every success returns the whole cart.
 
 ### Orders
 
-| Method | Path      | Auth | Description                                                                                                                                                                                                                                           |
-| :----- | :-------- | :--- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST` | `/orders` | 🔒   | Place an order from my cart (`Idempotency-Key` required): holds the stock (`reserved_quantity` + a `RESERVE` movement), copies names, prices and the method's fee, adds 10% tax, creates a PENDING CHARGE and empties the cart; any 400 saves nothing |
+| Method | Path                   | Auth | Description                                                                                                                                                                                                                                                                                  |
+| :----- | :--------------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/orders`              | 🔒   | Place an order from my cart (`Idempotency-Key` required): holds the stock (`reserved_quantity` + a `RESERVE` movement), copies names, prices and the method's fee, adds 10% tax, creates a PENDING CHARGE and empties the cart; any 400 saves nothing                                        |
+| `POST` | `/orders/:id/payments` | 🔒   | Start the online payment of my CARD order: opens a card-only Stripe Checkout Session and returns `{ paymentId, checkoutUrl, expiresAt }`; the same URL while it is open. 404 for another user's order, 400 `paymentMethodNotOnline` for COD, 409 `paymentNotPayable` / `paymentOrderExpired` |
 
 ### Health
 
@@ -515,11 +537,16 @@ rate-limited, and skipped by the Clerk and user-resolution middlewares (GET and 
 
 ### Webhooks
 
-Not under `/api/v1` and excluded from Swagger.
+Not under `/api/v1` and excluded from Swagger. Each verified event is recorded once in
+`webhook_events` (`provider` CLERK, STRIPE or PAYPAL + the provider's event id: `svix-id` or
+`evt_…`), in the same transaction as its processing: a repeated event id answers 200 and is
+skipped, an event that changed nothing is recorded `IGNORED`, and a processing error rolls the
+record back so the provider sends the event again. No payload is stored.
 
-| Method | Path              | Auth           | Description                                                      |
-| :----- | :---------------- | :------------- | :--------------------------------------------------------------- |
-| `POST` | `/webhooks/clerk` | Svix signature | Sync `user.created` / `user.updated` / `user.deleted` from Clerk |
+| Method | Path               | Auth             | Description                                                                                                                                                                                       |
+| :----- | :----------------- | :--------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST` | `/webhooks/clerk`  | Svix signature   | Sync `user.created` / `user.updated` / `user.deleted` from Clerk                                                                                                                                  |
+| `POST` | `/webhooks/stripe` | Stripe signature | Record a Stripe payment: `checkout.session.completed` → PAID + order CONFIRMED; `payment_intent.payment_failed`, `checkout.session.expired` → FAILED; 401 for a bad signature; never rate-limited |
 
 ## Database & Migrations
 

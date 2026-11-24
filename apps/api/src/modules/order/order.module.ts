@@ -20,5 +20,6 @@ import { ShippingMethodModule } from '../shipping-method/shipping-method.module.
   ],
   providers: [OrderService, OrderRepository],
   controllers: [OrderController],
+  exports: [OrderRepository],
 })
 export class OrderModule {}

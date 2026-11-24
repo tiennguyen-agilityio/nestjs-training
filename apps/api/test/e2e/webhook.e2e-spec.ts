@@ -41,8 +41,8 @@ describe('WebhookController (e2e)', () => {
 
   const signPayload = (
     body: string,
+    msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   ): { msgId: string; timestamp: string; signature: string } => {
-    const msgId = `msg-${Date.now()}`;
     const timestampSeconds = Math.floor(Date.now() / 1000);
     const webhook = new Webhook(webhookSecret);
     const signature = webhook.sign(
@@ -109,6 +109,67 @@ describe('WebhookController (e2e)', () => {
         .set('svix-signature', 'v1,tampered-signature')
         .send(body)
         .expect(400);
+    });
+
+    it('POST /webhooks/clerk processes one svix-id once', async () => {
+      const clerkId = `clerk-once-${Date.now()}`;
+      const msgId = `msg-once-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      await RequestContext.create(orm.em, () =>
+        userService.create(
+          {
+            clerkId,
+            email: `${clerkId}@example.com`,
+            firstName: 'Before',
+            lastName: 'Once',
+            role: UserRole.USER,
+          },
+          null,
+        ),
+      );
+      const updated = (firstName: string) =>
+        JSON.stringify({
+          type: 'user.updated',
+          data: {
+            id: clerkId,
+            email_addresses: [
+              { id: 'email-1', email_address: `${clerkId}@example.com` },
+            ],
+            primary_email_address_id: 'email-1',
+            first_name: firstName,
+            last_name: 'Once',
+            phone_numbers: [],
+            primary_phone_number_id: null,
+            image_url: null,
+            public_metadata: {},
+          },
+        });
+      const deliver = (body: string) => {
+        const { timestamp, signature } = signPayload(body, msgId);
+        return request(app.getHttpServer())
+          .post('/webhooks/clerk')
+          .set('Content-Type', 'application/json')
+          .set('svix-id', msgId)
+          .set('svix-timestamp', timestamp)
+          .set('svix-signature', signature)
+          .send(body)
+          .expect(200);
+      };
+
+      await deliver(updated('First'));
+      await deliver(updated('Second'));
+
+      await RequestContext.create(orm.em, async () => {
+        expect((await userService.findByClerkId(clerkId)).firstName).toBe(
+          'First',
+        );
+      });
+      const rows = (await orm.em
+        .getConnection()
+        .execute(
+          'select provider, status from webhook_events where event_id = ?',
+          [msgId],
+        )) as { provider: string; status: string }[];
+      expect(rows).toEqual([{ provider: 'CLERK', status: 'PROCESSED' }]);
     });
   });
 

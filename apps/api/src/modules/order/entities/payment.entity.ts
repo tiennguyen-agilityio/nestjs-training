@@ -14,6 +14,7 @@ import { Order } from './order.entity.js';
 
 const CURRENCY_LENGTH = 3;
 const TRANSACTION_ID_LENGTH = 255;
+const CHECKOUT_SESSION_ID_LENGTH = 255;
 
 @Entity({ tableName: 'payments' })
 @Index({ properties: ['order', 'createdAt'] })
@@ -29,6 +30,11 @@ const TRANSACTION_ID_LENGTH = 255;
   name: 'payments_transaction_id_unique',
   expression:
     'create unique index "payments_transaction_id_unique" on "payments" ("transaction_id") where "transaction_id" is not null;',
+})
+@Index({
+  name: 'payments_checkout_session_id_unique',
+  expression:
+    'create unique index "payments_checkout_session_id_unique" on "payments" ("checkout_session_id") where "checkout_session_id" is not null;',
 })
 @Check({ name: 'payments_amount_check', expression: 'amount > 0' })
 export class Payment extends AuditableEntity {
@@ -57,6 +63,14 @@ export class Payment extends AuditableEntity {
     nullable: true,
   })
   transactionId: string | null = null;
+
+  @Property({
+    type: 'string',
+    fieldName: 'checkout_session_id',
+    length: CHECKOUT_SESSION_ID_LENGTH,
+    nullable: true,
+  })
+  checkoutSessionId: string | null = null;
 
   @Property({ type: Date, fieldName: 'completed_at', nullable: true })
   completedAt: Date | null = null;

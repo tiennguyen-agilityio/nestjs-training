@@ -1,0 +1,24 @@
+import { Module } from '@nestjs/common';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { Payment } from '../order/entities/payment.entity.js';
+import { OrderModule } from '../order/order.module.js';
+import { PaymentRepository } from './repositories/payment.repository.js';
+import { PaymentService } from './services/payment.service.js';
+import { PaymentController } from './controllers/payment.controller.js';
+import { PaymentGateways } from './gateways/payment-gateways.js';
+import { StripePaymentGateway } from './gateways/stripe-payment.gateway.js';
+import { stripeClientProvider } from './gateways/stripe-client.provider.js';
+
+@Module({
+  imports: [MikroOrmModule.forFeature([Payment]), OrderModule],
+  providers: [
+    PaymentService,
+    PaymentRepository,
+    PaymentGateways,
+    StripePaymentGateway,
+    stripeClientProvider,
+  ],
+  controllers: [PaymentController],
+  exports: [PaymentService],
+})
+export class PaymentModule {}

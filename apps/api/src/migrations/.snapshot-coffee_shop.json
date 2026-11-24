@@ -1496,6 +1496,23 @@
           "enumItems": [],
           "mappedType": "decimal"
         },
+        "checkout_session_id": {
+          "name": "checkout_session_id",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
         "completed_at": {
           "name": "completed_at",
           "type": "timestamptz(6)",
@@ -1753,6 +1770,15 @@
         }
       },
       "indexes": [
+        {
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "keyName": "payments_checkout_session_id_unique",
+          "primary": false,
+          "unique": false,
+          "expression": "create unique index \"payments_checkout_session_id_unique\" on \"payments\" (\"checkout_session_id\") where \"checkout_session_id\" is not null;"
+        },
         {
           "columnNames": ["order_id", "created_at"],
           "composite": true,
@@ -3268,6 +3294,183 @@
           "name": "users_status_check",
           "expression": "\"status\" in ('ACTIVE', 'INACTIVE')",
           "definition": "check (\"status\" in ('ACTIVE', 'INACTIVE'))",
+          "columnName": "status"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {},
+      "comment": null
+    },
+    {
+      "name": "webhook_events",
+      "schema": "public",
+      "columns": {
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar(255)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 255,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": ["CLERK", "STRIPE", "PAYPAL"],
+          "mappedType": "enum"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'PROCESSED'",
+          "comment": null,
+          "collation": null,
+          "enumItems": ["PROCESSED", "IGNORED"],
+          "mappedType": "enum"
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(100)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 100,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": ["id"],
+          "composite": false,
+          "constraint": true,
+          "keyName": "webhook_events_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": ["provider", "event_id"],
+          "composite": true,
+          "constraint": true,
+          "keyName": "webhook_events_provider_event_id_unique",
+          "primary": false,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "webhook_events_provider_check",
+          "expression": "\"provider\" in ('CLERK', 'STRIPE', 'PAYPAL')",
+          "definition": "check (\"provider\" in ('CLERK', 'STRIPE', 'PAYPAL'))",
+          "columnName": "provider"
+        },
+        {
+          "name": "webhook_events_status_check",
+          "expression": "\"status\" in ('PROCESSED', 'IGNORED')",
+          "definition": "check (\"status\" in ('PROCESSED', 'IGNORED'))",
           "columnName": "status"
         }
       ],

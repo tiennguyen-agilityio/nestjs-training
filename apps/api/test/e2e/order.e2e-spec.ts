@@ -502,10 +502,11 @@ describe('OrderController (e2e)', () => {
       method: string,
       status: string,
       amount: number,
+      checkoutSessionId: string | null = null,
     ) =>
       execute(
-        `insert into payments (id, created_at, updated_at, order_id, type, method, status, amount) values (gen_random_uuid(), now() + interval '1 minute', now(), ?, ?, ?, ?, ?)`,
-        [orderId, type, method, status, amount],
+        `insert into payments (id, created_at, updated_at, order_id, type, method, status, amount, checkout_session_id) values (gen_random_uuid(), now() + interval '1 minute', now(), ?, ?, ?, ?, ?, ?)`,
+        [orderId, type, method, status, amount, checkoutSessionId],
       );
 
     it("GET /orders lists only the caller's orders, newest first (AC1)", async () => {
@@ -593,15 +594,25 @@ describe('OrderController (e2e)', () => {
       const user = await createUser();
       signIn(user.clerkId);
       const unpaid = await placeOne(methodId);
+      const unpaidCard = await placeOne(methodId);
       const pending = await placeOne(methodId);
       const paid = await placeOne(methodId);
       const failed = await placeOne(methodId);
       const refunded = await placeOne(methodId);
       const partial = await placeOne(methodId);
 
-      // A FAILED CARD charge, then a newer PENDING CARD charge: the newest wins.
+      // A CARD charge whose payment has not started (no Checkout Session) is UNPAID.
+      await setCharge(unpaidCard.id, 'CARD', 'PENDING');
+      // A FAILED CARD charge, then a newer started CARD charge: the newest wins.
       await setCharge(pending.id, 'CARD', 'FAILED', 5);
-      await addPayment(pending.id, 'CHARGE', 'CARD', 'PENDING', 10);
+      await addPayment(
+        pending.id,
+        'CHARGE',
+        'CARD',
+        'PENDING',
+        10,
+        `cs_test_filter_${pending.id}`,
+      );
       await setCharge(paid.id, 'CARD', 'PAID');
       await setCharge(failed.id, 'CARD', 'FAILED');
       await execute(
@@ -620,22 +631,22 @@ describe('OrderController (e2e)', () => {
         [paid.id],
       );
 
-      const expected: [string, string][] = [
-        ['UNPAID', unpaid.id],
-        ['PENDING', pending.id],
-        ['PAID', paid.id],
-        ['FAILED', failed.id],
-        ['REFUNDED', refunded.id],
-        ['PARTIALLY_REFUNDED', partial.id],
+      const expected: [string, string[]][] = [
+        ['UNPAID', [unpaidCard.id, unpaid.id]],
+        ['PENDING', [pending.id]],
+        ['PAID', [paid.id]],
+        ['FAILED', [failed.id]],
+        ['REFUNDED', [refunded.id]],
+        ['PARTIALLY_REFUNDED', [partial.id]],
       ];
-      for (const [paymentStatus, orderId] of expected) {
+      for (const [paymentStatus, orderIds] of expected) {
         const response = await list(`?paymentStatus=${paymentStatus}`).expect(
           200,
         );
-        expect(ids(response)).toEqual([orderId]);
-        expect((response.body as ListBody).data[0].paymentStatus).toBe(
-          paymentStatus,
-        );
+        expect(ids(response)).toEqual(orderIds);
+        for (const order of (response.body as ListBody).data) {
+          expect(order.paymentStatus).toBe(paymentStatus);
+        }
       }
       expect(ids(await list('?status=CANCELLED').expect(200))).toEqual([
         failed.id,
