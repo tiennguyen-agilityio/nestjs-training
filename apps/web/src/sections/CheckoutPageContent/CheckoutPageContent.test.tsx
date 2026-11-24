@@ -1,18 +1,35 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type React from 'react'
 import { useRouter } from 'next/navigation'
-import { ShippingMethodStatus } from '@repo/constants'
+import { toast } from 'sonner'
+import {
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+  ShippingMethodStatus,
+  ShippingStatus,
+} from '@repo/constants'
 
+import {
+  API_FALLBACK_ERRORS,
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
+} from '@/constants/messages'
+import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
-import { useCart, type UseCartResult } from '@/hooks/useCart'
+import { cartQueryKeys, useCart, type UseCartResult } from '@/hooks/useCart'
+import { useCreateOrder } from '@/hooks/useOrder'
 import {
   useActiveShippingMethods,
   type UseActiveShippingMethodsResult,
 } from '@/hooks/useShippingMethod'
 import CheckoutPageContent from '@/sections/CheckoutPageContent'
 import { useCartStore } from '@/store/useCartStore'
+import type { PlacedOrder } from '@/types/order'
 import type { ShippingMethod } from '@/types/shippingMethod'
+import { ServiceError } from '@/utils/query'
 
 jest.mock('next/navigation', () => ({ useRouter: jest.fn() }))
 jest.mock('sonner', () => ({ toast: { success: jest.fn(), error: jest.fn() } }))
@@ -40,7 +57,14 @@ jest.mock('@/components/CheckoutShippingMethods', () => {
   }
 })
 jest.mock('@/store/useCartStore', () => ({ useCartStore: jest.fn() }))
-jest.mock('@/hooks/useCart', () => ({ useCart: jest.fn() }))
+jest.mock('@/hooks/useCart', () => ({
+  useCart: jest.fn(),
+  cartQueryKeys: { root: ['cart'], detail: (id: string) => ['cart', id] },
+}))
+jest.mock('@/hooks/useOrder', () => ({ useCreateOrder: jest.fn() }))
+jest.mock('@clerk/nextjs', () => ({
+  useAuth: () => ({ getToken: jest.fn().mockResolvedValue('session-token') }),
+}))
 jest.mock('@/hooks/useAuth', () => ({ useAuth: jest.fn() }))
 jest.mock('@/hooks/useShippingMethod', () => ({
   useActiveShippingMethods: jest.fn(),
@@ -57,6 +81,75 @@ const mockUseCartStore = jest.mocked(useCartStore)
 const mockUseCart = jest.mocked(useCart)
 const mockUseAuth = jest.mocked(useAuth)
 const mockUseShippingMethods = jest.mocked(useActiveShippingMethods)
+const mockUseCreateOrder = jest.mocked(useCreateOrder)
+const mutateAsync = jest.fn()
+const push = jest.fn()
+
+let queryClient: QueryClient
+let invalidateQueries: jest.SpyInstance
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+)
+const renderCheckout = () => render(<CheckoutPageContent />, { wrapper })
+
+const placedOrder: PlacedOrder = {
+  id: 'order-1',
+  orderNumber: 'NB-000123',
+  userId: 'user-1',
+  shippingMethodId: 'express-id',
+  status: OrderStatus.PENDING,
+  shippingStatus: ShippingStatus.PENDING,
+  paymentStatus: OrderPaymentStatus.UNPAID,
+  recipientName: 'Ada Lovelace',
+  recipientPhone: '0912345678',
+  addressLine: '12 Roast Street',
+  ward: 'Kim Ma',
+  district: 'Ba Dinh',
+  city: 'Hanoi',
+  postalCode: '100000',
+  shippingMethodName: 'Roast Express',
+  shippingFee: 12,
+  tax: 2.4,
+  subTotal: 24,
+  totalAmount: 115,
+  note: null,
+  expiresAt: null,
+  items: [],
+  payments: [],
+  createdAt: '2026-11-24T00:00:00.000Z',
+  updatedAt: '2026-11-24T00:00:00.000Z',
+}
+
+const OUT_OF_STOCK_DESCRIPTION = 'Update your cart and try again.'
+
+const lineError = (errCode: string, description: string) =>
+  new ServiceError('Validation failed', [
+    {
+      errCode,
+      field: 'items.0.productVariantId',
+      message: 'Only 0 left for SKU-1',
+      description,
+    },
+  ])
+
+const fillForm = async (user: ReturnType<typeof userEvent.setup>) => {
+  const fields: [string, string][] = [
+    ['First Name', 'Ada'],
+    ['Last Name', 'Lovelace'],
+    ['Phone Number', '0912345678'],
+    ['Delivery Address', '12 Roast Street'],
+    ['City', 'Hanoi'],
+    ['District', 'Ba Dinh'],
+    ['Ward', 'Kim Ma'],
+    ['Postal Code', '100000'],
+  ]
+  // Paste, not type: typing every key makes the slower tests time out
+  // under coverage instrumentation.
+  for (const [label, value] of fields) {
+    await user.click(screen.getByLabelText(label))
+    await user.paste(value)
+  }
+}
 
 const standard: ShippingMethod = {
   id: 'standard-id',
@@ -130,8 +223,19 @@ const placeOrderButton = () =>
 describe('CheckoutPageContent', () => {
   beforeEach(() => {
     setItemSnapshots.mockClear()
+    clearCart.mockClear()
+    push.mockClear()
+    mutateAsync.mockReset()
+    jest.mocked(toast.success).mockClear()
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    invalidateQueries = jest.spyOn(queryClient, 'invalidateQueries')
+    mockUseCreateOrder.mockReturnValue({
+      mutateAsync,
+    } as unknown as ReturnType<typeof useCreateOrder>)
     mockUseRouter.mockReturnValue({
-      push: jest.fn(),
+      push,
     } as unknown as ReturnType<typeof useRouter>)
     mockUseCart.mockReturnValue(cartResult)
     mockUseCartStore.mockReturnValue({ clearCart, setItemSnapshots })
@@ -145,7 +249,7 @@ describe('CheckoutPageContent', () => {
       shippingResult({ shippingMethods: [standard, express] }),
     )
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     expect(
       deliverySpeed().getByRole('radio', { name: 'Artisanal Standard' }),
@@ -162,7 +266,7 @@ describe('CheckoutPageContent', () => {
       shippingResult({ shippingMethods: [standard] }),
     )
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     expect(
       deliverySpeed().getByRole('radio', { name: 'Artisanal Standard' }),
@@ -177,7 +281,7 @@ describe('CheckoutPageContent', () => {
       shippingResult({ shippingMethods: [express, standard] }),
     )
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     expect(
       deliverySpeed().getByRole('radio', { name: 'Roast Express' }),
@@ -191,7 +295,7 @@ describe('CheckoutPageContent', () => {
       shippingResult({ shippingMethods: [standard, express] }),
     )
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     const renders = mockRecordShippingProps.mock.calls.map(
       ([props]) => props as { methods: { id: string }[]; selectedId: string },
@@ -208,7 +312,7 @@ describe('CheckoutPageContent', () => {
       shippingResult({ shippingMethods: [standard, express] }),
     )
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
     expect(totalText()).toBe('$24.00')
 
     await user.click(
@@ -224,7 +328,7 @@ describe('CheckoutPageContent', () => {
       shippingResult({ shippingMethods: [standard, express] }),
     )
 
-    const { rerender } = render(<CheckoutPageContent />)
+    const { rerender } = renderCheckout()
     await user.click(
       deliverySpeed().getByRole('radio', { name: 'Roast Express' }),
     )
@@ -248,7 +352,7 @@ describe('CheckoutPageContent', () => {
     (_state, overrides) => {
       mockUseShippingMethods.mockReturnValue(shippingResult(overrides))
 
-      render(<CheckoutPageContent />)
+      renderCheckout()
 
       expect(placeOrderButton()).toBeDisabled()
     },
@@ -259,43 +363,572 @@ describe('CheckoutPageContent', () => {
       shippingResult({ shippingMethods: [standard] }),
     )
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     expect(placeOrderButton()).toBeEnabled()
   })
 
-  it('places the mocked order with the selected method', async () => {
+  it('Place order sends the payload built from the form and the selected method', async () => {
     const user = userEvent.setup()
+    mutateAsync.mockResolvedValue(placedOrder)
     mockUseShippingMethods.mockReturnValue(
       shippingResult({ shippingMethods: [standard, express] }),
     )
 
-    render(<CheckoutPageContent />)
-    const fields: [string, string][] = [
-      ['First Name', 'Ada'],
-      ['Last Name', 'Lovelace'],
-      ['Phone Number', '0912345678'],
-      ['Delivery Address', '12 Roast Street'],
-      ['City', 'Hanoi'],
-      ['District', 'Ba Dinh'],
-      ['Ward', 'Kim Ma'],
-      ['Postal Code', '100000'],
-    ]
-    for (const [label, value] of fields) {
-      await user.type(screen.getByLabelText(label), value)
-    }
+    renderCheckout()
+    await fillForm(user)
     await user.click(
       deliverySpeed().getByRole('radio', { name: 'Roast Express' }),
     )
     await user.click(placeOrderButton())
 
-    expect(setItemSnapshots).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(mutateAsync).toHaveBeenCalledWith({
+      body: {
         shippingMethodId: express.id,
-        shippingMethodName: 'Roast Express',
-        shippingFee: 12,
+        paymentMethod: PaymentMethod.CARD,
+        recipientName: 'Ada Lovelace',
+        recipientPhone: '0912345678',
+        addressLine: '12 Roast Street',
+        ward: 'Kim Ma',
+        district: 'Ba Dinh',
+        city: 'Hanoi',
+        postalCode: '100000',
+      },
+      getToken: expect.any(Function),
+    })
+  })
+
+  it('Place order is disabled while sending', async () => {
+    const user = userEvent.setup()
+    // Never settles: the request is still in flight.
+    mutateAsync.mockReturnValue(new Promise<never>(() => undefined))
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(placeOrderButton()).toBeDisabled()
+    await user.click(placeOrderButton())
+    expect(mutateAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('success stores the PlacedOrder, toasts its totalAmount and goes to ROUTES.ORDER_SUCCESS', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue(placedOrder)
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith(ROUTES.ORDER_SUCCESS))
+    expect(setItemSnapshots).toHaveBeenCalledWith(placedOrder)
+    expect(toast.success).toHaveBeenCalledWith(SUCCESS_MESSAGES.ORDER_PLACED, {
+      description: SUCCESS_MESSAGES.ORDER_TOTAL('$115.00'),
+    })
+  })
+
+  it('success invalidates the cart query and does not call clearCart', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue(placedOrder)
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    await waitFor(() =>
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: cartQueryKeys.root,
       }),
     )
+    expect(clearCart).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'outOfStock',
+      'Update your cart and try again.',
+      ERROR_MESSAGES.ORDER_OUT_OF_STOCK('Ethiopian Yirgacheffe'),
+    ],
+    [
+      'itemUnavailable',
+      'Remove it from the cart and try again.',
+      ERROR_MESSAGES.ORDER_ITEM_UNAVAILABLE('Ethiopian Yirgacheffe'),
+    ],
+  ])(
+    'outOfStock names the product, tags the line and refetches the cart (%s)',
+    async (errCode, description, pageMessage) => {
+      const user = userEvent.setup()
+      mutateAsync.mockRejectedValue(lineError(errCode, description))
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      renderCheckout()
+      await fillForm(user)
+      await user.click(placeOrderButton())
+
+      expect(await screen.findByText(pageMessage)).toBeInTheDocument()
+      expect(screen.getByText(description)).toBeInTheDocument()
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: cartQueryKeys.root,
+      })
+      expect(push).not.toHaveBeenCalled()
+      expect(placeOrderButton()).toBeDisabled()
+    },
+  )
+
+  it('cartEmpty shows the message and refetches the cart', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      new ServiceError('Cart is empty', [
+        {
+          errCode: 'cartEmpty',
+          field: 'cart',
+          message: 'Cart is empty',
+          description: 'Add an item before checking out.',
+        },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(
+      await screen.findByText(ERROR_MESSAGES.ORDER_CART_EMPTY),
+    ).toBeInTheDocument()
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: cartQueryKeys.root,
+    })
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('shippingMethodUnavailable refetches the methods and clears the selection', async () => {
+    const user = userEvent.setup()
+    const refetch = jest.fn().mockResolvedValue(undefined)
+    mutateAsync.mockRejectedValue(
+      new ServiceError('Shipping method is not available', [
+        {
+          errCode: 'shippingMethodUnavailable',
+          field: 'shippingMethodId',
+          message: 'Shipping method is not available',
+          description: 'Choose another shipping method.',
+        },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard, express], refetch }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(
+      await screen.findByText(ERROR_MESSAGES.ORDER_SHIPPING_METHOD_UNAVAILABLE),
+    ).toBeInTheDocument()
+    expect(refetch).toHaveBeenCalled()
+    for (const name of ['Artisanal Standard', 'Roast Express']) {
+      expect(deliverySpeed().getByRole('radio', { name })).not.toBeChecked()
+    }
+    expect(placeOrderButton()).toBeDisabled()
+
+    await user.click(
+      deliverySpeed().getByRole('radio', { name: 'Roast Express' }),
+    )
+    expect(placeOrderButton()).toBeEnabled()
+  })
+
+  it('a network error shows the fallback and lets the shopper retry', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      new ServiceError(API_FALLBACK_ERRORS.ORDER_CREATE),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(
+      await screen.findByText(API_FALLBACK_ERRORS.ORDER_CREATE),
+    ).toBeInTheDocument()
+    expect(placeOrderButton()).toBeEnabled()
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('an error without a description shows the web fallback, not the developer message', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      new ServiceError('Unauthorized', [
+        { errCode: 'unauthenticated', field: '', message: 'Token expired' },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(
+      await screen.findByText(API_FALLBACK_ERRORS.ORDER_CREATE),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Unauthorized')).not.toBeInTheDocument()
+    expect(screen.queryByText('Token expired')).not.toBeInTheDocument()
+  })
+
+  it('removing the flagged line clears the page message', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      lineError('outOfStock', 'Update your cart and try again.'),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+    const pageMessage = ERROR_MESSAGES.ORDER_OUT_OF_STOCK(
+      'Ethiopian Yirgacheffe',
+    )
+    expect(await screen.findByText(pageMessage)).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Remove Ethiopian Yirgacheffe from order',
+      }),
+    )
+
+    // The errors are pruned once the removal answers.
+    await waitFor(() =>
+      expect(screen.queryByText(pageMessage)).not.toBeInTheDocument(),
+    )
+  })
+
+  it('a line error that matches no shown line still shows a message', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      new ServiceError('Validation failed', [
+        {
+          errCode: 'outOfStock',
+          field: 'items.5.productVariantId',
+          message: 'Only 0 left',
+          description: 'Update your cart and try again.',
+        },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(
+      await screen.findByText(ERROR_MESSAGES.ORDER_ITEMS_CHANGED),
+    ).toBeInTheDocument()
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: cartQueryKeys.root,
+    })
+  })
+
+  it('an unmatched line error flags no line and leaves Place order enabled', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      new ServiceError('Validation failed', [
+        {
+          errCode: 'outOfStock',
+          field: 'items.1.productVariantId',
+          message: 'Only 0 left',
+          description: 'Update your cart and try again.',
+        },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard, express] }),
+    )
+
+    const { rerender } = renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+    expect(
+      await screen.findByText(ERROR_MESSAGES.ORDER_ITEMS_CHANGED),
+    ).toBeInTheDocument()
+
+    // The refetched cart now has a second line at index 1.
+    const second = {
+      ...cartResult.items[0],
+      id: 'line-2',
+      variantId: 'variant-2',
+      productId: 'product-2',
+      name: 'Kenya AA',
+    }
+    mockUseCart.mockReturnValue({
+      ...cartResult,
+      items: [...cartResult.items, second],
+      itemCount: 2,
+    })
+    rerender(<CheckoutPageContent />)
+
+    expect(screen.queryByText(OUT_OF_STOCK_DESCRIPTION)).not.toBeInTheDocument()
+    expect(placeOrderButton()).toBeEnabled()
+
+    // Picking a method does not hide the line notice.
+    await user.click(
+      deliverySpeed().getByRole('radio', { name: 'Roast Express' }),
+    )
+    expect(
+      screen.getByText(ERROR_MESSAGES.ORDER_ITEMS_CHANGED),
+    ).toBeInTheDocument()
+  })
+
+  it('a flagged line that is gone after the refetch still leaves a message', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      lineError('outOfStock', OUT_OF_STOCK_DESCRIPTION),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    const { rerender } = renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+    expect(
+      await screen.findByText(
+        ERROR_MESSAGES.ORDER_OUT_OF_STOCK('Ethiopian Yirgacheffe'),
+      ),
+    ).toBeInTheDocument()
+
+    // The refetched cart holds the variant under a new line id.
+    mockUseCart.mockReturnValue({
+      ...cartResult,
+      items: [{ ...cartResult.items[0], id: 'line-9' }],
+    })
+    rerender(<CheckoutPageContent />)
+
+    expect(
+      screen.getByText(ERROR_MESSAGES.ORDER_ITEMS_CHANGED),
+    ).toBeInTheDocument()
+  })
+
+  it('an unmatched line error keeps its notice next to another error', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      new ServiceError('Validation failed', [
+        {
+          errCode: 'outOfStock',
+          field: 'cart',
+          message: 'Only 0 left',
+          description: 'Update your cart and try again.',
+        },
+        {
+          errCode: 'shippingMethodUnavailable',
+          field: 'shippingMethodId',
+          message: 'Shipping method is not available',
+          description: 'Choose another shipping method.',
+        },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(
+      await screen.findByText(
+        `${ERROR_MESSAGES.ORDER_ITEMS_CHANGED} ${ERROR_MESSAGES.ORDER_SHIPPING_METHOD_UNAVAILABLE}`,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a shipping method error next to a line error', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      new ServiceError('Validation failed', [
+        {
+          errCode: 'outOfStock',
+          field: 'items.0.productVariantId',
+          message: 'Only 0 left',
+          description: 'Update your cart and try again.',
+        },
+        {
+          errCode: 'shippingMethodUnavailable',
+          field: 'shippingMethodId',
+          message: 'Shipping method is not available',
+          description: 'Choose another shipping method.',
+        },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(
+      await screen.findByText(
+        `${ERROR_MESSAGES.ORDER_OUT_OF_STOCK('Ethiopian Yirgacheffe')} ${ERROR_MESSAGES.ORDER_SHIPPING_METHOD_UNAVAILABLE}`,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('does not show the empty cart after a successful order', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue(placedOrder)
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    const { rerender } = renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+    await waitFor(() => expect(push).toHaveBeenCalledWith(ROUTES.ORDER_SUCCESS))
+
+    // The invalidated GET /cart answers before the route changes.
+    mockUseCart.mockReturnValue({ ...cartResult, items: [], itemCount: 0 })
+    rerender(<CheckoutPageContent />)
+
+    expect(screen.queryByTestId('checkout-empty')).not.toBeInTheDocument()
+    expect(screen.getByTestId('checkout-loading')).toBeInTheDocument()
+  })
+
+  it('an unmapped error never shows its description (the developer message)', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockRejectedValue(
+      new ServiceError('Token expired', [
+        {
+          errCode: 'unauthenticated',
+          field: '',
+          message: 'Token expired',
+          description: 'Token expired',
+        },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    expect(
+      await screen.findByText(API_FALLBACK_ERRORS.ORDER_CREATE),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Token expired')).not.toBeInTheDocument()
+  })
+
+  it('removing one of two flagged lines names only the line left', async () => {
+    const user = userEvent.setup()
+    const second = {
+      ...cartResult.items[0],
+      id: 'line-2',
+      variantId: 'variant-2',
+      productId: 'product-2',
+      name: 'Kenya AA',
+    }
+    mockUseCart.mockReturnValue({
+      ...cartResult,
+      items: [...cartResult.items, second],
+      itemCount: 2,
+    })
+    mutateAsync.mockRejectedValue(
+      new ServiceError(
+        'Validation failed',
+        [0, 1].map((index) => ({
+          errCode: 'outOfStock',
+          field: `items.${index}.productVariantId`,
+          message: 'Only 0 left',
+          description: 'Update your cart and try again.',
+        })),
+      ),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+    expect(
+      await screen.findByText(
+        ERROR_MESSAGES.ORDER_OUT_OF_STOCK('Ethiopian Yirgacheffe, Kenya AA'),
+      ),
+    ).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Remove Ethiopian Yirgacheffe from order',
+      }),
+    )
+
+    expect(
+      await screen.findByText(ERROR_MESSAGES.ORDER_OUT_OF_STOCK('Kenya AA')),
+    ).toBeInTheDocument()
+  })
+
+  it('a failed removal keeps the line error and the page message', async () => {
+    const user = userEvent.setup()
+    mockUseCart.mockReturnValue({
+      ...cartResult,
+      removeItem: jest.fn(async () => ({
+        ok: false as const,
+        error: API_FALLBACK_ERRORS.CART_REMOVE,
+      })),
+    })
+    mutateAsync.mockRejectedValue(
+      lineError('outOfStock', 'Update your cart and try again.'),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+    const pageMessage = ERROR_MESSAGES.ORDER_OUT_OF_STOCK(
+      'Ethiopian Yirgacheffe',
+    )
+    expect(await screen.findByText(pageMessage)).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Remove Ethiopian Yirgacheffe from order',
+      }),
+    )
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(API_FALLBACK_ERRORS.CART_REMOVE),
+    )
+    expect(screen.getByText(pageMessage)).toBeInTheDocument()
+    expect(
+      screen.getByText('Update your cart and try again.'),
+    ).toBeInTheDocument()
+    expect(placeOrderButton()).toBeDisabled()
   })
 
   it("lists the server cart's lines in the order summary", () => {
@@ -303,7 +936,7 @@ describe('CheckoutPageContent', () => {
       shippingResult({ shippingMethods: [standard] }),
     )
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     expect(screen.getByText('Ethiopian Yirgacheffe')).toBeInTheDocument()
     expect(placeOrderButton()).toBeEnabled()
@@ -318,7 +951,7 @@ describe('CheckoutPageContent', () => {
       items: cartResult.items.map((item) => ({ ...item, isUnavailable: true })),
     })
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     expect(placeOrderButton()).toBeDisabled()
   })
@@ -329,7 +962,7 @@ describe('CheckoutPageContent', () => {
     )
     mockUseCart.mockReturnValue({ ...cartResult, isLoading: true })
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     expect(screen.queryByRole('button', { name: /place order/i })).toBeNull()
   })
@@ -343,7 +976,7 @@ describe('CheckoutPageContent', () => {
       items: cartResult.items.map((item) => ({ ...item, exceedsStock: true })),
     })
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
 
     expect(placeOrderButton()).toBeDisabled()
   })
@@ -356,7 +989,7 @@ describe('CheckoutPageContent', () => {
     const removeItem = jest.fn(() => new Promise<{ ok: true }>(() => undefined))
     mockUseCart.mockReturnValue({ ...cartResult, removeItem })
 
-    render(<CheckoutPageContent />)
+    renderCheckout()
     const remove = screen.getByRole('button', {
       name: 'Remove Ethiopian Yirgacheffe from order',
     })

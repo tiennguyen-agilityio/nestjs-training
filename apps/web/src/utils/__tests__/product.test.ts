@@ -17,6 +17,7 @@ import {
   resolveEditedProductStatus,
   toCreateVariantPayload,
   updateProductErrorTarget,
+  getProductPricing,
 } from '@/utils/product'
 import { getPrimaryVariantQuantity } from '@/utils/inventory'
 
@@ -331,5 +332,45 @@ describe('getPrimaryVariantQuantity', () => {
     expect(
       getPrimaryVariantQuantity(product([variant({ stockQuantity: 7 })])),
     ).toBe(7)
+  })
+})
+
+describe('getProductPricing', () => {
+  const withVariant = (variant: Partial<ProductVariantSummary>): Product =>
+    ({
+      variants: [
+        {
+          size: 250,
+          unit: ProductUnit.G,
+          name: '250g',
+          price: 20,
+          discountType: null,
+          discountValue: null,
+          stockQuantity: 5,
+          ...variant,
+        },
+      ],
+    }) as unknown as Product
+
+  it("applies the first variant's discount", () => {
+    expect(
+      getProductPricing(
+        withVariant({ discountType: DiscountType.PERCENT, discountValue: 25 }),
+      ),
+    ).toEqual({ listPrice: 20, salePrice: 15 })
+  })
+
+  it('returns the list price as the sale price with no discount', () => {
+    expect(getProductPricing(withVariant({}))).toEqual({
+      listPrice: 20,
+      salePrice: 20,
+    })
+  })
+
+  it('returns 0 for a product with no variant', () => {
+    expect(getProductPricing({ variants: [] } as unknown as Product)).toEqual({
+      listPrice: 0,
+      salePrice: 0,
+    })
   })
 })

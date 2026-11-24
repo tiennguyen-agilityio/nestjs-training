@@ -2,39 +2,155 @@ import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuth } from '@clerk/nextjs'
-import { OrderStatus } from '@repo/constants'
+import { OrderStatus, PaymentMethod } from '@repo/constants'
+import type { PlaceOrderPayload } from '@repo/schemas'
 
 import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import {
   orderDetailRetry,
-  orderQueryKeys,
+  ordersQueryKeys,
+  useCreateOrder,
   useMyOrders,
   useOrderDetail,
 } from '@/hooks/useOrder'
-import { fetchMyOrders, fetchOrderDetail } from '@/services/order'
-import type { OrderDetail, OrderSummary } from '@/types/order'
+import { createOrder, fetchMyOrders, fetchOrderDetail } from '@/services/order'
+import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
+import { ServiceError } from '@/utils/query'
 
 jest.mock('@clerk/nextjs', () => ({ useAuth: jest.fn() }))
 
 jest.mock('@/services/order', () => ({
-  ...jest.requireActual('@/services/order'),
+  createOrder: jest.fn(),
+  deleteOrder: jest.fn(),
+  fetchOrders: jest.fn(),
+  updateOrderShippingStatus: jest.fn(),
+  updateOrderStatus: jest.fn(),
   fetchMyOrders: jest.fn(),
   fetchOrderDetail: jest.fn(),
 }))
+
+const mockCreateOrder = jest.mocked(createOrder)
+
+const body: PlaceOrderPayload = {
+  shippingMethodId: '0b0b5b8e-8b0e-4f43-9a55-3c2a1f1d0a01',
+  paymentMethod: PaymentMethod.COD,
+  recipientName: 'Ada Lovelace',
+  recipientPhone: '0912345678',
+  addressLine: '1 Analytical St',
+  ward: 'Ward 1',
+  district: 'Marylebone',
+  city: 'London',
+  postalCode: 'NW1',
+}
+
+const order = { id: 'order-1', orderNumber: 'NB-000123' } as PlacedOrder
+const getToken = async () => 'session-token'
+
+const outOfStock = {
+  ok: false as const,
+  status: 400,
+  error: 'Validation failed',
+  errorResponse: {
+    statusCode: 400,
+    message: 'Validation failed',
+    errors: [
+      {
+        errCode: 'outOfStock',
+        field: 'items.0.productVariantId',
+        message: 'Only 1 left',
+        description: 'Update your cart and try again.',
+      },
+    ],
+  },
+}
+
+const setup = () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  const invalidate = jest.spyOn(client, 'invalidateQueries')
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  )
+  const view = renderHook(() => useCreateOrder(), { wrapper })
+  return { ...view, invalidate }
+}
+
+const keyOfCall = (n: number) =>
+  mockCreateOrder.mock.calls[n]?.[1].idempotencyKey
+
+describe('useCreateOrder', () => {
+  beforeEach(() => mockCreateOrder.mockReset())
+
+  it('useCreateOrder reuses the key for the same body and invalidates the orders root', async () => {
+    mockCreateOrder
+      .mockResolvedValueOnce({ ok: false, error: 'Network error' })
+      .mockResolvedValueOnce({ ok: true, order })
+      .mockResolvedValueOnce({ ok: true, order })
+    const { result, invalidate } = setup()
+
+    await act(async () => {
+      await result.current.mutateAsync({ body, getToken }).catch(() => null)
+    })
+    await act(async () => {
+      await result.current.mutateAsync({ body, getToken })
+    })
+    expect(keyOfCall(0)).toEqual(expect.any(String))
+    expect(keyOfCall(1)).toBe(keyOfCall(0))
+    expect(mockCreateOrder.mock.calls[1]?.[1].getToken).toBe(getToken)
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ordersQueryKeys.root })
+    expect(ordersQueryKeys.root).toEqual(['orders'])
+
+    await act(async () => {
+      await result.current.mutateAsync({ body, getToken })
+    })
+    expect(keyOfCall(2)).not.toBe(keyOfCall(1))
+  })
+
+  it('sends a new key when the body changes', async () => {
+    mockCreateOrder.mockResolvedValue({ ok: false, error: 'Network error' })
+    const { result } = setup()
+
+    await act(async () => {
+      await result.current.mutateAsync({ body, getToken }).catch(() => null)
+    })
+    await act(async () => {
+      await result.current
+        .mutateAsync({ body: { ...body, ward: 'Ward 2' }, getToken })
+        .catch(() => null)
+    })
+    expect(keyOfCall(1)).not.toBe(keyOfCall(0))
+  })
+
+  it('throws a ServiceError carrying the API errors', async () => {
+    mockCreateOrder.mockResolvedValue(outOfStock)
+    const { result } = setup()
+
+    let caught: unknown
+    await act(async () => {
+      caught = await result.current
+        .mutateAsync({ body, getToken })
+        .catch((error: unknown) => error)
+    })
+
+    expect(caught).toBeInstanceOf(ServiceError)
+    expect((caught as ServiceError).errors[0]?.errCode).toBe('outOfStock')
+  })
+})
 
 const mockUseAuth = jest.mocked(useAuth)
 const mockFetchMyOrders = jest.mocked(fetchMyOrders)
 const mockFetchOrderDetail = jest.mocked(fetchOrderDetail)
 
-const getToken = jest.fn().mockResolvedValue('clerk-token')
+const clerkGetToken = jest.fn().mockResolvedValue('clerk-token')
 
 const signedIn = (userId = 'u1', isLoaded = true) =>
   mockUseAuth.mockReturnValue({
     isLoaded,
     isSignedIn: isLoaded,
     userId: isLoaded ? userId : null,
-    getToken,
+    getToken: clerkGetToken,
   } as unknown as ReturnType<typeof useAuth>)
 
 const renderWithClient = <T, P = undefined>(
@@ -50,13 +166,13 @@ const renderWithClient = <T, P = undefined>(
   return renderHook(hook, { wrapper, initialProps })
 }
 
-const order = { id: 'order-1', orderNumber: 'CH-1' } as OrderSummary
+const summaryRow = { id: 'order-1', orderNumber: 'CH-1' } as OrderSummary
 const detail = { id: 'order-1', orderNumber: 'CH-1' } as OrderDetail
 const meta = { limit: 10, currentPage: 1, pageCount: 1, totalCount: 1 }
 
-describe('orderQueryKeys', () => {
+describe('ordersQueryKeys', () => {
   it('myOrdersQueryKey and orderDetailQueryKey carry the user id', () => {
-    expect(orderQueryKeys.mine('u1', { page: 1 })).toEqual([
+    expect(ordersQueryKeys.mine('u1', { page: 1 })).toEqual([
       'orders',
       'mine',
       'u1',
@@ -64,9 +180,9 @@ describe('orderQueryKeys', () => {
       '',
     ])
     expect(
-      orderQueryKeys.mine('u2', { page: 1, status: OrderStatus.PENDING }),
+      ordersQueryKeys.mine('u2', { page: 1, status: OrderStatus.PENDING }),
     ).toEqual(['orders', 'mine', 'u2', 1, 'PENDING'])
-    expect(orderQueryKeys.detail('u1', 'CH-1')).toEqual([
+    expect(ordersQueryKeys.detail('u1', 'CH-1')).toEqual([
       'orders',
       'detail',
       'u1',
@@ -82,13 +198,17 @@ describe('useMyOrders', () => {
   })
 
   it('passes page, limit 10 and status to fetchMyOrders', async () => {
-    mockFetchMyOrders.mockResolvedValue({ ok: true, orders: [order], meta })
+    mockFetchMyOrders.mockResolvedValue({
+      ok: true,
+      orders: [summaryRow],
+      meta,
+    })
 
     const { result } = renderWithClient(() =>
       useMyOrders({ page: 2, status: OrderStatus.PENDING }),
     )
 
-    await waitFor(() => expect(result.current.orders).toEqual([order]))
+    await waitFor(() => expect(result.current.orders).toEqual([summaryRow]))
     expect(mockFetchMyOrders).toHaveBeenCalledWith(
       expect.objectContaining({
         page: 2,
@@ -98,7 +218,9 @@ describe('useMyOrders', () => {
     )
     const { getToken: passed } = mockFetchMyOrders.mock.calls[0][0]
     await passed()
-    expect(getToken).toHaveBeenCalledWith({ template: CLERK_SESSION_TEMPLATE })
+    expect(clerkGetToken).toHaveBeenCalledWith({
+      template: CLERK_SESSION_TEMPLATE,
+    })
     expect(result.current.meta).toEqual(meta)
   })
 
@@ -135,7 +257,7 @@ describe('useMyOrders while keys change', () => {
       isLoaded: true,
       isSignedIn: false,
       userId: null,
-      getToken,
+      getToken: clerkGetToken,
     } as unknown as ReturnType<typeof useAuth>)
 
     const { result } = renderWithClient(() => useMyOrders({ page: 1 }))
@@ -170,7 +292,7 @@ describe('useMyOrders while keys change', () => {
       value: Awaited<ReturnType<typeof fetchMyOrders>>,
     ) => void = () => undefined
     mockFetchMyOrders
-      .mockResolvedValueOnce({ ok: true, orders: [order], meta })
+      .mockResolvedValueOnce({ ok: true, orders: [summaryRow], meta })
       .mockReturnValueOnce(
         new Promise((resolve) => {
           resolveU2 = resolve
@@ -179,7 +301,7 @@ describe('useMyOrders while keys change', () => {
     const { result, rerender } = renderWithClient(() =>
       useMyOrders({ page: 1 }),
     )
-    await waitFor(() => expect(result.current.orders).toEqual([order]))
+    await waitFor(() => expect(result.current.orders).toEqual([summaryRow]))
 
     signedIn('u2')
     rerender()
@@ -193,7 +315,7 @@ describe('useMyOrders while keys change', () => {
   it('shows loading, not the previous rows, when the status filter changes', async () => {
     signedIn('u1')
     mockFetchMyOrders
-      .mockResolvedValueOnce({ ok: true, orders: [order], meta })
+      .mockResolvedValueOnce({ ok: true, orders: [summaryRow], meta })
       .mockReturnValueOnce(new Promise(() => undefined))
     const initialProps: { status?: OrderStatus } = {
       status: OrderStatus.CANCELLED,
@@ -215,18 +337,18 @@ describe('useMyOrders while keys change', () => {
   it('keeps the current rows while the next page loads', async () => {
     signedIn('u1')
     mockFetchMyOrders
-      .mockResolvedValueOnce({ ok: true, orders: [order], meta })
+      .mockResolvedValueOnce({ ok: true, orders: [summaryRow], meta })
       .mockReturnValueOnce(new Promise(() => undefined))
     const { result, rerender } = renderWithClient(
       ({ page }: { page: number }) => useMyOrders({ page }),
       { page: 1 },
     )
-    await waitFor(() => expect(result.current.orders).toEqual([order]))
+    await waitFor(() => expect(result.current.orders).toEqual([summaryRow]))
 
     rerender({ page: 2 })
 
     await waitFor(() => expect(mockFetchMyOrders).toHaveBeenCalledTimes(2))
-    expect(result.current.orders).toEqual([order])
+    expect(result.current.orders).toEqual([summaryRow])
     expect(result.current.isLoading).toBe(false)
   })
 })

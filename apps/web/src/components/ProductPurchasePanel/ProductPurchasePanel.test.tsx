@@ -2,7 +2,12 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { ProductStatus, ProductUnit, RoastLevel } from '@repo/constants'
+import {
+  DiscountType,
+  ProductStatus,
+  ProductUnit,
+  RoastLevel,
+} from '@repo/constants'
 
 import { ProductPurchasePanel } from '@/components/ProductPurchasePanel'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
@@ -119,5 +124,24 @@ describe('ProductPurchasePanel', () => {
     )
     expect(screen.getByRole('button', { name: 'Add to Cart' })).toBeEnabled()
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('adds the sale price and the list price', async () => {
+    const user = userEvent.setup()
+    addItem.mockResolvedValue({ ok: true })
+    const discounted = product()
+    discounted.variants[0] = {
+      ...discounted.variants[0],
+      price: 20,
+      discountType: DiscountType.PERCENT,
+      discountValue: 25,
+    }
+    render(<ProductPurchasePanel product={discounted} />)
+
+    await user.click(screen.getByRole('button', { name: 'Add to Cart' }))
+
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({ unitPrice: 15, listPrice: 20 }),
+    )
   })
 })

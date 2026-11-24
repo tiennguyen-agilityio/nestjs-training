@@ -1,8 +1,21 @@
+import { PaymentMethod } from '@repo/constants'
+import type { PlaceOrderPayload } from '@repo/schemas'
 import { Banknote, Package, Truck } from 'lucide-react'
 
 import type { StatCardItem } from '@/components/StatsCards'
+import { ERROR_MESSAGES } from '@/constants/messages'
 import type { ApiErrorResponse, ErrorDetail, ResponseMeta } from '@/types/api'
-import { ORDER_STATUS, SHIPPING_STATUS, type Order } from '@/types/order'
+import {
+  PAYMENT_METHOD,
+  type CheckoutCardFormValues,
+  type CheckoutFormValues,
+} from '@/types/checkout'
+import {
+  ORDER_STATUS,
+  SHIPPING_STATUS,
+  type Order,
+  type PlacedOrder,
+} from '@/types/order'
 
 import {
   OrderPaymentStatus,
@@ -218,9 +231,46 @@ export function buildOrderDashboardStats(
   ]
 }
 
-// --- Place-order API: line errors keyed to cart rows (checkout) ---
+// --- Place-order API: payload and line errors keyed to cart rows (checkout) ---
 
-const ITEM_FIELD_PATTERN = /^items\[(\d+)]/
+/** The `errCode`s `POST /orders` answers with (400, nothing saved). */
+export const PLACE_ORDER_ERR_CODES = {
+  CART_EMPTY: 'cartEmpty',
+  SHIPPING_METHOD_UNAVAILABLE: 'shippingMethodUnavailable',
+  ITEM_UNAVAILABLE: 'itemUnavailable',
+  OUT_OF_STOCK: 'outOfStock',
+} as const
+
+const API_PAYMENT_METHOD: Record<PAYMENT_METHOD, PaymentMethod> = {
+  [PAYMENT_METHOD.STRIPE]: PaymentMethod.CARD,
+  [PAYMENT_METHOD.PAYPAL]: PaymentMethod.PAYPAL,
+  [PAYMENT_METHOD.COD]: PaymentMethod.COD,
+}
+
+/** The `POST /orders` body: the API takes the lines from the server cart. */
+export const buildPlaceOrderPayload = (
+  // The card fields are not sent (online payment is #33).
+  values: Omit<CheckoutFormValues, keyof CheckoutCardFormValues>,
+  shippingMethodId: string,
+): PlaceOrderPayload => ({
+  shippingMethodId,
+  paymentMethod: API_PAYMENT_METHOD[values.paymentMethod],
+  recipientName: [values.firstName.trim(), values.lastName.trim()]
+    .filter(Boolean)
+    .join(' '),
+  recipientPhone: values.phoneNumber.trim(),
+  addressLine: values.addressLine.trim(),
+  ward: values.ward.trim(),
+  district: values.district.trim(),
+  city: values.city.trim(),
+  postalCode: values.postalCode.trim(),
+})
+
+/** `items[<i>]…` (older format) or the API's `items.<i>.productVariantId`. */
+const ITEM_FIELD_PATTERN = /^items(?:\[(\d+)]|\.(\d+))/
+
+const itemIndexOf = (match: RegExpExecArray): number =>
+  Number.parseInt(match[1] ?? match[2] ?? '', 10)
 
 type ItemFieldErrorWithLineContext = ErrorDetail & {
   submitLineId?: string
@@ -251,7 +301,7 @@ export const tagItemErrorsWithLineRefs = (
       return error
     }
 
-    const apiIndex = Number.parseInt(match[1] ?? '', 10)
+    const apiIndex = itemIndexOf(match)
     if (
       !Number.isFinite(apiIndex) ||
       apiIndex < 0 ||
@@ -297,15 +347,13 @@ export const mapItemFieldErrorsToLineMessages = (
       continue
     }
 
-    const apiIndex = Number.parseInt(match[1] ?? '', 10)
+    const apiIndex = itemIndexOf(match)
     if (!Number.isFinite(apiIndex)) {
       continue
     }
 
-    const message = error.message ?? error.description
-    if (!message) {
-      continue
-    }
+    // The shopper sees the API's `description`, never its developer `message`.
+    const message = error.description ?? ERROR_MESSAGES.ORDER_LINE_ERROR
 
     const row = error as ItemFieldErrorWithLineContext
     if (row.submitLineId !== undefined) {
@@ -375,4 +423,19 @@ export const omitSubmitErrorsForRemovedLine = (
     ...response,
     errors: filtered,
   }
+}
+
+/**
+ * True for the API's order (`POST /orders`); false for an Order success
+ * snapshot saved in the browser before the page read the API's order.
+ */
+export const isPlacedOrder = (value: unknown): value is PlacedOrder => {
+  if (!value || typeof value !== 'object') return false
+  const order = value as Partial<PlacedOrder>
+  return (
+    typeof order.orderNumber === 'string' &&
+    typeof order.recipientName === 'string' &&
+    Array.isArray(order.items) &&
+    order.items.every((item) => typeof item?.lineTotal === 'number')
+  )
 }

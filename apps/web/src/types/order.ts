@@ -1,11 +1,12 @@
 import type {
   OrderPaymentStatus,
   OrderStatus,
-  PaymentMethod as OrderPaymentMethod,
+  PaymentMethod as ApiPaymentMethod,
   PaymentStatus,
   PaymentType,
   ShippingStatus,
 } from '@repo/constants'
+
 import { type AddressSnapshot, type PaymentMethod } from './checkout'
 import { type User } from './user'
 
@@ -39,15 +40,12 @@ export interface OrderItem extends OrderItemPayload {
   discountAmount: number
 }
 
-export interface OrderPayload {
+/** An order in the admin dashboard. */
+export interface Order {
   shippingMethodId: string
   paymentMethod: PaymentMethod
-  shippingAddress: AddressSnapshot
   note?: string
-  items: OrderItemPayload[]
-}
-
-export interface Order extends Omit<OrderPayload, 'shippingAddress'> {
+  items: OrderItem[]
   id: string
   userId: string
   orderNumber: string
@@ -60,29 +58,14 @@ export interface Order extends Omit<OrderPayload, 'shippingAddress'> {
   totalAmount: number
   shippingMethodName: string
   addressSnapshot: AddressSnapshot
-  items: OrderItem[]
   user: User
   createdAt: string
   updatedAt: string
   deletedAt: string | null
 }
 
-/** One row of `GET /orders` (OROW of the API design). */
-export interface OrderSummary {
-  id: string
-  orderNumber: string
-  userId: string
-  customer: { firstName: string; lastName: string; email: string }
-  status: OrderStatus
-  shippingStatus: ShippingStatus
-  paymentStatus: OrderPaymentStatus
-  paymentMethod: OrderPaymentMethod | null
-  itemCount: number
-  totalAmount: number
-  createdAt: string
-}
-
-export interface OrderDetailItem {
+/** A line of the API's `ResponseOrderDto` (`POST /orders`). */
+export interface PlacedOrderItem {
   id: string
   productVariantId: string
   productName: string
@@ -94,11 +77,12 @@ export interface OrderDetailItem {
   lineTotal: number
 }
 
-export interface OrderPayment {
+/** A payment of the API's `ResponseOrderDto`. */
+export interface PlacedOrderPayment {
   id: string
   orderId: string
   type: PaymentType
-  method: OrderPaymentMethod
+  method: ApiPaymentMethod
   status: PaymentStatus
   amount: number
   currency: string
@@ -109,8 +93,8 @@ export interface OrderPayment {
   updatedAt: string
 }
 
-/** `GET /orders/{idOrOrderNumber}` (ORDER of the API design). */
-export interface OrderDetail {
+/** The API's `ResponseOrderDto`: the order `POST /orders` saved. */
+export interface PlacedOrder {
   id: string
   orderNumber: string
   userId: string
@@ -132,8 +116,31 @@ export interface OrderDetail {
   totalAmount: number
   note: string | null
   expiresAt: string | null
-  items: OrderDetailItem[]
-  payments: OrderPayment[]
+  items: PlacedOrderItem[]
+  payments: PlacedOrderPayment[]
   createdAt: string
   updatedAt: string
 }
+
+/** One row of `GET /orders` (OROW of the API design). */
+export interface OrderSummary {
+  id: string
+  orderNumber: string
+  userId: string
+  customer: { firstName: string; lastName: string; email: string }
+  status: OrderStatus
+  shippingStatus: ShippingStatus
+  paymentStatus: OrderPaymentStatus
+  paymentMethod: ApiPaymentMethod | null
+  itemCount: number
+  totalAmount: number
+  createdAt: string
+}
+
+/**
+ * `GET /orders/{idOrOrderNumber}` returns the same `ResponseOrderDto` as
+ * `POST /orders`, so the order details reuse its types.
+ */
+export type OrderDetail = PlacedOrder
+export type OrderDetailItem = PlacedOrderItem
+export type OrderPayment = PlacedOrderPayment

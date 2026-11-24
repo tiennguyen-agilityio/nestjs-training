@@ -200,4 +200,22 @@ describe('RoastDetailPageContent', () => {
 
     expect(screen.getByText('250g')).toBeInTheDocument()
   })
+
+  it('shows the sale price with the list price struck through', () => {
+    mockUseProductById.mockReturnValue({
+      product: {
+        ...productFixture,
+        variants: [{ ...productFixture.variants[0], discountValue: 25 }],
+      },
+      isLoading: false,
+      isError: false,
+      errorMessage: null,
+      refetch: jest.fn(),
+    })
+
+    render(<RoastDetailPageContent />)
+
+    expect(screen.getByText('$18.00')).toBeInTheDocument()
+    expect(screen.getByRole('deletion')).toHaveTextContent('$24.00')
+  })
 })

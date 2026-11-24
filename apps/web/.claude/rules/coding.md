@@ -49,7 +49,7 @@ The layering and conventions the code actually follows. Plans, code reviews and 
 
 **Data hooks wrap TanStack Query** (`src/hooks/useCategory.ts`); `useAuth` keeps the current user in the zustand `useUserStore`.
 
-- Query keys come from exported key factories under one root key per resource (`['categories']`); `setQueriesData` filters may use a literal prefix (`['products', 'list']`). Mutations invalidate that root key (`useCreateOrder` does not).
+- Query keys come from exported key factories under one root key per resource (`['categories']`); `setQueriesData` filters may use a literal prefix (`['products', 'list']`). Mutations invalidate that root key.
 
 ## Shared packages
 

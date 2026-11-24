@@ -4,7 +4,10 @@ import { useAuth } from '@clerk/nextjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { VALIDATION_RULES, type OrderStatus } from '@repo/constants'
 
+import type { PlaceOrderPayload } from '@repo/schemas'
+
 import { CLERK_SESSION_TEMPLATE, PAGE_SIZE } from '@/constants/common'
+import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import {
   createOrder,
   deleteOrder,
@@ -19,35 +22,59 @@ import type { ResponseMeta } from '@/types/api'
 import type {
   Order,
   OrderDetail,
-  OrderPayload,
   OrderSummary,
   ORDER_STATUS,
+  PlacedOrder,
   SHIPPING_STATUS,
 } from '@/types/order'
 import {
   detailQueryOptions,
   listQueryOptions,
+  throwIfServiceFailed,
   toQueryResult,
 } from '@/utils/query'
 
+/**
+ * Keys under the one `['orders']` root. The shopper's own lists and details
+ * carry the user id, so a switched account never reads another user's cache.
+ */
+export const ordersQueryKeys = {
+  root: ['orders'] as const,
+  mine: (userId: string, params: MyOrdersParams) =>
+    ['orders', 'mine', userId, params.page, params.status ?? ''] as const,
+  detail: (userId: string, orderNumber: string) =>
+    ['orders', 'detail', userId, orderNumber] as const,
+}
+
+const ordersQueryRoot = ordersQueryKeys.root
+
+/**
+ * Places the order. A retry of the same values reuses the `Idempotency-Key`,
+ * so a lost response never places a second order; a failure throws a
+ * `ServiceError` carrying the API's `errors[]`.
+ */
 export function useCreateOrder() {
+  const queryClient = useQueryClient()
+  const idempotency = useIdempotencyKey()
+
   return useMutation({
     mutationFn: async (input: {
-      body: OrderPayload
-      getToken?: () => Promise<string | null>
-    }): Promise<Order> => {
-      const result = await createOrder(input.body, { getToken: input.getToken })
-      if (!result.ok) {
-        throw Object.assign(new Error(result.error.message), {
-          response: { data: result.error },
-        })
-      }
+      body: PlaceOrderPayload
+      getToken: () => Promise<string | null>
+    }): Promise<PlacedOrder> => {
+      const idempotencyKey = idempotency.keyFor(input.body)
+      const result = await sendUntilSettled(() =>
+        createOrder(input.body, { getToken: input.getToken, idempotencyKey }),
+      )
+      if (!result.ok) throwIfServiceFailed(result)
       return result.order
+    },
+    onSuccess: () => {
+      idempotency.clear()
+      void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })
     },
   })
 }
-
-const ordersQueryRoot = ['orders'] as const
 
 export function useDeleteOrder() {
   const queryClient = useQueryClient()
@@ -147,15 +174,6 @@ export interface MyOrdersParams {
   status?: OrderStatus
 }
 
-/** Keys of the shopper's own orders; they carry the user id, so a switched account never reads another user's cache. */
-export const orderQueryKeys = {
-  root: ordersQueryRoot,
-  mine: (userId: string, params: MyOrdersParams) =>
-    ['orders', 'mine', userId, params.page, params.status ?? ''] as const,
-  detail: (userId: string, orderNumber: string) =>
-    ['orders', 'detail', userId, orderNumber] as const,
-}
-
 export interface UseMyOrdersResult {
   orders: OrderSummary[]
   meta: ResponseMeta | null
@@ -170,7 +188,7 @@ export function useMyOrders(params: MyOrdersParams): UseMyOrdersResult {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth()
 
   const query = useQuery({
-    queryKey: orderQueryKeys.mine(userId ?? '', params),
+    queryKey: ordersQueryKeys.mine(userId ?? '', params),
     queryFn: async () => {
       const result = await fetchMyOrders({
         getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
@@ -230,7 +248,7 @@ export function useOrderDetail(
   const { isLoaded, isSignedIn, userId, getToken } = useAuth()
 
   const query = useQuery({
-    queryKey: orderQueryKeys.detail(userId ?? '', orderNumber ?? ''),
+    queryKey: ordersQueryKeys.detail(userId ?? '', orderNumber ?? ''),
     queryFn: async () => {
       const result = await fetchOrderDetail(orderNumber ?? '', {
         getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),

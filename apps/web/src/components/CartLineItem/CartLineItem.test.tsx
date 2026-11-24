@@ -94,4 +94,17 @@ describe('CartLineItem', () => {
       screen.getByRole('button', { name: 'Increase quantity' }),
     ).toBeDisabled()
   })
+
+  it('shows the struck list price for a discounted line', () => {
+    render(
+      <CartLineItem
+        item={line({ unitPrice: 15, listPrice: 20, maxQuantity: 9 })}
+        onChangeQuantity={jest.fn()}
+        onRemove={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByText('$15.00')).toBeInTheDocument()
+    expect(screen.getByRole('deletion')).toHaveTextContent('$20.00')
+  })
 })
