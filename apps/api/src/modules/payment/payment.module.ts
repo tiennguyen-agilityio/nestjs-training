@@ -8,6 +8,7 @@ import { PaymentController } from './controllers/payment.controller.js';
 import { PaymentGateways } from './gateways/payment-gateways.js';
 import { StripePaymentGateway } from './gateways/stripe-payment.gateway.js';
 import { stripeClientProvider } from './gateways/stripe-client.provider.js';
+import { PaymentCheckoutExpireHandler } from './handlers/payment-checkout-expire.handler.js';
 
 @Module({
   imports: [MikroOrmModule.forFeature([Payment]), OrderModule],
@@ -17,6 +18,7 @@ import { stripeClientProvider } from './gateways/stripe-client.provider.js';
     PaymentGateways,
     StripePaymentGateway,
     stripeClientProvider,
+    PaymentCheckoutExpireHandler,
   ],
   controllers: [PaymentController],
   exports: [PaymentService],

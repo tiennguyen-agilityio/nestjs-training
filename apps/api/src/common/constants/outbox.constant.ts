@@ -1,6 +1,7 @@
 /** Outbox topics: what a message is about. */
 export const OUTBOX_TOPICS = {
   USER_ROLE_SYNC: 'user.role-sync',
+  PAYMENT_CHECKOUT_EXPIRE: 'payment.checkout-expire',
 } as const;
 
 /**
@@ -9,4 +10,5 @@ export const OUTBOX_TOPICS = {
  */
 export const OUTBOX_CONSUMERS = {
   USER_ROLE_SYNC: 'user-role-sync',
+  PAYMENT_CHECKOUT_EXPIRE: 'payment-checkout-expire',
 } as const;

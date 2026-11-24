@@ -11,7 +11,7 @@ import { User } from '../../user/entities/user.entity.js';
 describe('OrderController', () => {
   let controller: OrderController;
   let orderService: Record<
-    'place' | 'findMine' | 'findAll' | 'findMineOne' | 'findAnyOne',
+    'place' | 'findMine' | 'findAll' | 'findMineOne' | 'findAnyOne' | 'cancel',
     Mock
   >;
   const user = { id: 'user-1' } as User;
@@ -29,6 +29,7 @@ describe('OrderController', () => {
       findAll: vi.fn(),
       findMineOne: vi.fn().mockResolvedValue(order),
       findAnyOne: vi.fn().mockResolvedValue(order),
+      cancel: vi.fn().mockResolvedValue(order),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrderController],
@@ -77,6 +78,16 @@ describe('OrderController', () => {
       controller.findOne(user, { idOrOrderNumber: 'CH-261124-0001' }),
     ).resolves.toBe(order);
     expect(orderService.findMineOne).toHaveBeenCalledWith(
+      'user-1',
+      'CH-261124-0001',
+    );
+  });
+
+  it('cancel forwards the user id and idOrOrderNumber to OrderService.cancel and returns its result', async () => {
+    await expect(
+      controller.cancel(user, { idOrOrderNumber: 'CH-261124-0001' }),
+    ).resolves.toBe(order);
+    expect(orderService.cancel).toHaveBeenCalledWith(
       'user-1',
       'CH-261124-0001',
     );

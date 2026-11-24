@@ -39,7 +39,10 @@ describe('PaymentService', () => {
   >;
   let orderRepository: Record<'reload' | 'findById', Mock>;
   let gateways: Record<'for', Mock>;
-  let gateway: Record<'createCheckout' | 'findCheckout' | 'parseWebhook', Mock>;
+  let gateway: Record<
+    'createCheckout' | 'findCheckout' | 'expireCheckout' | 'parseWebhook',
+    Mock
+  >;
   let order: Order;
   let payment: Payment;
 
@@ -106,6 +109,7 @@ describe('PaymentService', () => {
     gateway = {
       createCheckout: vi.fn().mockResolvedValue(session()),
       findCheckout: vi.fn(),
+      expireCheckout: vi.fn().mockResolvedValue(undefined),
       parseWebhook: vi.fn(),
     };
     gateways = { for: vi.fn().mockReturnValue(gateway) };
@@ -453,6 +457,42 @@ describe('PaymentService', () => {
       expect(paymentRepository.lockById).toHaveBeenCalledTimes(1);
       expect(paymentRepository.save).not.toHaveBeenCalled();
       warn.mockRestore();
+    });
+  });
+
+  describe('expireCheckout', () => {
+    const payload = {
+      paymentId: 'payment-1',
+      method: PaymentMethod.CARD,
+      checkoutSessionId: 'cs_test_1',
+    };
+
+    it("expireCheckout expires the session on the method's gateway", async () => {
+      await expect(service.expireCheckout(payload)).resolves.toBeUndefined();
+
+      expect(gateways.for).toHaveBeenCalledWith(PaymentMethod.CARD);
+      expect(gateway.expireCheckout).toHaveBeenCalledWith('cs_test_1');
+    });
+
+    it('expireCheckout logs and finishes for a method with no gateway', async () => {
+      gateways.for.mockReturnValue(null);
+      const warn = vi
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      await expect(
+        service.expireCheckout({ ...payload, method: PaymentMethod.PAYPAL }),
+      ).resolves.toBeUndefined();
+
+      expect(gateway.expireCheckout).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('expireCheckout rejects when the gateway rejects', async () => {
+      const error = new Error('stripe down');
+      gateway.expireCheckout.mockRejectedValue(error);
+
+      await expect(service.expireCheckout(payload)).rejects.toBe(error);
     });
   });
 

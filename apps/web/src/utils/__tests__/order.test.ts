@@ -13,10 +13,12 @@ import {
   buildOrderDashboardStats,
   formatOrderCustomerName,
   formatOrderDateTime,
+  getCancelOrderErrorMessage,
   getPaymentStatusPresentation,
 } from '@/utils/order'
 import type { OrderSummary } from '@/types/order'
 import { OrderStatus, ShippingStatus } from '@repo/constants'
+import { ServiceError } from '@/utils/query'
 
 const values = (
   overrides: Partial<CheckoutFormValues> = {},
@@ -252,5 +254,29 @@ describe('formatOrderDateTime', () => {
       `${pad(d.getDate())} ${month}, ${pad(d.getHours())}:${pad(d.getMinutes())}`,
     )
     expect(formatOrderDateTime('not a date')).toBe('—')
+  })
+})
+
+describe('getCancelOrderErrorMessage', () => {
+  it('getCancelOrderErrorMessage maps statusNotAllowed to ORDER_NOT_CANCELLABLE and falls back to the error message', () => {
+    const conflict = new ServiceError('Order cannot be cancelled: it is paid', [
+      {
+        errCode: 'statusNotAllowed',
+        field: 'paymentStatus',
+        message: 'Order cannot be cancelled: it is paid',
+        description:
+          'The order is already paid. Contact the shop to cancel it.',
+      },
+    ])
+
+    expect(getCancelOrderErrorMessage(conflict)).toBe(
+      ERROR_MESSAGES.ORDER_NOT_CANCELLABLE,
+    )
+    expect(
+      getCancelOrderErrorMessage(new Error('Could not cancel order')),
+    ).toBe('Could not cancel order')
+    expect(getCancelOrderErrorMessage('boom')).toBe(
+      ERROR_MESSAGES.NETWORK_ERROR,
+    )
   })
 })

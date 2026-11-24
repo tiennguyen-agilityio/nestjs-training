@@ -24,6 +24,8 @@ import {
 } from '@repo/constants'
 
 import { formatPrice } from './common'
+import { getErrorMessage } from './form'
+import { ServiceError } from './query'
 
 export function formatOrderCustomerName(order: OrderSummary): string {
   const { firstName, lastName } = order.customer
@@ -438,3 +440,10 @@ export const isPlacedOrder = (value: unknown): value is PlacedOrder => {
     order.items.every((item) => typeof item?.lineTotal === 'number')
   )
 }
+
+/** The cancel dialog's message: the API's `errCode`, never its `message`, picks it. */
+export const getCancelOrderErrorMessage = (error: unknown): string =>
+  error instanceof ServiceError &&
+  error.errors.some(({ errCode }) => errCode === 'statusNotAllowed')
+    ? ERROR_MESSAGES.ORDER_NOT_CANCELLABLE
+    : getErrorMessage(error)

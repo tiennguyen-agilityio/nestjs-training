@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import userEvent from '@testing-library/user-event'
 import { useParams } from 'next/navigation'
 import {
@@ -11,8 +12,14 @@ import {
 } from '@repo/constants'
 
 import OrderDetailPageContent from '@/sections/OrderDetailPageContent'
-import { useOrderDetail } from '@/hooks/useOrder'
-import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
+import { useCancelOrder, useOrderDetail } from '@/hooks/useOrder'
+import {
+  API_FALLBACK_ERRORS,
+  DIALOG_MESSAGES,
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
+} from '@/constants/messages'
+import { ServiceError } from '@/utils/query'
 import { ROUTES } from '@/constants/routes'
 import { formatPrice } from '@/utils/common'
 import { formatOrderDateTime } from '@/utils/order'
@@ -23,7 +30,11 @@ jest.mock('next/navigation', () => ({
   usePathname: jest.fn(() => '/dashboard/orders/CH-261117-0001'),
 }))
 
-jest.mock('@/hooks/useOrder', () => ({ useOrderDetail: jest.fn() }))
+jest.mock('@/hooks/useOrder', () => ({
+  useOrderDetail: jest.fn(),
+  useCancelOrder: jest.fn(),
+}))
+jest.mock('sonner', () => ({ toast: { success: jest.fn() } }))
 
 jest.mock('next/image', () => ({
   __esModule: true,
@@ -34,6 +45,8 @@ jest.mock('next/image', () => ({
 
 const mockUseParams = jest.mocked(useParams)
 const mockUseOrderDetail = jest.mocked(useOrderDetail)
+const mockUseCancelOrder = jest.mocked(useCancelOrder)
+const mutate = jest.fn()
 
 const charge: OrderPayment = {
   id: 'pay-1',
@@ -113,6 +126,10 @@ describe('OrderDetailPageContent', () => {
   beforeEach(() => {
     mockUseParams.mockReturnValue({ orderNumber: order.orderNumber })
     mockUseOrderDetail.mockReturnValue(state())
+    mockUseCancelOrder.mockReturnValue({
+      mutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCancelOrder>)
   })
 
   afterEach(() => {
@@ -274,7 +291,7 @@ describe('OrderDetailPageContent', () => {
     expect(within(shipTo).getByText(/Ring twice/)).toBeInTheDocument()
   })
 
-  it('shows a disabled Cancel order button for a PENDING order and the matching text for other statuses', () => {
+  it('shows an enabled Cancel order button only for a PENDING order (AC3)', () => {
     const { rerender } = render(<OrderDetailPageContent />)
 
     const cancel = section('Cancel order')
@@ -285,7 +302,7 @@ describe('OrderDetailPageContent', () => {
     ).toBeInTheDocument()
     expect(
       within(cancel).getByRole('button', { name: 'Cancel order' }),
-    ).toBeDisabled()
+    ).toBeEnabled()
 
     mockUseOrderDetail.mockReturnValue(
       state({ order: { ...order, status: OrderStatus.CONFIRMED } }),
@@ -305,6 +322,138 @@ describe('OrderDetailPageContent', () => {
     expect(
       within(section('Cancel order')).getByText(
         'This order has been cancelled.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull()
+  })
+
+  it('cancels a PENDING order after the confirm and toasts Order cancelled', async () => {
+    const user = userEvent.setup()
+    mutate.mockImplementation(
+      (_id: string, { onSuccess }: { onSuccess: () => void }) => onSuccess(),
+    )
+    render(<OrderDetailPageContent />)
+
+    await user.click(
+      within(section('Cancel order')).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).getByText(DIALOG_MESSAGES.ORDER.CANCEL.TITLE),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.DESCRIPTION(order.orderNumber),
+      ),
+    ).toBeInTheDocument()
+
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.KEEP,
+      }),
+    )
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(mutate).not.toHaveBeenCalled()
+
+    await user.click(
+      within(section('Cancel order')).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    const reopened = await screen.findByRole('alertdialog')
+    await user.click(
+      within(reopened).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+
+    expect(mutate).toHaveBeenCalledWith(order.id, expect.any(Object))
+    expect(toast.success).toHaveBeenCalledWith(SUCCESS_MESSAGES.ORDER_CANCELLED)
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  })
+
+  it('shows ORDER_NOT_CANCELLABLE in the dialog when the cancel answers statusNotAllowed', async () => {
+    const user = userEvent.setup()
+    mutate.mockImplementation(
+      (_id: string, { onError }: { onError: (error: unknown) => void }) =>
+        onError(
+          new ServiceError('Order cannot be cancelled: it is confirmed', [
+            {
+              errCode: 'statusNotAllowed',
+              field: 'status',
+              message: 'Order cannot be cancelled: it is confirmed',
+              description: 'Contact the shop to cancel a confirmed order.',
+            },
+          ]),
+        ),
+    )
+    render(<OrderDetailPageContent />)
+
+    await user.click(
+      within(section('Cancel order')).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+
+    expect(
+      await within(dialog).findByText(ERROR_MESSAGES.ORDER_NOT_CANCELLABLE),
+    ).toBeInTheDocument()
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('keeps the dialog and its message when the refetch after a 409 shows the order confirmed', async () => {
+    const user = userEvent.setup()
+    mutate.mockImplementation(
+      (_id: string, { onError }: { onError: (error: unknown) => void }) =>
+        onError(
+          new ServiceError('Order cannot be cancelled: it is confirmed', [
+            {
+              errCode: 'statusNotAllowed',
+              field: 'status',
+              message: 'Order cannot be cancelled: it is confirmed',
+              description: 'Contact the shop to cancel a confirmed order.',
+            },
+          ]),
+        ),
+    )
+    const { rerender } = render(<OrderDetailPageContent />)
+
+    await user.click(
+      within(section('Cancel order')).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    mockUseOrderDetail.mockReturnValue(
+      state({ order: { ...order, status: OrderStatus.CONFIRMED } }),
+    )
+    rerender(<OrderDetailPageContent />)
+
+    expect(
+      within(screen.getByRole('alertdialog')).getByText(
+        ERROR_MESSAGES.ORDER_NOT_CANCELLABLE,
+      ),
+    ).toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', { name: DIALOG_MESSAGES.ORDER.CANCEL.KEEP }),
+    )
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(
+      within(section('Cancel order')).getByText(
+        'Cannot be cancelled: the order is confirmed.',
       ),
     ).toBeInTheDocument()
   })

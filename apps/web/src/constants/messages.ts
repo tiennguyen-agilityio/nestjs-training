@@ -2,6 +2,8 @@ import { VALIDATION_RULES } from '@repo/constants'
 
 export const ERROR_MESSAGES = {
   ORDER_NOT_FOUND: 'Order not found.',
+  ORDER_NOT_CANCELLABLE:
+    'This order can no longer be cancelled. Contact the shop for help.',
   IDENTIFIER_REQUIRED: 'Enter your email address',
   IDENTIFIER_EMAIL_INVALID: 'Enter a valid email address',
   PASSWORD_REQUIRED: 'Enter your password',
@@ -89,6 +91,7 @@ export const API_FALLBACK_ERRORS = {
   USER_UPDATE: 'Could not update user',
   PROFILE_LOAD: 'Could not load profile',
   ORDER_CREATE: 'Could not place order',
+  ORDER_CANCEL: 'Could not cancel order',
   ORDER_DELETE: 'Could not delete order',
   ORDER_STATUS_UPDATE: 'Could not update order status',
   ORDER_SHIPPING_STATUS_UPDATE: 'Could not update shipping status',
@@ -108,6 +111,7 @@ export const API_FALLBACK_ERRORS = {
 
 export const SUCCESS_MESSAGES = {
   ORDER_PLACED: 'Order placed successfully',
+  ORDER_CANCELLED: 'Order cancelled',
   ORDER_TOTAL: (total: string) => `Order total: ${total}`,
   SIGNED_OUT: 'Signed out successfully',
   CATEGORY_CREATED: 'Category created',
@@ -160,6 +164,13 @@ export const DIALOG_MESSAGES = {
     },
   },
   ORDER: {
+    CANCEL: {
+      TITLE: 'Cancel this order?',
+      ACTION: 'Cancel order',
+      KEEP: 'Keep order',
+      DESCRIPTION: (orderNumber: string) =>
+        `Order ${orderNumber} will be cancelled and its items go back into stock. This cannot be undone.`,
+    },
     DELETE: {
       ACTION: 'Delete order',
       DESCRIPTION: (orderLabel: string) =>

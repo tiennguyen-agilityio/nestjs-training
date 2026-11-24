@@ -93,6 +93,23 @@ export class StripePaymentGateway extends PaymentGateway {
     }
   }
 
+  async expireCheckout(sessionId: string): Promise<void> {
+    if (!(await this.findCheckout(sessionId))?.open) return;
+    try {
+      await this.stripe.checkout.sessions.expire(sessionId);
+    } catch (error) {
+      // Stripe refuses to expire a session that is no longer open (paid or
+      // expired between the read and the call): done, unless it is still open.
+      if (
+        error instanceof Stripe.errors.StripeInvalidRequestError &&
+        !(await this.findCheckout(sessionId))?.open
+      ) {
+        return;
+      }
+      throw this.translate(error);
+    }
+  }
+
   parseWebhook(
     rawBody: Buffer | undefined,
     headers: IncomingHttpHeaders,

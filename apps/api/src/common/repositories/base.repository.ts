@@ -265,6 +265,18 @@ export abstract class BaseRepository<T extends BaseEntity> {
     };
   }
 
+  /**
+   * Creates a row of another entity, by its entity name, in this repository's
+   * persistence context; the next flush (`save`) inserts it. For child rows
+   * that have no repository of their own (an `InventoryMovement`).
+   */
+  protected createRelated(
+    entityName: string,
+    data: Record<string, unknown>,
+  ): void {
+    this.em.persist(this.em.create(entityName as never, data as never));
+  }
+
   protected async createAndSave(
     data: Record<string, unknown>,
     actorId: ActorId,

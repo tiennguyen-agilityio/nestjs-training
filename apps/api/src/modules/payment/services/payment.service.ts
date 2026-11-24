@@ -15,6 +15,7 @@ import type {
 import { ResponsePaymentCheckoutDto } from '../dto/response-payment-checkout.dto.js';
 import type { Payment } from '../../order/entities/payment.entity.js';
 import type { Order } from '../../order/entities/order.entity.js';
+import type { PaymentCheckoutExpirePayload } from '../../../common/interfaces/outbox-payload.interface.js';
 import {
   InvalidStateException,
   ItemNotFoundException,
@@ -184,6 +185,25 @@ export class PaymentService {
       await this.paymentRepository.save(payment, null);
       return true;
     });
+  }
+
+  /**
+   * The outbox's `payment.checkout-expire`: closes the cancelled order's
+   * checkout session. A rejection is a failed attempt the relay retries.
+   */
+  async expireCheckout({
+    paymentId,
+    method,
+    checkoutSessionId,
+  }: PaymentCheckoutExpirePayload): Promise<void> {
+    const gateway = this.gateways.for(method);
+    if (!gateway) {
+      this.logger.warn(
+        `Checkout session ${checkoutSessionId} of payment ${paymentId} not expired: no ${method} gateway`,
+      );
+      return;
+    }
+    await gateway.expireCheckout(checkoutSessionId);
   }
 
   private async reuse(
