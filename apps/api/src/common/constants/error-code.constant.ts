@@ -53,6 +53,7 @@ export const ERROR_CODES = {
     SHIPPING_METHOD_UNAVAILABLE: 'shippingMethodUnavailable',
     ITEM_UNAVAILABLE: 'itemUnavailable',
     OUT_OF_STOCK: 'outOfStock',
+    STATUS_NOT_ALLOWED: 'statusNotAllowed',
   },
   PAYMENT: {
     METHOD_NOT_ONLINE: 'paymentMethodNotOnline',

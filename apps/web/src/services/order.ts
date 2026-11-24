@@ -76,6 +76,40 @@ export async function createOrder(
   return { ok: true, order: result.data }
 }
 
+/**
+ * `POST /orders/:id/cancel`: the API cancels one of the signed-in shopper's
+ * PENDING orders and returns it.
+ */
+export async function cancelOrder(
+  id: string,
+  options: { getToken: () => Promise<string | null> },
+): Promise<
+  | { ok: true; order: OrderDetail }
+  | {
+      ok: false
+      error: string
+      status?: number
+      errorResponse?: ApiErrorResponse
+    }
+> {
+  // `post` unwraps the `{ data }` envelope.
+  const result = await apiClient.post<OrderDetail>(
+    `${API_ROUTES.ORDERS}/${encodeURIComponent(id)}/cancel`,
+    undefined,
+    {
+      getToken: options.getToken,
+      fallbackError: API_FALLBACK_ERRORS.ORDER_CANCEL,
+    },
+  )
+  if (!result.ok) {
+    return result.status === undefined
+      ? { ...result, error: API_FALLBACK_ERRORS.ORDER_CANCEL }
+      : result
+  }
+
+  return { ok: true, order: result.data }
+}
+
 export async function fetchOrders(
   options: FetchOrdersOptions = {},
 ): Promise<

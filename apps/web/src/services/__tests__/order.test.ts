@@ -9,7 +9,12 @@ import type { PlaceOrderPayload } from '@repo/schemas'
 import { IDEMPOTENCY } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { API_ROUTES } from '@/constants/routes'
-import { createOrder, fetchMyOrders, fetchOrderDetail } from '@/services/order'
+import {
+  cancelOrder,
+  createOrder,
+  fetchMyOrders,
+  fetchOrderDetail,
+} from '@/services/order'
 import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 
 const body: PlaceOrderPayload = {
@@ -225,5 +230,66 @@ describe('order service (shopper)', () => {
     if (!result.ok) {
       expect(result.error.message).toContain(API_FALLBACK_ERRORS.ORDER_LOAD)
     }
+  })
+})
+
+describe('cancelOrder', () => {
+  const originalFetch = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('cancelOrder posts to /orders/:id/cancel with the token and unwraps data', async () => {
+    const cancelled = { ...detail, status: OrderStatus.CANCELLED }
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ data: cancelled }))
+    globalThis.fetch = fetchMock
+
+    const result = await cancelOrder('o-1', { getToken })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${API_ROUTES.ORDERS}/o-1/cancel`)
+    expect(requestInit(fetchMock).method).toBe('POST')
+    expect(requestInit(fetchMock).credentials).toBe('include')
+    const headers = requestInit(fetchMock).headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer tok')
+    expect(result).toEqual({ ok: true, order: cancelled })
+  })
+
+  it('cancelOrder returns the API error response on a 409', async () => {
+    const conflict = {
+      statusCode: 409,
+      message: 'Conflict',
+      errors: [
+        {
+          errCode: 'statusNotAllowed',
+          field: 'status',
+          message: 'Order cannot be cancelled: it is confirmed',
+          description: 'Contact the shop to cancel a confirmed order.',
+        },
+      ],
+    }
+    globalThis.fetch = jest.fn().mockResolvedValue(fetchResponse(conflict, 409))
+
+    const result = await cancelOrder('o-1', { getToken })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.status).toBe(409)
+    expect(result.errorResponse?.errors?.[0]?.errCode).toBe('statusNotAllowed')
+  })
+
+  it('cancelOrder falls back to ORDER_CANCEL on a network error', async () => {
+    globalThis.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const result = await cancelOrder('o-1', { getToken })
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: API_FALLBACK_ERRORS.ORDER_CANCEL,
+    })
   })
 })

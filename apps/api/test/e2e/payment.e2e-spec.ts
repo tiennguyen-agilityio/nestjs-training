@@ -304,6 +304,33 @@ describe('Payments (e2e)', () => {
     });
   });
 
+  describe('POST /orders/:id/cancel', () => {
+    it('cancelling a card order with a checkout session expires the session through the outbox', async () => {
+      const user = await createUser();
+      const sessionId = `cs_test_e2e_${suffix()}`;
+      const { orderId, paymentId } = await seedOrder(user.id, { sessionId });
+      const expire = vi
+        .spyOn(stripe.checkout.sessions, 'expire')
+        .mockImplementation(((id: string) =>
+          Promise.resolve({
+            ...fakeSession(id, Math.floor(ORDER_EXPIRES_AT.getTime() / 1000)),
+            status: 'expired',
+          })) as never);
+      signIn(user.clerkId);
+
+      await request(app.getHttpServer())
+        .post(`${ORDERS}/${orderId}/cancel`)
+        .expect(200);
+
+      const row = await paymentRow(paymentId);
+      expect(row.status).toBe('FAILED');
+      expect(row.failure_reason).toBe('Cancelled');
+      await vi.waitFor(() => expect(expire).toHaveBeenCalledWith(sessionId), {
+        timeout: 10_000,
+      });
+    });
+  });
+
   describe('POST /webhooks/stripe', () => {
     it('POST /webhooks/stripe completed marks the payment PAID and the order CONFIRMED (AC4)', async () => {
       const user = await createUser();
