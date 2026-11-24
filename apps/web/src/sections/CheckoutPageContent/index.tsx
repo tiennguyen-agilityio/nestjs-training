@@ -29,6 +29,7 @@ import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
 import { orderSuccessPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart } from '@/hooks/useCart'
+import { addressQueryKeys, useMyAddresses } from '@/hooks/useMyAddresses'
 import { useCreateOrder } from '@/hooks/useOrder'
 import { useStartPayment } from '@/hooks/usePayment'
 import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
@@ -76,6 +77,14 @@ const DEFAULT_VALUES: CheckoutFormValues = {
   expiryDate: '',
   cvc: '',
 }
+
+const ADDRESS_FIELDS = [
+  'addressLine',
+  'city',
+  'district',
+  'ward',
+  'postalCode',
+] as const satisfies readonly (keyof CheckoutFormValues)[]
 
 const LINE_ERR_CODES = new Set<string>([
   PLACE_ORDER_ERR_CODES.OUT_OF_STOCK,
@@ -149,6 +158,7 @@ const CheckoutPageContent = () => {
   const queryClient = useQueryClient()
   const { getToken } = useClerkAuth()
   const { user } = useAuth()
+  const { defaultAddress } = useMyAddresses()
   const { mutateAsync: createOrder } = useCreateOrder()
   const { mutateAsync: startPayment } = useStartPayment()
 
@@ -228,42 +238,48 @@ const CheckoutPageContent = () => {
     }),
   }
 
-  const initialUserValues = useMemo<AddressSnapshot>(() => {
-    const userAddress = user?.address
-
-    return {
-      firstName: userAddress?.firstName ?? user?.firstName ?? '',
-      lastName: userAddress?.lastName ?? user?.lastName ?? '',
-      phoneNumber: userAddress?.phoneNumber ?? '',
-      addressLine: userAddress?.addressLine ?? '',
-      city: userAddress?.city ?? '',
-      district: userAddress?.district ?? '',
-      ward: userAddress?.ward ?? '',
-      postalCode: userAddress?.postalCode ?? '',
-    }
-  }, [user])
+  const initialUserValues = useMemo<AddressSnapshot>(
+    () => ({
+      firstName: user?.firstName ?? '',
+      lastName: user?.lastName ?? '',
+      phoneNumber: user?.phoneNumber ?? '',
+      addressLine: defaultAddress?.addressLine ?? '',
+      city: defaultAddress?.city ?? '',
+      district: defaultAddress?.district ?? '',
+      ward: defaultAddress?.ward ?? '',
+      postalCode: defaultAddress?.postalCode ?? '',
+    }),
+    [user, defaultAddress],
+  )
 
   useEffect(() => {
-    setValues((previousValues) => ({
-      ...previousValues,
-      firstName: previousValues.firstName || initialUserValues.firstName,
-      lastName: previousValues.lastName || initialUserValues.lastName,
-      phoneNumber:
-        previousValues.phoneNumber.length > 0
-          ? previousValues.phoneNumber
-          : initialUserValues.phoneNumber,
-      addressLine: previousValues.addressLine || initialUserValues.addressLine,
-      city: previousValues.city || initialUserValues.city,
-      district:
-        previousValues.district.length > 0
-          ? previousValues.district
-          : initialUserValues.district,
-      ward:
-        previousValues.ward.length > 0
-          ? previousValues.ward
-          : initialUserValues.ward,
-      postalCode: previousValues.postalCode || initialUserValues.postalCode,
-    }))
+    setValues((previousValues) => {
+      const isAddressEmpty = ADDRESS_FIELDS.every(
+        (field) => previousValues[field].length === 0,
+      )
+      const applyAddress =
+        isAddressEmpty && initialUserValues.addressLine.length > 0
+      if (applyAddress) {
+        selectedSuggestionRef.current = initialUserValues.addressLine.trim()
+      }
+
+      return {
+        ...previousValues,
+        firstName: previousValues.firstName || initialUserValues.firstName,
+        lastName: previousValues.lastName || initialUserValues.lastName,
+        phoneNumber:
+          previousValues.phoneNumber || initialUserValues.phoneNumber,
+        ...(applyAddress
+          ? {
+              addressLine: initialUserValues.addressLine,
+              city: initialUserValues.city,
+              district: initialUserValues.district,
+              ward: initialUserValues.ward,
+              postalCode: initialUserValues.postalCode,
+            }
+          : {}),
+      }
+    })
   }, [initialUserValues])
 
   const handleValueChange = (
@@ -438,6 +454,7 @@ const CheckoutPageContent = () => {
       if (result.data.paymentMethod === PAYMENT_METHOD.STRIPE) {
         setHasPlacedOrder(true)
         void queryClient.invalidateQueries({ queryKey: cartQueryKeys.root })
+        void queryClient.invalidateQueries({ queryKey: addressQueryKeys.root })
         await payPlacedOrder(order.id)
         return
       }
@@ -451,6 +468,7 @@ const CheckoutPageContent = () => {
       router.push(ROUTES.ORDER_SUCCESS)
       // The API emptied the server cart: read it again (header count → 0).
       void queryClient.invalidateQueries({ queryKey: cartQueryKeys.root })
+      void queryClient.invalidateQueries({ queryKey: addressQueryKeys.root })
     } catch (error) {
       const errors = error instanceof ServiceError ? error.errors : []
       const errCodes = new Set(errors.map((detail) => detail.errCode))

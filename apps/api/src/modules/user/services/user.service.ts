@@ -8,6 +8,7 @@ import type {
   UserProfileSyncInput,
 } from '../dto/user.schema.js';
 import { UserRepository } from '../repositories/user.repository.js';
+import { UserAddressService } from './user-address.service.js';
 import type { FindOptions } from '../../../common/interfaces/repository-options.interface.js';
 import {
   ERROR_MESSAGES,
@@ -32,6 +33,7 @@ export class UserService {
   constructor(
     private readonly userRepository: UserRepository,
     private readonly authProvider: AuthProvider,
+    private readonly userAddressService: UserAddressService,
   ) {}
 
   async create(dto: CreateUserInput, actorId: ActorId): Promise<User> {
@@ -221,6 +223,9 @@ export class UserService {
     const user = await this.findOne(id);
     await this.authProvider.syncUserStatus(user.clerkId, UserStatus.INACTIVE);
     user.status = UserStatus.INACTIVE;
-    await this.userRepository.softDelete(user, actorId);
+    await this.userRepository.transactional(async () => {
+      await this.userAddressService.softDeleteAllOf(user.id, actorId);
+      await this.userRepository.softDelete(user, actorId);
+    });
   }
 }
