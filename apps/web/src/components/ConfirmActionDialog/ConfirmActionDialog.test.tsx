@@ -25,11 +25,15 @@ function Harness({
   mutate,
   isPending = false,
   onClose,
+  textCancel,
+  formatError,
 }: {
   item: Item
   mutate: Mutate
   isPending?: boolean
   onClose?: () => void
+  textCancel?: string
+  formatError?: (error: unknown) => string
 }) {
   const [pending, setPending] = useState<Item | null>(null)
   return (
@@ -49,6 +53,8 @@ function Harness({
         title={TITLE}
         renderDescription={(current) => <p>Remove {current?.name}</p>}
         textAction="Delete"
+        textCancel={textCancel}
+        formatError={formatError}
         data-testid="modal-confirm-delete-item"
       >
         <span>preview</span>
@@ -179,5 +185,41 @@ describe('ConfirmActionDialog', () => {
     expect(screen.getByText('Remove Arabica')).toBeInTheDocument()
     expect(screen.getByText('preview')).toBeInTheDocument()
     expect(screen.getByTestId('modal-confirm-delete-item')).toBeInTheDocument()
+  })
+
+  it('uses Cancel as the cancel label by default and textCancel when given', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<Harness item={item} mutate={jest.fn()} />)
+    await openDialog(user)
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    unmount()
+
+    render(<Harness item={item} mutate={jest.fn()} textCancel="Keep it" />)
+    await openDialog(user)
+    expect(screen.getByRole('button', { name: 'Keep it' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+  })
+
+  it("shows formatError's text for a failed mutation when given, getErrorMessage otherwise", async () => {
+    const user = userEvent.setup()
+    const failing: Mutate = (_id, { onError }) =>
+      onError(new Error('Raw API text'))
+    const { unmount } = render(<Harness item={item} mutate={failing} />)
+    await openDialog(user)
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('Raw API text')).toBeInTheDocument()
+    unmount()
+
+    render(
+      <Harness
+        item={item}
+        mutate={failing}
+        formatError={() => 'Friendly text'}
+      />,
+    )
+    await openDialog(user)
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('Friendly text')).toBeInTheDocument()
+    expect(screen.queryByText('Raw API text')).toBeNull()
   })
 })

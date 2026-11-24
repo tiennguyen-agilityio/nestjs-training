@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { Outbox } from '@nestjs/outbox';
 import {
   InventoryMovementType,
   type OrderPaymentStatus,
   PaymentMethod,
 } from '@repo/constants';
 import { Order } from '../entities/order.entity.js';
+import { InventoryMovement } from '../entities/inventory-movement.entity.js';
+import { OUTBOX_TOPICS } from '../../../common/constants/outbox.constant.js';
+import type { PaymentCheckoutExpirePayload } from '../../../common/interfaces/outbox-payload.interface.js';
 import { BaseRepository } from '../../../common/repositories/base.repository.js';
 import type { ActorId } from '../../../common/utils/audit.util.js';
 import type {
@@ -21,6 +25,24 @@ import type { OrderFilters } from '../dto/order.schema.js';
  * non-deleted payments) equals the last parameter. Parameters:
  * `paymentStatusParams(userId, status)`.
  */
+/**
+ * Locks the non-deleted CHARGE rows of one of a user's orders, in id order,
+ * before the order row itself: `PaymentService.apply()` locks a payment and
+ * then writes its order, so taking the same order avoids a deadlock.
+ * Parameters: user id, the order's id or order number.
+ */
+const lockChargesSql = (column: 'id' | 'order_number'): string =>
+  `select p.id from payments p
+join orders o on o.id = p.order_id
+where o.user_id = ? and o.${column} = ? and o.deleted_at is null
+  and p.type = 'CHARGE' and p.deleted_at is null
+order by p.id
+for update of p`;
+
+export type EnqueueCheckoutExpire = (
+  payload: PaymentCheckoutExpirePayload,
+) => Promise<void>;
+
 const PAYMENT_STATUS_IDS_SQL = `select o.id from orders o
 left join lateral (
   select coalesce(sum(p.amount) filter (where p.type = 'REFUND' and p.status = 'PAID'), 0) as refunded,
@@ -89,6 +111,77 @@ export interface CreateOrderData {
 @Injectable()
 export class OrderRepository extends BaseRepository<Order> {
   protected readonly entity = Order;
+
+  // Property injection keeps BaseRepository's constructor, the only one that sees the ORM.
+  @Inject(Outbox)
+  private readonly outbox!: Outbox;
+
+  /**
+   * Runs `work` in one transaction and hands it a function that adds a
+   * `payment.checkout-expire` outbox message to that transaction; wakes the
+   * relay after the commit when a message was added.
+   */
+  async transactionalWithOutbox<R>(
+    work: (enqueueCheckoutExpire: EnqueueCheckoutExpire) => Promise<R>,
+  ): Promise<R> {
+    let enqueued = false;
+    const result = await this.inTransaction((tx) =>
+      work(async (payload) => {
+        await this.outbox.add<PaymentCheckoutExpirePayload>(tx, {
+          topic: OUTBOX_TOPICS.PAYMENT_CHECKOUT_EXPIRE,
+          key: payload.paymentId,
+          payload,
+        });
+        enqueued = true;
+      }),
+    );
+    if (enqueued) this.outbox.notify();
+
+    return result;
+  }
+
+  /**
+   * One of the user's orders, locked for a cancel: its CHARGE rows first,
+   * then the order row with its live payments. Its items load next with the
+   * soft-delete filter off: MikroORM joins each item's variant to apply that
+   * filter, which would drop an item whose variant was soft-deleted (and so
+   * never release its stock).
+   */
+  async lockMineForCancel(
+    userId: string,
+    where: { id: string } | { orderNumber: string },
+  ): Promise<Order | null> {
+    const [column, value] =
+      'id' in where
+        ? (['id', where.id] as const)
+        : (['order_number', where.orderNumber] as const);
+    await this.selectIds(lockChargesSql(column), [userId, value]);
+
+    const order = await this.findOneForUpdate(
+      { ...where, user: userId },
+      { relations: ['payments'] },
+    );
+    if (!order) return null;
+    await this.findOneBy(
+      { id: order.id },
+      { relations: ['items'], includeDeleted: true },
+    );
+
+    return order;
+  }
+
+  /** Writes one RELEASE per item of the cancelled order, then saves it. */
+  async saveCancelled(order: Order, actorId: ActorId): Promise<void> {
+    for (const item of order.items.getItems()) {
+      this.createRelated(InventoryMovement.name, {
+        productVariant: item.productVariant,
+        order,
+        type: InventoryMovementType.RELEASE,
+        quantity: item.quantity,
+      });
+    }
+    await this.save(order, actorId);
+  }
 
   async existsByNumber(orderNumber: string): Promise<boolean> {
     return (

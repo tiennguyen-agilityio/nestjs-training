@@ -19,6 +19,7 @@ describe('ProductVariantService', () => {
     findWithProduct: Mock;
     findManyWithProduct: Mock;
     reserve: Mock;
+    release: Mock;
     reload: Mock;
     lockByIds: Mock;
     findBySku: Mock;
@@ -52,6 +53,7 @@ describe('ProductVariantService', () => {
       findWithProduct: vi.fn(),
       findManyWithProduct: vi.fn(),
       reserve: vi.fn(),
+      release: vi.fn(),
       reload: vi.fn(),
       lockByIds: vi.fn(),
       findBySku: vi.fn(),
@@ -343,6 +345,26 @@ describe('ProductVariantService', () => {
         ACTOR,
       );
       expect(productVariantRepository.reserve).toHaveBeenNthCalledWith(
+        2,
+        'v1',
+        9,
+        null,
+      );
+    });
+
+    it('release forwards to the repository and returns its result', async () => {
+      productVariantRepository.release.mockResolvedValueOnce(true);
+      productVariantRepository.release.mockResolvedValueOnce(false);
+
+      await expect(service.release('v1', 2, ACTOR)).resolves.toBe(true);
+      await expect(service.release('v1', 9, null)).resolves.toBe(false);
+      expect(productVariantRepository.release).toHaveBeenNthCalledWith(
+        1,
+        'v1',
+        2,
+        ACTOR,
+      );
+      expect(productVariantRepository.release).toHaveBeenNthCalledWith(
         2,
         'v1',
         9,
