@@ -48,10 +48,10 @@ describe('CategoryController (e2e)', () => {
   afterAll(async () => {
     await RequestContext.create(orm.em, async () => {
       for (const id of createdCategoryIds) {
-        await categoryService.remove(id).catch(() => undefined);
+        await categoryService.remove(id, null).catch(() => undefined);
       }
       for (const id of createdUserIds) {
-        await userService.remove(id).catch(() => undefined);
+        await userService.remove(id, null).catch(() => undefined);
       }
     });
     await app.close();
@@ -64,20 +64,23 @@ describe('CategoryController (e2e)', () => {
   const createTestUser = async (role: UserRole): Promise<User> =>
     RequestContext.create(orm.em, async () => {
       const clerkId = `clerk-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const user = await userService.create({
-        clerkId,
-        email: `${clerkId}@example.com`,
-        firstName: 'E2E',
-        lastName: 'Test',
-        role,
-      });
+      const user = await userService.create(
+        {
+          clerkId,
+          email: `${clerkId}@example.com`,
+          firstName: 'E2E',
+          lastName: 'Test',
+          role,
+        },
+        null,
+      );
       createdUserIds.push(user.id);
       return user;
     });
 
   const createTestCategory = async (name: string): Promise<Category> =>
     RequestContext.create(orm.em, async () => {
-      const category = await categoryService.create({ name });
+      const category = await categoryService.create({ name }, null);
       createdCategoryIds.push(category.id);
       return category;
     });
@@ -237,7 +240,7 @@ describe('CategoryController (e2e)', () => {
         uniqueName('Restore Forbidden E2E'),
       );
       await RequestContext.create(orm.em, () =>
-        categoryService.remove(category.id),
+        categoryService.remove(category.id, null),
       );
       mockSessionFor(user.clerkId);
 
@@ -384,16 +387,19 @@ describe('CategoryController (e2e)', () => {
       mockSessionFor(admin.clerkId);
       const category = await createTestCategory(uniqueName('In Use E2E'));
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name: uniqueName('In Use Product E2E'),
-          roastLevel: RoastLevel.MEDIUM,
-          description: 'A balanced, well-rounded coffee.',
-          origin: 'Ethiopia',
-          processingMethod: 'Washed',
-          images: [],
-          variants: [],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name: uniqueName('In Use Product E2E'),
+            roastLevel: RoastLevel.MEDIUM,
+            description: 'A balanced, well-rounded coffee.',
+            origin: 'Ethiopia',
+            processingMethod: 'Washed',
+            images: [],
+            variants: [],
+          },
+          null,
+        ),
       );
 
       const response = await request(app.getHttpServer())
@@ -404,7 +410,7 @@ describe('CategoryController (e2e)', () => {
       expect(body.errors[0].errCode).toBe(ERROR_CODES.CATEGORY.HAS_PRODUCTS);
 
       await RequestContext.create(orm.em, () =>
-        productService.remove(product.id),
+        productService.remove(product.id, null),
       );
 
       await request(app.getHttpServer())
@@ -431,7 +437,7 @@ describe('CategoryController (e2e)', () => {
         uniqueName('Deleted Visible E2E'),
       );
       await RequestContext.create(orm.em, () =>
-        categoryService.remove(category.id),
+        categoryService.remove(category.id, null),
       );
       mockSessionFor(admin.clerkId);
 
@@ -455,7 +461,7 @@ describe('CategoryController (e2e)', () => {
         uniqueName('Deleted Hidden E2E'),
       );
       await RequestContext.create(orm.em, () =>
-        categoryService.remove(category.id),
+        categoryService.remove(category.id, null),
       );
       mockSessionFor(user.clerkId);
 
@@ -474,7 +480,7 @@ describe('CategoryController (e2e)', () => {
       const admin = await createTestUser(UserRole.ADMIN);
       const category = await createTestCategory(uniqueName('Restore E2E'));
       await RequestContext.create(orm.em, () =>
-        categoryService.remove(category.id),
+        categoryService.remove(category.id, null),
       );
       mockSessionFor(admin.clerkId);
 
@@ -527,7 +533,7 @@ describe('CategoryController (e2e)', () => {
         uniqueName('Double Restore E2E'),
       );
       await RequestContext.create(orm.em, () =>
-        categoryService.remove(category.id),
+        categoryService.remove(category.id, null),
       );
       mockSessionFor(admin.clerkId);
 
@@ -549,7 +555,7 @@ describe('CategoryController (e2e)', () => {
         uniqueName('Restore Then Delete E2E'),
       );
       await RequestContext.create(orm.em, () =>
-        categoryService.remove(category.id),
+        categoryService.remove(category.id, null),
       );
       mockSessionFor(admin.clerkId);
 
@@ -569,6 +575,106 @@ describe('CategoryController (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`${API_BASE_PATH}/categories/not-a-uuid/restore`)
         .expect(400);
+    });
+  });
+
+  describe('audit', () => {
+    type AuditBody = {
+      data: {
+        id: string;
+        createdBy?: string | null;
+        updatedBy?: string | null;
+        deletedBy?: string | null;
+      };
+    };
+
+    const createAsAdmin = async (adminClerkId: string): Promise<string> => {
+      mockSessionFor(adminClerkId);
+      const response = await request(app.getHttpServer())
+        .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ name: uniqueName('Audit E2E') })
+        .expect(201);
+      const { data } = response.body as AuditBody;
+      createdCategoryIds.push(data.id);
+      return data.id;
+    };
+
+    it('AC1 create records the admin', async () => {
+      const a1 = await createTestUser(UserRole.ADMIN);
+      mockSessionFor(a1.clerkId);
+
+      const response = await request(app.getHttpServer())
+        .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ name: uniqueName('Audit AC1 E2E') })
+        .expect(201);
+
+      const { data } = response.body as AuditBody;
+      createdCategoryIds.push(data.id);
+      expect(data.createdBy).toBe(a1.id);
+      expect(data.updatedBy).toBe(a1.id);
+      expect(data.deletedBy).toBeNull();
+    });
+
+    it('AC2 update keeps createdBy and records the new admin', async () => {
+      const a1 = await createTestUser(UserRole.ADMIN);
+      const a2 = await createTestUser(UserRole.ADMIN);
+      const id = await createAsAdmin(a1.clerkId);
+      mockSessionFor(a2.clerkId);
+
+      const response = await request(app.getHttpServer())
+        .patch(`${API_BASE_PATH}/categories/${id}`)
+        .send({ name: uniqueName('Audit AC2 E2E') })
+        .expect(200);
+
+      const { data } = response.body as AuditBody;
+      expect(data.createdBy).toBe(a1.id);
+      expect(data.updatedBy).toBe(a2.id);
+    });
+
+    it('delete and restore record the admin', async () => {
+      const a1 = await createTestUser(UserRole.ADMIN);
+      const a2 = await createTestUser(UserRole.ADMIN);
+      const id = await createAsAdmin(a1.clerkId);
+
+      mockSessionFor(a2.clerkId);
+      await request(app.getHttpServer())
+        .delete(`${API_BASE_PATH}/categories/${id}`)
+        .expect(204);
+      const deleted = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/categories/${id}`)
+        .expect(200);
+      expect((deleted.body as AuditBody).data).toMatchObject({
+        createdBy: a1.id,
+        updatedBy: a2.id,
+        deletedBy: a2.id,
+      });
+
+      mockSessionFor(a1.clerkId);
+      const restored = await request(app.getHttpServer())
+        .patch(`${API_BASE_PATH}/categories/${id}/restore`)
+        .expect(200);
+      expect((restored.body as AuditBody).data).toMatchObject({
+        createdBy: a1.id,
+        updatedBy: a1.id,
+        deletedBy: null,
+      });
+    });
+
+    it('hides audit ids from visitors', async () => {
+      const a1 = await createTestUser(UserRole.ADMIN);
+      const id = await createAsAdmin(a1.clerkId);
+      mockSessionFor(null);
+
+      const response = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/categories/${id}`)
+        .expect(200);
+
+      const { data } = response.body as AuditBody;
+      expect(data).not.toHaveProperty('createdBy');
+      expect(data).not.toHaveProperty('updatedBy');
+      expect(data).not.toHaveProperty('deletedBy');
     });
   });
 });

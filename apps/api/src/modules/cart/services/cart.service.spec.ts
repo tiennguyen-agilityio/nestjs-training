@@ -123,6 +123,7 @@ describe('CartService', () => {
       CART_ID,
       VARIANT_ID,
       2,
+      USER_ID,
     );
   });
 
@@ -136,7 +137,7 @@ describe('CartService', () => {
     });
 
     expect(existing.quantity).toBe(3);
-    expect(cartItemRepository.save).toHaveBeenCalledWith(existing);
+    expect(cartItemRepository.save).toHaveBeenCalledWith(existing, USER_ID);
     expect(cartItemRepository.create).not.toHaveBeenCalled();
   });
 
@@ -205,7 +206,7 @@ describe('CartService', () => {
       'id',
     );
     expect(existing.quantity).toBe(4);
-    expect(cartItemRepository.save).toHaveBeenCalledWith(existing);
+    expect(cartItemRepository.save).toHaveBeenCalledWith(existing, USER_ID);
   });
 
   it('updateItem rejects a quantity above the stock', async () => {
@@ -321,7 +322,7 @@ describe('CartService', () => {
 
     const expectTouched = (): void => {
       expect(locked.updatedAt.getTime()).toBeGreaterThan(since.getTime());
-      expect(cartRepository.save).toHaveBeenCalledWith(locked);
+      expect(cartRepository.save).toHaveBeenCalledWith(locked, USER_ID);
     };
 
     it('addItem touches the cart', async () => {

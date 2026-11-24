@@ -137,7 +137,7 @@ export class ClerkWebhookService {
       return;
     }
 
-    await this.userService.remove(existing.id);
+    await this.userService.remove(existing.id, null);
   }
 
   /**

@@ -22,6 +22,9 @@ describe('RolesGuard', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
+    createdBy: null,
+    updatedBy: null,
+    deletedBy: null,
     ...overrides,
   });
 

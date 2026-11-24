@@ -67,13 +67,13 @@ describe('ProductController (e2e)', () => {
   afterAll(async () => {
     await RequestContext.create(orm.em, async () => {
       for (const id of createdProductIds) {
-        await productService.remove(id).catch(() => undefined);
+        await productService.remove(id, null).catch(() => undefined);
       }
       for (const id of createdCategoryIds) {
-        await categoryService.remove(id).catch(() => undefined);
+        await categoryService.remove(id, null).catch(() => undefined);
       }
       for (const id of createdUserIds) {
-        await userService.remove(id).catch(() => undefined);
+        await userService.remove(id, null).catch(() => undefined);
       }
     });
     await app.close();
@@ -127,13 +127,16 @@ describe('ProductController (e2e)', () => {
   ): Promise<User> =>
     RequestContext.create(orm.em, async () => {
       const clerkId = `clerk-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      let user = await userService.create({
-        clerkId,
-        email: `${clerkId}@example.com`,
-        firstName: 'E2E',
-        lastName: 'Test',
-        role,
-      });
+      let user = await userService.create(
+        {
+          clerkId,
+          email: `${clerkId}@example.com`,
+          firstName: 'E2E',
+          lastName: 'Test',
+          role,
+        },
+        null,
+      );
       createdUserIds.push(user.id);
       if (status && status !== (user.status as UserStatus)) {
         user = await userService.update(user.id, { status });
@@ -143,9 +146,12 @@ describe('ProductController (e2e)', () => {
 
   const createTestCategory = async (): Promise<Category> =>
     RequestContext.create(orm.em, async () => {
-      const category = await categoryService.create({
-        name: uniqueName('Coffee Category E2E'),
-      });
+      const category = await categoryService.create(
+        {
+          name: uniqueName('Coffee Category E2E'),
+        },
+        null,
+      );
       createdCategoryIds.push(category.id);
       return category;
     });
@@ -173,25 +179,28 @@ describe('ProductController (e2e)', () => {
   ): Promise<{ productId: string; variantId: string }> => {
     const category = await createTestCategory();
     const product = await RequestContext.create(orm.em, () =>
-      productService.create({
-        categoryId: category.id,
-        name: uniqueName('Priced Product E2E'),
-        status: ProductStatus.ACTIVE,
-        ...requiredProductFields(),
-        images: [],
-        variants: [
-          {
-            sku: uniqueName('SKU-PRICED'),
-            size: '250',
-            unit: ProductUnit.G,
-            price: '100',
-            discountType: DiscountType.PERCENT,
-            discountValue: '10',
-            stockQuantity: 30,
-            ...variant,
-          },
-        ],
-      }),
+      productService.create(
+        {
+          categoryId: category.id,
+          name: uniqueName('Priced Product E2E'),
+          status: ProductStatus.ACTIVE,
+          ...requiredProductFields(),
+          images: [],
+          variants: [
+            {
+              sku: uniqueName('SKU-PRICED'),
+              size: '250',
+              unit: ProductUnit.G,
+              price: '100',
+              discountType: DiscountType.PERCENT,
+              discountValue: '10',
+              stockQuantity: 30,
+              ...variant,
+            },
+          ],
+        },
+        null,
+      ),
     );
     createdProductIds.push(product.id);
     return {
@@ -222,14 +231,17 @@ describe('ProductController (e2e)', () => {
       const category = await createTestCategory();
       const name = uniqueName('Ethiopia Yirgacheffe E2E');
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name,
-          status: ProductStatus.ACTIVE,
-          ...requiredProductFields(),
-          images: [],
-          variants: [],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name,
+            status: ProductStatus.ACTIVE,
+            ...requiredProductFields(),
+            images: [],
+            variants: [],
+          },
+          null,
+        ),
       );
       createdProductIds.push(product.id);
 
@@ -253,22 +265,25 @@ describe('ProductController (e2e)', () => {
     const createProductWithVariant = async (): Promise<Product> => {
       const category = await createTestCategory();
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name: uniqueName('Variant Read E2E'),
-          status: ProductStatus.ACTIVE,
-          ...requiredProductFields(),
-          images: [],
-          variants: [
-            {
-              sku: uniqueName('SKU-READ'),
-              size: '250',
-              unit: ProductUnit.G,
-              price: '120',
-              stockQuantity: 30,
-            },
-          ],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name: uniqueName('Variant Read E2E'),
+            status: ProductStatus.ACTIVE,
+            ...requiredProductFields(),
+            images: [],
+            variants: [
+              {
+                sku: uniqueName('SKU-READ'),
+                size: '250',
+                unit: ProductUnit.G,
+                price: '120',
+                stockQuantity: 30,
+              },
+            ],
+          },
+          null,
+        ),
       );
       createdProductIds.push(product.id);
       return product;
@@ -336,13 +351,16 @@ describe('ProductController (e2e)', () => {
       const product = await createProductWithVariant();
       const [first] = product.variants.getItems();
       const older = await RequestContext.create(orm.em, () =>
-        productVariantService.create({
-          productId: product.id,
-          sku: uniqueName('SKU-OLDER'),
-          size: '500',
-          unit: ProductUnit.G,
-          price: '200',
-        }),
+        productVariantService.create(
+          {
+            productId: product.id,
+            sku: uniqueName('SKU-OLDER'),
+            size: '500',
+            unit: ProductUnit.G,
+            price: '200',
+          },
+          null,
+        ),
       );
       await setVariantColumns(older.id, {
         createdAt: new Date(first.createdAt.getTime() - 60_000),
@@ -407,13 +425,16 @@ describe('ProductController (e2e)', () => {
           Pick<ProductCreateInput, 'categoryId' | 'name'>,
       ): Promise<Product> =>
         RequestContext.create(orm.em, () =>
-          productService.create({
-            ...requiredProductFields(),
-            status: ProductStatus.ACTIVE,
-            images: [],
-            variants: [],
-            ...data,
-          }),
+          productService.create(
+            {
+              ...requiredProductFields(),
+              status: ProductStatus.ACTIVE,
+              images: [],
+              variants: [],
+              ...data,
+            },
+            null,
+          ),
         );
 
       pLight = await create({
@@ -845,7 +866,10 @@ describe('ProductController (e2e)', () => {
         ]),
       );
       expect(images).toHaveLength(2);
-      expect(images[0]).toMatchObject({
+      const byPosition = [...images].sort(
+        (x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0),
+      );
+      expect(byPosition[0]).toMatchObject({
         url: 'https://example.com/coffee.jpg',
       });
       expect(variants).toHaveLength(1);
@@ -954,13 +978,16 @@ describe('ProductController (e2e)', () => {
       const name = uniqueName('Duplicate Product E2E');
 
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name,
-          ...requiredProductFields(),
-          images: [],
-          variants: [],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name,
+            ...requiredProductFields(),
+            images: [],
+            variants: [],
+          },
+          null,
+        ),
       );
       createdProductIds.push(product.id);
 
@@ -1008,20 +1035,23 @@ describe('ProductController (e2e)', () => {
       mockSessionFor(admin.clerkId);
       const existingSku = uniqueName('SKU-EXISTING');
       const existing = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name: uniqueName('Existing Product E2E'),
-          ...requiredProductFields(),
-          images: [],
-          variants: [
-            {
-              sku: existingSku,
-              size: '250',
-              unit: ProductUnit.G,
-              price: '10',
-            },
-          ],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name: uniqueName('Existing Product E2E'),
+            ...requiredProductFields(),
+            images: [],
+            variants: [
+              {
+                sku: existingSku,
+                size: '250',
+                unit: ProductUnit.G,
+                price: '10',
+              },
+            ],
+          },
+          null,
+        ),
       );
       createdProductIds.push(existing.id);
 
@@ -1386,25 +1416,28 @@ describe('ProductController (e2e)', () => {
       ): Promise<{ productId: string; imageIds: string[] }> => {
         const category = await createTestCategory();
         const product = await RequestContext.create(orm.em, () =>
-          productService.create({
-            categoryId: category.id,
-            name: uniqueName('Image Order Product E2E'),
-            status: ProductStatus.ACTIVE,
-            ...requiredProductFields(),
-            images: Array.from({ length: count }, (_, sortOrder) => ({
-              url: `https://example.com/order-${sortOrder}.jpg`,
-              isPrimary: sortOrder === 0,
-              sortOrder,
-            })),
-            variants: [
-              {
-                sku: uniqueName('SKU-IMAGES'),
-                size: '250',
-                unit: ProductUnit.G,
-                price: '100',
-              },
-            ],
-          }),
+          productService.create(
+            {
+              categoryId: category.id,
+              name: uniqueName('Image Order Product E2E'),
+              status: ProductStatus.ACTIVE,
+              ...requiredProductFields(),
+              images: Array.from({ length: count }, (_, sortOrder) => ({
+                url: `https://example.com/order-${sortOrder}.jpg`,
+                isPrimary: sortOrder === 0,
+                sortOrder,
+              })),
+              variants: [
+                {
+                  sku: uniqueName('SKU-IMAGES'),
+                  size: '250',
+                  unit: ProductUnit.G,
+                  price: '100',
+                },
+              ],
+            },
+            null,
+          ),
         );
         createdProductIds.push(product.id);
         const imageIds = [...product.images.getItems()]
@@ -1683,13 +1716,16 @@ describe('ProductController (e2e)', () => {
       it('PATCH /products/:id updates the second variant only', async () => {
         const { productId, variantId } = await createPricedProduct();
         const second = await RequestContext.create(orm.em, () =>
-          productVariantService.create({
-            productId,
-            sku: uniqueName('SKU-SECOND'),
-            size: '500',
-            unit: ProductUnit.G,
-            price: '200',
-          }),
+          productVariantService.create(
+            {
+              productId,
+              sku: uniqueName('SKU-SECOND'),
+              size: '500',
+              unit: ProductUnit.G,
+              price: '200',
+            },
+            null,
+          ),
         );
 
         await patch(productId, {
@@ -1707,13 +1743,16 @@ describe('ProductController (e2e)', () => {
       const category = await createTestCategory();
       mockSessionFor(admin.clerkId);
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name: uniqueName('Kenya AA E2E'),
-          ...requiredProductFields(),
-          images: [],
-          variants: [],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name: uniqueName('Kenya AA E2E'),
+            ...requiredProductFields(),
+            images: [],
+            variants: [],
+          },
+          null,
+        ),
       );
       createdProductIds.push(product.id);
       const newName = uniqueName('Kenya AA Renamed E2E');
@@ -1735,13 +1774,16 @@ describe('ProductController (e2e)', () => {
       const category = await createTestCategory();
       mockSessionFor(admin.clerkId);
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name: uniqueName('Sumatra Mandheling E2E'),
-          ...requiredProductFields(),
-          images: [],
-          variants: [],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name: uniqueName('Sumatra Mandheling E2E'),
+            ...requiredProductFields(),
+            images: [],
+            variants: [],
+          },
+          null,
+        ),
       );
       createdProductIds.push(product.id);
 
@@ -1759,17 +1801,20 @@ describe('ProductController (e2e)', () => {
       const admin = await createTestUser(UserRole.ADMIN);
       const category = await createTestCategory();
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name: uniqueName('Deleted Visible Product E2E'),
-          ...requiredProductFields(),
-          images: [],
-          variants: [],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name: uniqueName('Deleted Visible Product E2E'),
+            ...requiredProductFields(),
+            images: [],
+            variants: [],
+          },
+          null,
+        ),
       );
       createdProductIds.push(product.id);
       await RequestContext.create(orm.em, () =>
-        productService.remove(product.id),
+        productService.remove(product.id, null),
       );
       mockSessionFor(admin.clerkId);
 
@@ -1788,17 +1833,20 @@ describe('ProductController (e2e)', () => {
       const admin = await createTestUser(UserRole.ADMIN);
       const category = await createTestCategory();
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name: uniqueName('Deleted By Id Product E2E'),
-          ...requiredProductFields(),
-          images: [],
-          variants: [],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name: uniqueName('Deleted By Id Product E2E'),
+            ...requiredProductFields(),
+            images: [],
+            variants: [],
+          },
+          null,
+        ),
       );
       createdProductIds.push(product.id);
       await RequestContext.create(orm.em, () =>
-        productService.remove(product.id),
+        productService.remove(product.id, null),
       );
       mockSessionFor(admin.clerkId);
 
@@ -1829,14 +1877,17 @@ describe('ProductController (e2e)', () => {
       stockQuantity = 0,
     ): Promise<Product> => {
       const product = await RequestContext.create(orm.em, () =>
-        productService.create({
-          categoryId: category.id,
-          name: `${namePart} ${label}`,
-          status,
-          ...requiredProductFields(),
-          images: [],
-          variants: [{ ...validVariant(`SKU-VIS-${label}`), stockQuantity }],
-        }),
+        productService.create(
+          {
+            categoryId: category.id,
+            name: `${namePart} ${label}`,
+            status,
+            ...requiredProductFields(),
+            images: [],
+            variants: [{ ...validVariant(`SKU-VIS-${label}`), stockQuantity }],
+          },
+          null,
+        ),
       );
       createdProductIds.push(product.id);
       return product;
@@ -1861,7 +1912,7 @@ describe('ProductController (e2e)', () => {
       pArchived = await createWithStatus('D', ProductStatus.ARCHIVED);
       pDeleted = await createWithStatus('E', ProductStatus.ACTIVE);
       await RequestContext.create(orm.em, () =>
-        productService.remove(pDeleted.id),
+        productService.remove(pDeleted.id, null),
       );
       customer = await createTestUser(UserRole.USER);
       inactiveAdmin = await createTestUser(UserRole.ADMIN, UserStatus.INACTIVE);
@@ -1962,6 +2013,144 @@ describe('ProductController (e2e)', () => {
           }
         ).data.variants[0].stockQuantity,
       ).toBe(37);
+    });
+  });
+
+  describe('audit', () => {
+    type AuditIds = {
+      createdBy?: string | null;
+      updatedBy?: string | null;
+      deletedBy?: string | null;
+    };
+    type ProductBody = {
+      data: AuditIds & {
+        id: string;
+        images: Array<AuditIds & { id: string }>;
+        variants: Array<AuditIds & { id: string }>;
+      };
+    };
+    type AuditRow = {
+      created_by: string | null;
+      updated_by: string | null;
+      deleted_by: string | null;
+    };
+
+    const auditRow = async (table: string, id: string): Promise<AuditRow> => {
+      const [row] = (await orm.em
+        .getConnection()
+        .execute(
+          `select created_by, updated_by, deleted_by from ${table} where id = ?`,
+          [id],
+        )) as AuditRow[];
+      return row;
+    };
+
+    const createAsAdmin = async (
+      adminClerkId: string,
+    ): Promise<ProductBody['data']> => {
+      const category = await createTestCategory();
+      mockSessionFor(adminClerkId);
+      const response = await request(app.getHttpServer())
+        .post(`${API_BASE_PATH}/products`)
+        .set('Idempotency-Key', randomUUID())
+        .send({
+          categoryId: category.id,
+          name: uniqueName('Audit Product E2E'),
+          status: ProductStatus.ACTIVE,
+          ...requiredProductFields(),
+          images: validImages(),
+          variants: [validVariant('AUDIT-A'), validVariant('AUDIT-B')],
+        })
+        .expect(201);
+      const { data } = response.body as ProductBody;
+      createdProductIds.push(data.id);
+      return data;
+    };
+
+    it('AC3 delete records the admin', async () => {
+      const a1 = await createTestUser(UserRole.ADMIN);
+      const a2 = await createTestUser(UserRole.ADMIN);
+      const product = await createAsAdmin(a1.clerkId);
+      expect(product.createdBy).toBe(a1.id);
+
+      mockSessionFor(a2.clerkId);
+      await request(app.getHttpServer())
+        .delete(`${API_BASE_PATH}/products/${product.id}`)
+        .expect(204);
+
+      const response = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/products/${product.id}`)
+        .expect(200);
+      expect((response.body as ProductBody).data).toMatchObject({
+        createdBy: a1.id,
+        updatedBy: a2.id,
+        deletedBy: a2.id,
+      });
+    });
+
+    it('stamps the images and variants a product update changes', async () => {
+      const a1 = await createTestUser(UserRole.ADMIN);
+      const a2 = await createTestUser(UserRole.ADMIN);
+      const product = await createAsAdmin(a1.clerkId);
+      const [kept, removed] = product.images;
+      const [changedVariant, untouchedVariant] = product.variants;
+      expect(changedVariant.createdBy).toBe(a1.id);
+
+      mockSessionFor(a2.clerkId);
+      const response = await request(app.getHttpServer())
+        .patch(`${API_BASE_PATH}/products/${product.id}`)
+        .send({
+          removeImageIds: [removed.id],
+          updateVariants: [{ id: changedVariant.id, price: 99 }],
+        })
+        .expect(200);
+
+      expect((response.body as ProductBody).data.updatedBy).toBe(a2.id);
+
+      expect(await auditRow('products', product.id)).toEqual({
+        created_by: a1.id,
+        updated_by: a2.id,
+        deleted_by: null,
+      });
+      expect(await auditRow('product_images', removed.id)).toEqual({
+        created_by: a1.id,
+        updated_by: a2.id,
+        deleted_by: a2.id,
+      });
+      expect(await auditRow('product_images', kept.id)).toEqual({
+        created_by: a1.id,
+        updated_by: a1.id,
+        deleted_by: null,
+      });
+      expect(await auditRow('product_variants', changedVariant.id)).toEqual({
+        created_by: a1.id,
+        updated_by: a2.id,
+        deleted_by: null,
+      });
+      expect(await auditRow('product_variants', untouchedVariant.id)).toEqual({
+        created_by: a1.id,
+        updated_by: a1.id,
+        deleted_by: null,
+      });
+    });
+
+    it('AC5 a visitor reading a product gets no audit keys', async () => {
+      const a1 = await createTestUser(UserRole.ADMIN);
+      const product = await createAsAdmin(a1.clerkId);
+      mockSessionFor(null);
+
+      const response = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/products/${product.id}`)
+        .expect(200);
+
+      const { data } = response.body as ProductBody;
+      expect(data.variants.length).toBeGreaterThan(0);
+      expect(data.images.length).toBeGreaterThan(0);
+      for (const item of [data, ...data.variants, ...data.images]) {
+        expect(item).not.toHaveProperty('createdBy');
+        expect(item).not.toHaveProperty('updatedBy');
+        expect(item).not.toHaveProperty('deletedBy');
+      }
     });
   });
 });

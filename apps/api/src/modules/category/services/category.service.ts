@@ -14,6 +14,7 @@ import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import { QueryParams } from '../../../common/dto/query-params.dto.js';
 import { slugFrom } from '../../../common/utils/slug.util.js';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import {
   DuplicateResourceException,
   InvalidStateException,
@@ -25,7 +26,7 @@ import {
 export class CategoryService {
   constructor(private readonly categoryRepository: CategoryRepository) {}
 
-  async create(dto: CreateCategoryInput): Promise<Category> {
+  async create(dto: CreateCategoryInput, actorId: ActorId): Promise<Category> {
     const existing = await this.categoryRepository.findByName(dto.name, {
       includeDeleted: true,
     });
@@ -38,10 +39,10 @@ export class CategoryService {
       });
     }
 
-    return this.categoryRepository.create({
-      name: dto.name,
-      slug: slugFrom(dto.name),
-    });
+    return this.categoryRepository.create(
+      { name: dto.name, slug: slugFrom(dto.name) },
+      actorId,
+    );
   }
 
   findAll(
@@ -65,7 +66,11 @@ export class CategoryService {
     return category;
   }
 
-  async update(id: string, dto: UpdateCategoryInput): Promise<Category> {
+  async update(
+    id: string,
+    dto: UpdateCategoryInput,
+    actorId: ActorId,
+  ): Promise<Category> {
     const category = await this.findOne(id);
 
     if (dto.name !== undefined && dto.name !== category.name) {
@@ -85,12 +90,12 @@ export class CategoryService {
       category.slug = slugFrom(dto.name);
     }
 
-    await this.categoryRepository.save(category);
+    await this.categoryRepository.save(category, actorId);
 
     return category;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actorId: ActorId): Promise<void> {
     const category = await this.findOne(id);
 
     const productCount = await this.categoryRepository.countProducts(id);
@@ -103,10 +108,10 @@ export class CategoryService {
       });
     }
 
-    await this.categoryRepository.softDelete(category);
+    await this.categoryRepository.softDelete(category, actorId);
   }
 
-  async restore(id: string): Promise<Category> {
+  async restore(id: string, actorId: ActorId): Promise<Category> {
     const category = await this.findOne(id, { includeDeleted: true });
 
     if (category.deletedAt === null) {
@@ -118,7 +123,7 @@ export class CategoryService {
       });
     }
 
-    await this.categoryRepository.restore(category);
+    await this.categoryRepository.restore(category, actorId);
 
     return category;
   }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CartItem } from '../entities/cart-item.entity.js';
 import { BaseRepository } from '../../../common/repositories/base.repository.js';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 
 @Injectable()
 export class CartItemRepository extends BaseRepository<CartItem> {
@@ -21,12 +22,12 @@ export class CartItemRepository extends BaseRepository<CartItem> {
     cartId: string,
     productVariantId: string,
     quantity: number,
+    actorId: ActorId,
   ): Promise<CartItem> {
-    return this.createAndSave({
-      cart: cartId,
-      productVariant: productVariantId,
-      quantity,
-    });
+    return this.createAndSave(
+      { cart: cartId, productVariant: productVariantId, quantity },
+      actorId,
+    );
   }
 
   async deleteById(id: string): Promise<void> {

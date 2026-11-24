@@ -62,15 +62,16 @@ export class CartService {
 
       if (line) {
         line.quantity = current + input.quantity;
-        await this.cartItemRepository.save(line);
+        await this.cartItemRepository.save(line, userId);
       } else {
         await this.cartItemRepository.create(
           cart.id,
           variant.id,
           input.quantity,
+          userId,
         );
       }
-      await this.touch(cart);
+      await this.touch(cart, userId);
 
       return this.read(userId);
     });
@@ -99,8 +100,8 @@ export class CartService {
       }
 
       line.quantity = input.quantity;
-      await this.cartItemRepository.save(line);
-      await this.touch(cart);
+      await this.cartItemRepository.save(line, userId);
+      await this.touch(cart, userId);
 
       return this.read(userId);
     });
@@ -110,7 +111,7 @@ export class CartService {
     return this.cartRepository.transactional(async () => {
       const { cart, line } = await this.lockLine(userId, id);
       await this.cartItemRepository.deleteById(line.id);
-      await this.touch(cart);
+      await this.touch(cart, userId);
 
       return this.read(userId);
     });
@@ -121,7 +122,7 @@ export class CartService {
       const cart = await this.cartRepository.lockByUser(userId);
       if (cart) {
         await this.cartItemRepository.deleteByCart(cart.id);
-        await this.touch(cart);
+        await this.touch(cart, userId);
       }
 
       return this.read(userId);
@@ -156,9 +157,9 @@ export class CartService {
   }
 
   // Line writes leave the carts row alone, so its updatedAt is moved by hand.
-  private async touch(cart: Cart): Promise<void> {
+  private async touch(cart: Cart, userId: string): Promise<void> {
     cart.updatedAt = new Date();
-    await this.cartRepository.save(cart);
+    await this.cartRepository.save(cart, userId);
   }
 
   private outOfStock(

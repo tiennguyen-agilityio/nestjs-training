@@ -85,12 +85,13 @@ export class CategoryController {
     @Query({ schema: paginationQuerySchema }) query: PaginationQueryInput,
     @AuthUser() user?: User,
   ): Promise<PaginatedResult<ResponseCategoryDto>> {
+    const asAdmin = isActiveAdmin(user);
     const result = await this.categoryService.findAll(query, {
-      includeDeleted: isActiveAdmin(user),
+      includeDeleted: asAdmin,
     });
 
     return mapPaginatedResult(result, (category) =>
-      ResponseCategoryDto.fromEntity(category),
+      ResponseCategoryDto.fromEntity(category, { withAudit: asAdmin }),
     );
   }
 
@@ -106,11 +107,12 @@ export class CategoryController {
     @Param({ schema: idParamSchema }) { id }: IdParam,
     @AuthUser() user?: User,
   ): Promise<ResponseCategoryDto> {
+    const asAdmin = isActiveAdmin(user);
     const category = await this.categoryService.findOne(id, {
-      includeDeleted: isActiveAdmin(user),
+      includeDeleted: asAdmin,
     });
 
-    return ResponseCategoryDto.fromEntity(category);
+    return ResponseCategoryDto.fromEntity(category, { withAudit: asAdmin });
   }
 
   @Post()
@@ -129,9 +131,10 @@ export class CategoryController {
   )
   async create(
     @Body({ schema: createCategorySchema }) dto: CreateCategoryInput,
+    @AuthUser() user: User,
   ): Promise<ResponseCategoryDto> {
-    const category = await this.categoryService.create(dto);
-    return ResponseCategoryDto.fromEntity(category);
+    const category = await this.categoryService.create(dto, user.id);
+    return ResponseCategoryDto.fromEntity(category, { withAudit: true });
   }
 
   @Patch(':id')
@@ -155,9 +158,10 @@ export class CategoryController {
   async update(
     @Param({ schema: idParamSchema }) { id }: IdParam,
     @Body({ schema: updateCategorySchema }) dto: UpdateCategoryInput,
+    @AuthUser() user: User,
   ): Promise<ResponseCategoryDto> {
-    const category = await this.categoryService.update(id, dto);
-    return ResponseCategoryDto.fromEntity(category);
+    const category = await this.categoryService.update(id, dto, user.id);
+    return ResponseCategoryDto.fromEntity(category, { withAudit: true });
   }
 
   @Patch(':id/restore')
@@ -176,9 +180,10 @@ export class CategoryController {
   )
   async restore(
     @Param({ schema: idParamSchema }) { id }: IdParam,
+    @AuthUser() user: User,
   ): Promise<ResponseCategoryDto> {
-    const category = await this.categoryService.restore(id);
-    return ResponseCategoryDto.fromEntity(category);
+    const category = await this.categoryService.restore(id, user.id);
+    return ResponseCategoryDto.fromEntity(category, { withAudit: true });
   }
 
   @Delete(':id')
@@ -198,7 +203,8 @@ export class CategoryController {
   )
   async remove(
     @Param({ schema: idParamSchema }) { id }: IdParam,
+    @AuthUser() user: User,
   ): Promise<void> {
-    await this.categoryService.remove(id);
+    await this.categoryService.remove(id, user.id);
   }
 }

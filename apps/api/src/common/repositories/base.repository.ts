@@ -4,9 +4,11 @@ import type {
   EntityRepository,
   FilterQuery,
 } from '@mikro-orm/core';
-import { LockMode, RequestContext } from '@mikro-orm/core';
+import { ChangeSetType, LockMode, RequestContext } from '@mikro-orm/core';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { BaseEntity } from '../entities/base.entity.js';
+import type { AuditableEntity } from '../entities/auditable.entity.js';
+import { type ActorId, stampAudit } from '../utils/audit.util.js';
 import {
   FindOptions,
   Criteria,
@@ -22,6 +24,10 @@ import { escapeLikePattern } from '../utils/like-pattern.util.js';
  * to a store written for that library, such as `Outbox.add()`.
  */
 export type TransactionHandle = unknown;
+
+function isAuditable(entity: object): entity is AuditableEntity {
+  return 'updatedBy' in entity;
+}
 
 /**
  * The only place that knows the persistence library. Module repositories
@@ -41,8 +47,41 @@ export abstract class BaseRepository<T extends BaseEntity> {
     return this.findOneBy({ id } as Criteria<T>, options);
   }
 
-  async save(entity: T): Promise<void> {
-    await this.em.persist(entity).flush();
+  async save(entity: T, actorId: ActorId): Promise<void> {
+    this.em.persist(entity);
+    this.stampAudit(entity, actorId);
+    await this.em.flush();
+  }
+
+  private stampAudit(saved: T, actorId: ActorId): void {
+    if (!actorId) return;
+
+    const unitOfWork = this.em.getUnitOfWork();
+    unitOfWork.computeChangeSets();
+
+    const stamped = new Set<object>();
+    for (const changeSet of unitOfWork.getChangeSets()) {
+      const { entity, type } = changeSet;
+      if (!isAuditable(entity)) continue;
+      if (type !== ChangeSetType.CREATE && type !== ChangeSetType.UPDATE) {
+        continue;
+      }
+
+      const previousDeletedAt =
+        (changeSet.originalEntity as { deletedAt?: Date | null } | undefined)
+          ?.deletedAt ?? null;
+      stampAudit(
+        entity,
+        type === ChangeSetType.CREATE ? 'create' : 'update',
+        actorId,
+        previousDeletedAt,
+      );
+      stamped.add(entity);
+    }
+
+    if (isAuditable(saved) && !stamped.has(saved)) {
+      stampAudit(saved, 'update', actorId, saved.deletedAt);
+    }
   }
 
   transactional<R>(callback: () => Promise<R>): Promise<R> {
@@ -68,14 +107,14 @@ export abstract class BaseRepository<T extends BaseEntity> {
     return RequestContext.create(this.em, work);
   }
 
-  async softDelete(entity: T): Promise<void> {
+  async softDelete(entity: T, actorId: ActorId): Promise<void> {
     entity.deletedAt = new Date();
-    await this.save(entity);
+    await this.save(entity, actorId);
   }
 
-  async restore(entity: T): Promise<void> {
+  async restore(entity: T, actorId: ActorId): Promise<void> {
     entity.deletedAt = null;
-    await this.save(entity);
+    await this.save(entity, actorId);
   }
 
   protected findOneBy(
@@ -172,9 +211,12 @@ export abstract class BaseRepository<T extends BaseEntity> {
     };
   }
 
-  protected async createAndSave(data: Record<string, unknown>): Promise<T> {
+  protected async createAndSave(
+    data: Record<string, unknown>,
+    actorId: ActorId,
+  ): Promise<T> {
     const entity = this.repository.create(data as never);
-    await this.save(entity);
+    await this.save(entity, actorId);
 
     return entity;
   }

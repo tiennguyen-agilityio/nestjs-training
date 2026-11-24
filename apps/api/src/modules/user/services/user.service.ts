@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import { User } from '../entities/user.entity.js';
 import type {
   CreateUserInput,
@@ -33,16 +34,16 @@ export class UserService {
     private readonly authProvider: AuthProvider,
   ) {}
 
-  async create(dto: CreateUserInput): Promise<User> {
+  async create(dto: CreateUserInput, actorId: ActorId): Promise<User> {
     await this.assertNotDuplicate(dto);
-    return this.userRepository.create(dto);
+    return this.userRepository.create(dto, actorId);
   }
 
   // A user from the auth provider's `user.created`: its role is synced back
   // through the outbox, committed with the user row.
   async createFromAuthProvider(dto: CreateUserInput): Promise<User> {
     await this.assertNotDuplicate(dto);
-    return this.userRepository.createWithRoleSync(dto);
+    return this.userRepository.createWithRoleSync(dto, null);
   }
 
   /**
@@ -139,44 +140,87 @@ export class UserService {
   // Local write only — used by the auth-provider webhook to mirror provider state into the DB.
   async update(id: string, dto: UserProfileSyncInput): Promise<User> {
     const user = await this.findOne(id);
-    return this.applyUpdates(user, dto);
+
+    const changed = (Object.keys(dto) as (keyof UserProfileSyncInput)[]).filter(
+      (key) => dto[key] !== undefined && dto[key] !== user[key],
+    );
+    if (changed.length === 0) return user;
+
+    if (changed.some((key) => key !== 'role' && key !== 'status')) {
+      user.updatedBy = null;
+    }
+
+    return this.applyUpdates(user, dto, null);
   }
 
   // `role` and `status` are owned by the auth provider: push them there and let the
   // `user.updated` webhook write them back to the DB. Everything else is written locally.
   // The returned user therefore still holds the previous role/status until the webhook lands.
-  async updateByAdmin(id: string, dto: UpdateUserInput): Promise<User> {
+  async updateByAdmin(
+    id: string,
+    dto: UpdateUserInput,
+    actorId: ActorId,
+  ): Promise<User> {
     const { role, status, ...profile } = dto;
     const user = await this.findOne(id, { includeDeleted: true });
 
-    if (role !== undefined && role !== (user.role as UserRole)) {
-      await this.authProvider.syncUserRole(user.clerkId, role);
-    }
-    if (status !== undefined && status !== (user.status as UserStatus)) {
-      await this.authProvider.syncUserStatus(user.clerkId, status);
+    const roleChanged = role !== undefined && role !== (user.role as UserRole);
+    const statusChanged =
+      status !== undefined && status !== (user.status as UserStatus);
+    try {
+      if (roleChanged) {
+        await this.authProvider.syncUserRole(user.clerkId, role);
+      }
+      if (statusChanged) {
+        await this.authProvider.syncUserStatus(user.clerkId, status);
+      }
+    } catch (error) {
+      await this.recordAdmin(user, actorId);
+      throw error;
     }
 
-    return this.applyUpdates(user, profile);
+    return this.applyUpdates(
+      user,
+      profile,
+      actorId,
+      roleChanged || statusChanged,
+    );
+  }
+
+  private async recordAdmin(user: User, actorId: ActorId): Promise<void> {
+    try {
+      await this.userRepository.save(user, actorId);
+    } catch (error) {
+      this.logger.error(
+        `Could not record ${actorId} as updatedBy of user ${user.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   private async applyUpdates(
     user: User,
     dto: UserProfileSyncInput,
+    actorId: ActorId,
+    pushedToAuthProvider = false,
   ): Promise<User> {
-    if (Object.values(dto).every((value) => value === undefined)) {
+    const noProfileChange = Object.values(dto).every(
+      (value) => value === undefined,
+    );
+    if (noProfileChange && !pushedToAuthProvider) {
       return user;
     }
 
     assignDefinedFields(user, dto);
-    await this.userRepository.save(user);
+    await this.userRepository.save(user, actorId);
 
     return user;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actorId: ActorId): Promise<void> {
     const user = await this.findOne(id);
     await this.authProvider.syncUserStatus(user.clerkId, UserStatus.INACTIVE);
     user.status = UserStatus.INACTIVE;
-    await this.userRepository.softDelete(user);
+    await this.userRepository.softDelete(user, actorId);
   }
 }

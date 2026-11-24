@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import { ProductVariant } from '../entities/product-variant.entity.js';
 import type { CreateProductVariantInput } from '../dto/product-variant.schema.js';
 import { ProductVariantRepository } from '../repositories/product-variant.repository.js';
@@ -22,6 +23,7 @@ export class ProductVariantService {
 
   async create(
     data: CreateProductVariantInput & { productId: string },
+    actorId: ActorId,
   ): Promise<ProductVariant> {
     const existing = await this.productVariantRepository.findBySku(data.sku);
     if (existing) {
@@ -33,11 +35,14 @@ export class ProductVariantService {
       });
     }
 
-    return this.productVariantRepository.create({
-      ...data,
-      discountType: data.discountType ?? DiscountType.PERCENT,
-      discountValue: data.discountValue ?? '0',
-    });
+    return this.productVariantRepository.create(
+      {
+        ...data,
+        discountType: data.discountType ?? DiscountType.PERCENT,
+        discountValue: data.discountValue ?? '0',
+      },
+      actorId,
+    );
   }
 
   findAllByProduct(productId: string): Promise<ProductVariant[]> {
@@ -87,6 +92,7 @@ export class ProductVariantService {
   async update(
     id: string,
     data: Partial<CreateProductVariantInput>,
+    actorId: ActorId,
   ): Promise<ProductVariant> {
     const variant = await this.findOne(id);
 
@@ -103,13 +109,13 @@ export class ProductVariantService {
     }
 
     assignDefinedFields(variant, data);
-    await this.productVariantRepository.save(variant);
+    await this.productVariantRepository.save(variant, actorId);
 
     return variant;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actorId: ActorId): Promise<void> {
     const variant = await this.findOne(id);
-    await this.productVariantRepository.softDelete(variant);
+    await this.productVariantRepository.softDelete(variant, actorId);
   }
 }

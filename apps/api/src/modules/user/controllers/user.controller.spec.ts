@@ -38,6 +38,15 @@ describe('UserController', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
+    createdBy: 'admin-id-1',
+    updatedBy: 'admin-id-1',
+    deletedBy: null,
+  } as User;
+
+  const adminUser = {
+    ...user,
+    id: 'admin-id-1',
+    role: UserRole.ADMIN,
   } as User;
 
   beforeEach(async () => {
@@ -71,10 +80,12 @@ describe('UserController', () => {
       };
       userService.create.mockResolvedValue(user);
 
-      const result = await controller.create(dto);
+      const result = await controller.create(dto, adminUser);
 
-      expect(userService.create).toHaveBeenCalledWith(dto);
-      expect(result).toEqual(ResponseUserDto.fromEntity(user));
+      expect(userService.create).toHaveBeenCalledWith(dto, 'admin-id-1');
+      expect(result).toEqual(
+        ResponseUserDto.fromEntity(user, { withAudit: true }),
+      );
     });
   });
 
@@ -94,7 +105,7 @@ describe('UserController', () => {
         { includeDeleted: true, excludeId: user.id },
       );
       expect(result).toEqual({
-        data: [ResponseUserDto.fromEntity(user)],
+        data: [ResponseUserDto.fromEntity(user, { withAudit: true })],
         meta,
       });
     });
@@ -129,6 +140,17 @@ describe('UserController', () => {
       const result = controller.getCurrentUser(user);
 
       expect(result).toEqual(ResponseUserDto.fromEntity(user));
+      expect(JSON.parse(JSON.stringify(result))).not.toHaveProperty(
+        'createdBy',
+      );
+    });
+
+    it('includes the audit ids for an active admin', () => {
+      expect(controller.getCurrentUser(adminUser)).toMatchObject({
+        createdBy: 'admin-id-1',
+        updatedBy: 'admin-id-1',
+        deletedBy: null,
+      });
       expect(userService.findOne).not.toHaveBeenCalled();
     });
   });
@@ -142,7 +164,9 @@ describe('UserController', () => {
       expect(userService.findOne).toHaveBeenCalledWith('user-id-1', {
         includeDeleted: true,
       });
-      expect(result).toEqual(ResponseUserDto.fromEntity(user));
+      expect(result).toEqual(
+        ResponseUserDto.fromEntity(user, { withAudit: true }),
+      );
     });
 
     it('propagates NotFoundException', async () => {
@@ -160,17 +184,31 @@ describe('UserController', () => {
       const updatedUser = { ...user, firstName: 'Janet' };
       userService.updateByAdmin.mockResolvedValue(updatedUser);
 
-      const result = await controller.update({ id: 'user-id-1' }, dto);
+      const result = await controller.update(
+        { id: 'user-id-1' },
+        dto,
+        adminUser,
+      );
 
-      expect(userService.updateByAdmin).toHaveBeenCalledWith('user-id-1', dto);
-      expect(result).toEqual(ResponseUserDto.fromEntity(updatedUser));
+      expect(userService.updateByAdmin).toHaveBeenCalledWith(
+        'user-id-1',
+        dto,
+        'admin-id-1',
+      );
+      expect(result).toEqual(
+        ResponseUserDto.fromEntity(updatedUser, { withAudit: true }),
+      );
     });
 
     it('propagates NotFoundException', async () => {
       userService.updateByAdmin.mockRejectedValue(new NotFoundException());
 
       await expect(
-        controller.update({ id: 'missing-id' }, { firstName: 'Janet' }),
+        controller.update(
+          { id: 'missing-id' },
+          { firstName: 'Janet' },
+          adminUser,
+        ),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -179,16 +217,19 @@ describe('UserController', () => {
     it('delegates to UserService.remove', async () => {
       userService.remove.mockResolvedValue(undefined);
 
-      await controller.remove({ id: 'user-id-1' });
+      await controller.remove({ id: 'user-id-1' }, adminUser);
 
-      expect(userService.remove).toHaveBeenCalledWith('user-id-1');
+      expect(userService.remove).toHaveBeenCalledWith(
+        'user-id-1',
+        'admin-id-1',
+      );
     });
 
     it('propagates NotFoundException', async () => {
       userService.remove.mockRejectedValue(new NotFoundException());
 
       await expect(
-        controller.remove({ id: 'missing-id' }),
+        controller.remove({ id: 'missing-id' }, adminUser),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

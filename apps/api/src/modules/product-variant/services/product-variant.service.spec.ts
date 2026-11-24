@@ -10,6 +10,8 @@ import {
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 
 import type { Mock } from 'vitest';
+const ACTOR = 'admin-1';
+
 describe('ProductVariantService', () => {
   let service: ProductVariantService;
   let productVariantRepository: {
@@ -83,16 +85,20 @@ describe('ProductVariantService', () => {
       const created = buildVariant();
       productVariantRepository.create.mockResolvedValue(created);
 
-      const result = await service.create(createData);
+      const result = await service.create(createData, ACTOR);
 
       expect(productVariantRepository.findBySku).toHaveBeenCalledWith('SKU-1');
-      expect(productVariantRepository.create).toHaveBeenCalledWith({
-        ...createData,
-        discountType: DiscountType.PERCENT,
-        discountValue: '0',
-      });
+      expect(productVariantRepository.create).toHaveBeenCalledWith(
+        {
+          ...createData,
+          discountType: DiscountType.PERCENT,
+          discountValue: '0',
+        },
+        ACTOR,
+      );
       expect(productVariantRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({ size: '250.000', stockQuantity: 12 }),
+        ACTOR,
       );
       expect(
         productVariantRepository.create.mock.calls[0]?.[0],
@@ -104,13 +110,14 @@ describe('ProductVariantService', () => {
       productVariantRepository.findBySku.mockResolvedValue(null);
       productVariantRepository.create.mockResolvedValue(buildVariant());
 
-      await service.create(createData);
+      await service.create(createData, ACTOR);
 
       expect(productVariantRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           discountType: DiscountType.PERCENT,
           discountValue: '0',
         }),
+        ACTOR,
       );
     });
 
@@ -118,17 +125,21 @@ describe('ProductVariantService', () => {
       productVariantRepository.findBySku.mockResolvedValue(null);
       productVariantRepository.create.mockResolvedValue(buildVariant());
 
-      await service.create({
-        ...createData,
-        discountType: DiscountType.FIXED,
-        discountValue: '2',
-      });
+      await service.create(
+        {
+          ...createData,
+          discountType: DiscountType.FIXED,
+          discountValue: '2',
+        },
+        ACTOR,
+      );
 
       expect(productVariantRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           discountType: DiscountType.FIXED,
           discountValue: '2',
         }),
+        ACTOR,
       );
     });
 
@@ -137,7 +148,7 @@ describe('ProductVariantService', () => {
       expect.assertions(3);
 
       try {
-        await service.create(createData);
+        await service.create(createData, ACTOR);
       } catch (error) {
         expect(error).toBeInstanceOf(DuplicateResourceException);
         expect(
@@ -192,21 +203,31 @@ describe('ProductVariantService', () => {
       const variant = buildVariant();
       productVariantRepository.findById.mockResolvedValue(variant);
 
-      await service.update('variant-id-1', { stockQuantity: 5 });
+      await service.update('variant-id-1', { stockQuantity: 5 }, ACTOR);
 
       expect(productVariantRepository.findBySku).not.toHaveBeenCalled();
-      expect(productVariantRepository.save).toHaveBeenCalledWith(variant);
+      expect(productVariantRepository.save).toHaveBeenCalledWith(
+        variant,
+        ACTOR,
+      );
     });
 
     it('sets size on update and writes no name', async () => {
       const variant = buildVariant();
       productVariantRepository.findById.mockResolvedValue(variant);
 
-      const result = await service.update('variant-id-1', { size: '500' });
+      const result = await service.update(
+        'variant-id-1',
+        { size: '500' },
+        ACTOR,
+      );
 
       expect(result.size).toBe('500');
       expect(result).not.toHaveProperty('name');
-      expect(productVariantRepository.save).toHaveBeenCalledWith(variant);
+      expect(productVariantRepository.save).toHaveBeenCalledWith(
+        variant,
+        ACTOR,
+      );
     });
 
     it('throws DuplicateResourceException when the new SKU collides with another variant', async () => {
@@ -218,7 +239,7 @@ describe('ProductVariantService', () => {
       expect.assertions(3);
 
       try {
-        await service.update('variant-id-1', { sku: 'SKU-2' });
+        await service.update('variant-id-1', { sku: 'SKU-2' }, ACTOR);
       } catch (error) {
         expect(error).toBeInstanceOf(DuplicateResourceException);
         expect(
@@ -233,17 +254,24 @@ describe('ProductVariantService', () => {
       productVariantRepository.findById.mockResolvedValue(variant);
       productVariantRepository.findBySku.mockResolvedValue(variant);
 
-      const result = await service.update('variant-id-1', { sku: 'SKU-1' });
+      const result = await service.update(
+        'variant-id-1',
+        { sku: 'SKU-1' },
+        ACTOR,
+      );
 
       expect(result).toBe(variant);
-      expect(productVariantRepository.save).toHaveBeenCalledWith(variant);
+      expect(productVariantRepository.save).toHaveBeenCalledWith(
+        variant,
+        ACTOR,
+      );
     });
 
     it('throws ItemNotFoundException for a missing id', async () => {
       productVariantRepository.findById.mockResolvedValue(null);
 
       await expect(
-        service.update('missing-id', { stockQuantity: 5 }),
+        service.update('missing-id', { stockQuantity: 5 }, ACTOR),
       ).rejects.toBeInstanceOf(ItemNotFoundException);
       expect(productVariantRepository.save).not.toHaveBeenCalled();
     });
@@ -254,15 +282,18 @@ describe('ProductVariantService', () => {
       const variant = buildVariant();
       productVariantRepository.findById.mockResolvedValue(variant);
 
-      await service.remove('variant-id-1');
+      await service.remove('variant-id-1', ACTOR);
 
-      expect(productVariantRepository.softDelete).toHaveBeenCalledWith(variant);
+      expect(productVariantRepository.softDelete).toHaveBeenCalledWith(
+        variant,
+        ACTOR,
+      );
     });
 
     it('throws ItemNotFoundException for a missing id', async () => {
       productVariantRepository.findById.mockResolvedValue(null);
 
-      await expect(service.remove('missing-id')).rejects.toBeInstanceOf(
+      await expect(service.remove('missing-id', ACTOR)).rejects.toBeInstanceOf(
         ItemNotFoundException,
       );
       expect(productVariantRepository.softDelete).not.toHaveBeenCalled();
