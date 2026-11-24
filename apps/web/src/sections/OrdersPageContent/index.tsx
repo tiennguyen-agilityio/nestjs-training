@@ -160,7 +160,7 @@ export default function OrdersPageContent() {
   return (
     <div className="flex flex-col gap-6">
       <OrderDetailModal
-        orderNumber={selectedOrder?.orderNumber ?? null}
+        order={selectedOrder}
         open={selectedOrder !== null}
         onOpenChange={(open) => {
           if (!open) {

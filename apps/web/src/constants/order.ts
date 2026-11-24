@@ -1,4 +1,6 @@
 import type { TableColumn } from '@/components/Table'
+import { PaymentMethod } from '@repo/constants'
+
 import { ORDER_STATUS, SHIPPING_STATUS } from '@/types/order'
 
 export const OUT_OF_STOCK_LABEL = 'Out of stock'
@@ -89,33 +91,51 @@ export const ORDERS_TABLE_COLUMNS: TableColumn[] = [
 
 export const ORDERS_HISTORY_TABLE_COLUMNS: TableColumn[] = [
   {
-    key: 'orderId',
-    label: 'Order ID',
+    key: 'order',
+    label: 'Order',
     className:
-      'px-8 py-6 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
+      'px-6 py-5 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
   },
   {
     key: 'date',
     label: 'Date',
     className:
-      'px-8 py-6 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
+      'px-6 py-5 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
+  },
+  {
+    key: 'items',
+    label: 'Items',
+    className:
+      'px-6 py-5 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
   },
   {
     key: 'status',
     label: 'Status',
     className:
-      'px-8 py-6 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
+      'px-6 py-5 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
+  },
+  {
+    key: 'shipping',
+    label: 'Shipping',
+    className:
+      'px-6 py-5 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
+  },
+  {
+    key: 'payment',
+    label: 'Payment',
+    className:
+      'px-6 py-5 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
   },
   {
     key: 'total',
     label: 'Total',
     className:
-      'px-8 py-6 font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
-  },
-  {
-    key: 'action',
-    label: 'Action',
-    className:
-      'px-8 py-6 text-right font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
+      'px-6 py-5 text-right font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
   },
 ]
+
+export const PAYMENT_METHOD_LABELS: Readonly<Record<PaymentMethod, string>> = {
+  [PaymentMethod.COD]: 'Cash on delivery',
+  [PaymentMethod.CARD]: 'Card (Stripe)',
+  [PaymentMethod.PAYPAL]: 'PayPal',
+}

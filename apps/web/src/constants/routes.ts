@@ -20,6 +20,11 @@ export const ROUTES = {
   ROASTS: '/roasts',
 }
 
+/** The shopper's order details page. */
+export function profileOrderPath(orderNumber: string): string {
+  return `${ROUTES.USER_PROFILE}/orders/${encodeURIComponent(orderNumber)}`
+}
+
 export function dashboardEditPath(base: string, id: string): string {
   return `${base}/${encodeURIComponent(id)}/edit`
 }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Coffee, Pencil } from 'lucide-react'
 import { useUser as useClerkUser } from '@clerk/nextjs'
 import { OrderStatus } from '@repo/constants'
@@ -11,7 +12,7 @@ import type { ClerkUser } from '@/types/user'
 
 // Constants
 import { DEFAULT_AVATAR } from '@/constants/images'
-import { ROUTES } from '@/constants/routes'
+import { ROUTES, profileOrderPath } from '@/constants/routes'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import {
   ALL_ORDER_STATUSES_VALUE,
@@ -34,7 +35,6 @@ import Table from '@/components/Table'
 import Loading from '@/components/Loading'
 import { Select } from '@/components/Select'
 import { PaginationBar } from '@/components/Pagination'
-import { OrderDetailModal } from '@/sections/OrderDetailModal'
 import { ProfileOrderTableRow } from '@/sections/ProfileOrderTableRow'
 import { ProfileAccountDialogs } from './ProfileAccountDialogs'
 
@@ -51,9 +51,7 @@ export function ProfilePageView() {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState<OrderStatus | undefined>(undefined)
-  const [selectedOrderNumber, setSelectedOrderNumber] = useState<string | null>(
-    null,
-  )
+  const router = useRouter()
   const { orders, meta, isLoading, isError, errorMessage, refetch } =
     useMyOrders(status ? { page, status } : { page })
 
@@ -71,16 +69,6 @@ export function ProfilePageView() {
   return (
     <div className="bg-background text-on-background">
       <div className="mx-auto max-w-7xl px-8 pb-24 pt-16 md:pt-20">
-        <OrderDetailModal
-          orderNumber={selectedOrderNumber}
-          open={selectedOrderNumber !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setSelectedOrderNumber(null)
-            }
-          }}
-        />
-
         <section className="mb-16 grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="flex flex-col items-center gap-12 rounded-xl bg-surface-container-low p-8 md:flex-row md:items-start md:p-12 lg:col-span-8">
             <div className="relative shrink-0">
@@ -186,7 +174,7 @@ export function ProfilePageView() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl bg-surface-container-lowest">
+          <div className="overflow-x-auto rounded-xl bg-surface-container-lowest">
             {isLoading ? (
               <Loading size="lg" label="Loading orders" />
             ) : isError ? (
@@ -222,13 +210,16 @@ export function ProfilePageView() {
                 renderRow={(order) => (
                   <ProfileOrderTableRow
                     order={order}
-                    onRequestView={(nextOrder) =>
-                      setSelectedOrderNumber(nextOrder.orderNumber)
+                    onOpen={(nextOrder) =>
+                      router.push(profileOrderPath(nextOrder.orderNumber))
                     }
                   />
                 )}
                 emptyMessage="No orders found."
                 tableClassName="w-full border-collapse text-left"
+                resolveRowClassName={() =>
+                  'cursor-pointer hover:bg-surface-container-low'
+                }
                 headerClassName="bg-surface-container-low"
                 emptyRowClassName="px-8 py-8 text-center text-on-surface-variant"
               />

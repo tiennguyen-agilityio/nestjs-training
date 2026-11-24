@@ -4,7 +4,11 @@ import type { StatCardItem } from '@/components/StatsCards'
 import type { ApiErrorResponse, ErrorDetail, ResponseMeta } from '@/types/api'
 import { ORDER_STATUS, SHIPPING_STATUS, type Order } from '@/types/order'
 
-import { OrderPaymentStatus, type OrderStatus } from '@repo/constants'
+import {
+  OrderPaymentStatus,
+  type OrderStatus,
+  type ShippingStatus,
+} from '@repo/constants'
 
 import { formatPrice } from './common'
 
@@ -22,6 +26,18 @@ export function formatOrderListDate(iso: string): string {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+  }).format(d)
+}
+
+/** Day, short month and time, e.g. "17 Nov, 16:00". */
+export function formatOrderDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
   }).format(d)
 }
 
@@ -63,7 +79,9 @@ export function getOrderStatusPresentation(
   }
 }
 
-export function getShippingStatusPresentation(status: SHIPPING_STATUS): {
+export function getShippingStatusPresentation(
+  status: SHIPPING_STATUS | ShippingStatus,
+): {
   label: string
   badgeClassName: string
 } {

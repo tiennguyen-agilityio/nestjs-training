@@ -10,7 +10,7 @@ import {
 
 import { ProfilePageView } from '@/app/(shop)/profile/ProfilePageView'
 import { useMyOrders } from '@/hooks/useOrder'
-import { ROUTES } from '@/constants/routes'
+import { ROUTES, profileOrderPath } from '@/constants/routes'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { formatPrice } from '@/utils/common'
 import { formatOrderListDate } from '@/utils/order'
@@ -37,12 +37,9 @@ jest.mock('sonner', () => ({
 
 jest.mock('@/hooks/useOrder', () => ({ useMyOrders: jest.fn() }))
 
-const mockOrderDetailModal = jest.fn()
-jest.mock('@/sections/OrderDetailModal', () => ({
-  OrderDetailModal: (props: { orderNumber: string | null; open: boolean }) => {
-    mockOrderDetailModal(props)
-    return props.open ? <div>Details of {props.orderNumber}</div> : null
-  },
+const mockPush = jest.fn()
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
 }))
 
 jest.mock('@/components/Select', () => ({
@@ -152,29 +149,54 @@ describe('ProfilePageView', () => {
     jest.clearAllMocks()
   })
 
-  it('ProfilePageView lists the orders with number, date, total and status (AC3)', () => {
+  it("ProfilePageView lists the orders with the prototype's columns (AC3)", () => {
     render(<ProfilePageView />)
 
     expect(
       screen.getByRole('heading', { name: 'Order History' }),
     ).toBeInTheDocument()
-    for (const [order, label] of [
+    expect(
+      screen.getAllByRole('columnheader').map((cell) => cell.textContent),
+    ).toEqual([
+      'Order',
+      'Date',
+      'Items',
+      'Status',
+      'Shipping',
+      'Payment',
+      'Total',
+    ])
+    for (const [order, status] of [
       [o2, 'Pending'],
       [o1, 'Completed'],
     ] as const) {
-      const row = screen
-        .getByRole('button', { name: `View order #${order.orderNumber}` })
-        .closest('tr') as HTMLElement
-      expect(within(row).getByText(`#${order.orderNumber}`)).toBeInTheDocument()
-      expect(
-        within(row).getByText(formatOrderListDate(order.createdAt)),
-      ).toBeInTheDocument()
-      expect(within(row).getByText(label)).toBeInTheDocument()
-      expect(
-        within(row).getByText(formatPrice(order.totalAmount)),
-      ).toBeInTheDocument()
+      const link = screen.getByRole('link', { name: `#${order.orderNumber}` })
+      expect(link).toHaveAttribute('href', profileOrderPath(order.orderNumber))
+      const row = link.closest('tr') as HTMLElement
+      const cells = within(row).getAllByRole('cell')
+      expect(cells.map((cell) => cell.textContent)).toEqual([
+        `#${order.orderNumber}`,
+        formatOrderListDate(order.createdAt),
+        String(order.itemCount),
+        status,
+        'Pending',
+        'Unpaid',
+        formatPrice(order.totalAmount),
+      ])
     }
     expect(lastOrdersCall()).toEqual({ page: 1 })
+  })
+
+  it('clicking a row opens its details page', async () => {
+    const user = userEvent.setup()
+    render(<ProfilePageView />)
+
+    const row = screen
+      .getByRole('link', { name: `#${o1.orderNumber}` })
+      .closest('tr') as HTMLElement
+    await user.click(within(row).getByText(formatPrice(o1.totalAmount)))
+
+    expect(mockPush).toHaveBeenCalledWith(profileOrderPath(o1.orderNumber))
   })
 
   it('changing the status filter goes back to page 1', async () => {
@@ -247,20 +269,6 @@ describe('ProfilePageView', () => {
     expect(
       screen.queryByRole('link', { name: 'Find your first bag' }),
     ).not.toBeInTheDocument()
-  })
-
-  it('View Details opens the modal for that order', async () => {
-    const user = userEvent.setup()
-    render(<ProfilePageView />)
-
-    await user.click(
-      screen.getByRole('button', { name: `View order #${o2.orderNumber}` }),
-    )
-
-    expect(screen.getByText(`Details of ${o2.orderNumber}`)).toBeInTheDocument()
-    expect(mockOrderDetailModal).toHaveBeenLastCalledWith(
-      expect.objectContaining({ orderNumber: o2.orderNumber, open: true }),
-    )
   })
 
   it('a list error without a message shows the fallback text', () => {

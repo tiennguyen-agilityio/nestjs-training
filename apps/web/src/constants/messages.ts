@@ -1,6 +1,7 @@
 import { VALIDATION_RULES } from '@repo/constants'
 
 export const ERROR_MESSAGES = {
+  ORDER_NOT_FOUND: 'Order not found.',
   IDENTIFIER_REQUIRED: 'Enter your email address',
   IDENTIFIER_EMAIL_INVALID: 'Enter a valid email address',
   PASSWORD_REQUIRED: 'Enter your password',

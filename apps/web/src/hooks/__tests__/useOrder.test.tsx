@@ -6,7 +6,12 @@ import { OrderStatus } from '@repo/constants'
 
 import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
-import { orderQueryKeys, useMyOrders, useOrderDetail } from '@/hooks/useOrder'
+import {
+  orderDetailRetry,
+  orderQueryKeys,
+  useMyOrders,
+  useOrderDetail,
+} from '@/hooks/useOrder'
 import { fetchMyOrders, fetchOrderDetail } from '@/services/order'
 import type { OrderDetail, OrderSummary } from '@/types/order'
 
@@ -246,13 +251,22 @@ describe('useOrderDetail', () => {
     mockFetchOrderDetail
       .mockResolvedValueOnce({
         ok: false,
-        error: { statusCode: 404, message: API_FALLBACK_ERRORS.ORDER_LOAD },
+        error: { statusCode: 500, message: API_FALLBACK_ERRORS.ORDER_LOAD },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { statusCode: 500, message: API_FALLBACK_ERRORS.ORDER_LOAD },
       })
       .mockReturnValueOnce(new Promise(() => undefined))
     const { result } = renderWithClient(() => useOrderDetail('CH-1'))
 
-    await waitFor(() => expect(result.current.isError).toBe(true))
+    // A non-404 error is retried once before the query fails.
+    await waitFor(() => expect(result.current.isError).toBe(true), {
+      timeout: 4000,
+    })
+    expect(mockFetchOrderDetail).toHaveBeenCalledTimes(2)
     expect(result.current.errorMessage).toBe(API_FALLBACK_ERRORS.ORDER_LOAD)
+    expect(result.current.isNotFound).toBe(false)
     expect(result.current.isLoading).toBe(false)
 
     void act(() => {
@@ -260,6 +274,31 @@ describe('useOrderDetail', () => {
     })
 
     await waitFor(() => expect(result.current.isLoading).toBe(true))
+  })
+
+  it('reports isNotFound for a 404', async () => {
+    mockFetchOrderDetail.mockResolvedValueOnce({
+      ok: false,
+      error: { statusCode: 404, message: 'Order not found' },
+    })
+    const { result } = renderWithClient(() => useOrderDetail('CH-404'))
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.isNotFound).toBe(true)
+    expect(mockFetchOrderDetail).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not retry a 404, but retries other errors once', () => {
+    const retry = orderDetailRetry
+    expect(retry(0, Object.assign(new Error('x'), { statusCode: 404 }))).toBe(
+      false,
+    )
+    expect(retry(0, Object.assign(new Error('x'), { statusCode: 500 }))).toBe(
+      true,
+    )
+    expect(retry(1, Object.assign(new Error('x'), { statusCode: 500 }))).toBe(
+      false,
+    )
   })
 
   it('does not fetch without an orderNumber', async () => {

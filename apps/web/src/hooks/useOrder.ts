@@ -206,10 +206,19 @@ export function useMyOrders(params: MyOrdersParams): UseMyOrdersResult {
   }
 }
 
+/** A 404 is final (no such order, or another user's); other errors retry once. */
+export function orderDetailRetry(failureCount: number, error: Error): boolean {
+  return (
+    (error as { statusCode?: number }).statusCode !== 404 && failureCount < 1
+  )
+}
+
 export interface UseOrderDetailResult {
   order: OrderDetail | null
   isLoading: boolean
   isError: boolean
+  /** The API answered 404: no such order, or another user's. */
+  isNotFound: boolean
   errorMessage: string | null
   refetch: () => Promise<void>
 }
@@ -226,16 +235,23 @@ export function useOrderDetail(
       const result = await fetchOrderDetail(orderNumber ?? '', {
         getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
       })
-      if (!result.ok) throw new Error(result.error.message)
+      if (!result.ok) {
+        throw Object.assign(new Error(result.error.message), {
+          statusCode: result.error.statusCode,
+        })
+      }
       return result.order
     },
     enabled: Boolean(isLoaded && isSignedIn && userId && orderNumber),
     ...detailQueryOptions,
+    retry: orderDetailRetry,
   })
   const { isError, errorMessage, refetch } = toQueryResult(query)
 
   return {
     order: query.data ?? null,
+    isNotFound:
+      (query.error as { statusCode?: number } | null)?.statusCode === 404,
     isLoading:
       query.isPending &&
       (!isLoaded || Boolean(isSignedIn && userId && orderNumber)),
