@@ -53,13 +53,13 @@ describe('Idempotency-Key on create routes (e2e)', () => {
   afterAll(async () => {
     await RequestContext.create(orm.em, async () => {
       for (const id of createdProductIds) {
-        await productService.remove(id).catch(() => undefined);
+        await productService.remove(id, null).catch(() => undefined);
       }
       for (const id of createdCategoryIds) {
-        await categoryService.remove(id).catch(() => undefined);
+        await categoryService.remove(id, null).catch(() => undefined);
       }
       for (const id of createdUserIds) {
-        await userService.remove(id).catch(() => undefined);
+        await userService.remove(id, null).catch(() => undefined);
       }
     });
     await app.close();
@@ -75,13 +75,16 @@ describe('Idempotency-Key on create routes (e2e)', () => {
   const signInAdmin = async (): Promise<User> => {
     const admin = await RequestContext.create(orm.em, async () => {
       const clerkId = `clerk-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const user = await userService.create({
-        clerkId,
-        email: `${clerkId}@example.com`,
-        firstName: 'E2E',
-        lastName: 'Test',
-        role: UserRole.ADMIN,
-      });
+      const user = await userService.create(
+        {
+          clerkId,
+          email: `${clerkId}@example.com`,
+          firstName: 'E2E',
+          lastName: 'Test',
+          role: UserRole.ADMIN,
+        },
+        null,
+      );
       createdUserIds.push(user.id);
       return user;
     });
@@ -91,7 +94,7 @@ describe('Idempotency-Key on create routes (e2e)', () => {
 
   const seedCategory = async (name: string): Promise<Category> =>
     RequestContext.create(orm.em, async () => {
-      const category = await categoryService.create({ name });
+      const category = await categoryService.create({ name }, null);
       createdCategoryIds.push(category.id);
       return category;
     });
@@ -230,16 +233,18 @@ describe('Idempotency-Key on create routes (e2e)', () => {
     const key = randomUUID();
     const body = { name: uniqueName('In Flight E2E') };
     const create: CategoryService['create'] = (dto) =>
-      categoryService.create(dto);
+      categoryService.create(dto, null);
     let entered!: () => void;
     const handlerEntered = new Promise<void>((resolve) => (entered = resolve));
     let release!: () => void;
     const handlerReleased = new Promise<void>((resolve) => (release = resolve));
-    vi.spyOn(categoryService, 'create').mockImplementationOnce(async (dto) => {
-      entered();
-      await handlerReleased;
-      return create(dto);
-    });
+    vi.spyOn(categoryService, 'create').mockImplementationOnce(
+      async (dto, actorId) => {
+        entered();
+        await handlerReleased;
+        return create(dto, actorId);
+      },
+    );
 
     const firstResponse = postCategory(body, key).then((res) => res);
     await handlerEntered;

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { MikroORM, RequestContext } from '@mikro-orm/core';
@@ -44,7 +45,7 @@ describe('UserController auth (e2e)', () => {
   afterAll(async () => {
     await RequestContext.create(orm.em, async () => {
       for (const id of createdUserIds) {
-        await userService.remove(id).catch(() => undefined);
+        await userService.remove(id, null).catch(() => undefined);
       }
     });
     await app.close();
@@ -63,13 +64,16 @@ describe('UserController auth (e2e)', () => {
   ): Promise<User> =>
     RequestContext.create(orm.em, async () => {
       const clerkId = generateClerkId();
-      let user = await userService.create({
-        clerkId,
-        email: `${clerkId}@example.com`,
-        firstName: 'E2E',
-        lastName: 'Test',
-        role: overrides.role,
-      });
+      let user = await userService.create(
+        {
+          clerkId,
+          email: `${clerkId}@example.com`,
+          firstName: 'E2E',
+          lastName: 'Test',
+          role: overrides.role,
+        },
+        null,
+      );
       createdUserIds.push(user.id);
 
       if (
@@ -184,7 +188,7 @@ describe('UserController auth (e2e)', () => {
       });
       const deletedUser = await createTestUser({ role: UserRole.USER });
       await RequestContext.create(orm.em, () =>
-        userService.remove(deletedUser.id),
+        userService.remove(deletedUser.id, null),
       );
       mockSessionFor(admin.clerkId);
       return { activeUser, inactiveUser, deletedUser };
@@ -314,7 +318,7 @@ describe('UserController auth (e2e)', () => {
       const admin = await createTestUser({ role: UserRole.ADMIN });
       const deletedUser = await createTestUser({ role: UserRole.USER });
       await RequestContext.create(orm.em, () =>
-        userService.remove(deletedUser.id),
+        userService.remove(deletedUser.id, null),
       );
       mockSessionFor(admin.clerkId);
 
@@ -331,7 +335,7 @@ describe('UserController auth (e2e)', () => {
       const admin = await createTestUser({ role: UserRole.ADMIN });
       const deletedUser = await createTestUser({ role: UserRole.USER });
       await RequestContext.create(orm.em, () =>
-        userService.remove(deletedUser.id),
+        userService.remove(deletedUser.id, null),
       );
       mockSessionFor(admin.clerkId);
 
@@ -558,6 +562,128 @@ describe('UserController auth (e2e)', () => {
         userService.findOne(target.id),
       );
       expect(persisted.phoneNumber).toBeNull();
+    });
+  });
+
+  describe('audit', () => {
+    type AuditIds = {
+      id: string;
+      createdBy?: string | null;
+      updatedBy?: string | null;
+      deletedBy?: string | null;
+    };
+
+    const auditRow = async (
+      table: string,
+      id: string,
+    ): Promise<{ updated_by: string | null; deleted_by: string | null }> => {
+      const [row] = (await orm.em
+        .getConnection()
+        .execute(`select updated_by, deleted_by from ${table} where id = ?`, [
+          id,
+        ])) as { updated_by: string | null; deleted_by: string | null }[];
+      return row;
+    };
+
+    it('POST /users records the admin as creator', async () => {
+      const a1 = await createTestUser({ role: UserRole.ADMIN });
+      mockSessionFor(a1.clerkId);
+      const suffix = `${Date.now()}${Math.random().toString(36).slice(2)}`;
+
+      const response = await request(app.getHttpServer())
+        .post(`${API_BASE_PATH}/users`)
+        .set('Idempotency-Key', randomUUID())
+        .send({
+          clerkId: `user_audit${suffix}`,
+          email: `audit-${suffix}@example.com`,
+          firstName: 'Audit',
+          lastName: 'Created',
+        })
+        .expect(201);
+
+      const { data } = response.body as { data: AuditIds };
+      createdUserIds.push(data.id);
+      expect(data).toMatchObject({
+        createdBy: a1.id,
+        updatedBy: a1.id,
+        deletedBy: null,
+      });
+    });
+
+    it('PATCH /users/:id with only a role records the admin before any webhook', async () => {
+      const a2 = await createTestUser({ role: UserRole.ADMIN });
+      const target = await createTestUser({ role: UserRole.USER });
+      mockSessionFor(a2.clerkId);
+
+      await request(app.getHttpServer())
+        .patch(`${API_BASE_PATH}/users/${target.id}`)
+        .send({ role: UserRole.ADMIN })
+        .expect(200);
+
+      expect((await auditRow('users', target.id)).updated_by).toBe(a2.id);
+    });
+
+    it('DELETE /users/:id records the admin', async () => {
+      const a2 = await createTestUser({ role: UserRole.ADMIN });
+      const target = await createTestUser({ role: UserRole.USER });
+      mockSessionFor(a2.clerkId);
+
+      await request(app.getHttpServer())
+        .delete(`${API_BASE_PATH}/users/${target.id}`)
+        .expect(204);
+
+      expect(await auditRow('users', target.id)).toEqual({
+        updated_by: a2.id,
+        deleted_by: a2.id,
+      });
+    });
+
+    it('GET /users/me has audit ids for an active admin only', async () => {
+      const admin = await createTestUser({ role: UserRole.ADMIN });
+      const customer = await createTestUser({ role: UserRole.USER });
+
+      mockSessionFor(customer.clerkId);
+      const asCustomer = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/users/me`)
+        .expect(200);
+      expect((asCustomer.body as { data: AuditIds }).data).not.toHaveProperty(
+        'createdBy',
+      );
+
+      mockSessionFor(admin.clerkId);
+      const asAdmin = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/users/me`)
+        .expect(200);
+      expect((asAdmin.body as { data: AuditIds }).data).toHaveProperty(
+        'createdBy',
+        null,
+      );
+    });
+
+    it('keeps the ids of a deleted admin', async () => {
+      const a1 = await createTestUser({ role: UserRole.ADMIN });
+      const a2 = await createTestUser({ role: UserRole.ADMIN });
+      mockSessionFor(a1.clerkId);
+      const created = await request(app.getHttpServer())
+        .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ name: `Audit Deleted Admin ${Date.now()}` })
+        .expect(201);
+      const categoryId = (created.body as { data: AuditIds }).data.id;
+
+      await RequestContext.create(orm.em, () =>
+        userService.remove(a1.id, null),
+      );
+
+      mockSessionFor(a2.clerkId);
+      const response = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/categories/${categoryId}`)
+        .expect(200);
+      expect((response.body as { data: AuditIds }).data.createdBy).toBe(a1.id);
+
+      await orm.em
+        .getConnection()
+        .execute('delete from categories where id = ?', [categoryId]);
     });
   });
 });

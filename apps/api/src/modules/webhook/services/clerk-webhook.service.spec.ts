@@ -346,7 +346,7 @@ describe('ClerkWebhookService', () => {
 
         await service.handleEvent(deletedEvent);
 
-        expect(userService.remove).toHaveBeenCalledWith(existing.id);
+        expect(userService.remove).toHaveBeenCalledWith(existing.id, null);
       });
 
       it('does not throw and does not delete when there is no local match', async () => {

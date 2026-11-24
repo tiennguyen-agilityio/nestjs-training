@@ -1,6 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole, UserStatus } from '@repo/constants';
 import { User } from '../entities/user.entity.js';
+import {
+  auditFieldsOf,
+  type ResponseOptions,
+} from '../../../common/utils/audit.util.js';
 
 export class ResponseUserDto {
   id!: string;
@@ -21,7 +25,19 @@ export class ResponseUserDto {
   @ApiPropertyOptional({ nullable: true, type: Date })
   deletedAt: Date | null = null;
 
-  static fromEntity(user: User): ResponseUserDto {
+  @ApiPropertyOptional({ nullable: true, type: String })
+  createdBy?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String })
+  updatedBy?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String })
+  deletedBy?: string | null;
+
+  static fromEntity(
+    user: User,
+    options: ResponseOptions = {},
+  ): ResponseUserDto {
     const dto = new ResponseUserDto();
     dto.id = user.id;
     dto.clerkId = user.clerkId;
@@ -32,6 +48,7 @@ export class ResponseUserDto {
     dto.status = user.status;
     dto.avatarUrl = user.avatarUrl;
     dto.deletedAt = user.deletedAt;
+    if (options.withAudit) Object.assign(dto, auditFieldsOf(user));
     return dto;
   }
 }

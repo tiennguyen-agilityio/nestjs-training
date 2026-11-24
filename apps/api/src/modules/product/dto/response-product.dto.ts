@@ -3,6 +3,10 @@ import { Product } from '../entities/product.entity.js';
 import { RoastLevel, ProductStatus } from '@repo/constants';
 import { ResponseProductImageDto } from '../../product-image/dto/response-product-image.dto.js';
 import { ResponseProductVariantDto } from '../../product-variant/dto/response-product-variant.dto.js';
+import {
+  auditFieldsOf,
+  type ResponseOptions,
+} from '../../../common/utils/audit.util.js';
 
 export class ResponseProductDto {
   id!: string;
@@ -40,7 +44,19 @@ export class ResponseProductDto {
   @ApiProperty({ type: () => ResponseProductVariantDto, isArray: true })
   variants!: ResponseProductVariantDto[];
 
-  static fromEntity(product: Product): ResponseProductDto {
+  @ApiPropertyOptional({ nullable: true, type: String })
+  createdBy?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String })
+  updatedBy?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String })
+  deletedBy?: string | null;
+
+  static fromEntity(
+    product: Product,
+    options: ResponseOptions = {},
+  ): ResponseProductDto {
     const dto = new ResponseProductDto();
     dto.id = product.id;
     dto.categoryId = product.category.id;
@@ -59,10 +75,11 @@ export class ResponseProductDto {
     dto.images = product.images
       .getItems()
       .filter((image) => !image.deletedAt)
-      .map((image) => ResponseProductImageDto.fromEntity(image));
+      .map((image) => ResponseProductImageDto.fromEntity(image, options));
     dto.variants = product.variants
       .getItems()
-      .map((variant) => ResponseProductVariantDto.fromEntity(variant));
+      .map((variant) => ResponseProductVariantDto.fromEntity(variant, options));
+    if (options.withAudit) Object.assign(dto, auditFieldsOf(product));
     return dto;
   }
 }

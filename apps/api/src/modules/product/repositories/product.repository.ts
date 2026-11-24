@@ -11,6 +11,7 @@ import {
   ListOptions,
 } from '../../../common/interfaces/repository-options.interface.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import { QueryParams } from '../../../common/dto/query-params.dto.js';
 
 const RELATIONS = ['images', 'variants'];
@@ -117,19 +118,23 @@ export class ProductRepository extends BaseRepository<Product> {
 
   create(
     data: Omit<CreateProductInput, 'images' | 'variants'> & { slug: string },
+    actorId: ActorId,
   ): Promise<Product> {
-    return this.createAndSave({
-      category: data.categoryId,
-      name: data.name,
-      slug: data.slug,
-      description: data.description ?? null,
-      roastLevel: data.roastLevel ?? null,
-      isOrganic: data.isOrganic,
-      isFairTrade: data.isFairTrade,
-      status: data.status,
-      tastingNotes: data.tastingNotes ?? null,
-      origin: data.origin ?? null,
-      processingMethod: data.processingMethod ?? null,
-    });
+    return this.createAndSave(
+      {
+        category: data.categoryId,
+        name: data.name,
+        slug: data.slug,
+        description: data.description ?? null,
+        roastLevel: data.roastLevel ?? null,
+        isOrganic: data.isOrganic,
+        isFairTrade: data.isFairTrade,
+        status: data.status,
+        tastingNotes: data.tastingNotes ?? null,
+        origin: data.origin ?? null,
+        processingMethod: data.processingMethod ?? null,
+      },
+      actorId,
+    );
   }
 }

@@ -18,6 +18,12 @@ The layering and conventions the code actually follows. Plans, code reviews and 
 - Exception: `src/modules/health/indicators/database-health.indicator.ts` runs `select 1` through MikroORM's connection: Terminus's `MikroOrmHealthIndicator` reports down until the lazy MikroORM 7 connection is opened by another query.
 - Exception: `src/modules/outbox/outbox.module.ts` builds the `@nestjs/outbox` PostgreSQL store's executor from MikroORM's Kysely (`fromKysely(em.getKysely())`); it runs no queries of its own, and the open transaction reaches `Outbox.add()` only through `BaseRepository`.
 
+**Writes carry the actor.**
+
+- Services take an `actorId: ActorId` (`src/common/utils/audit.util.ts`) and pass it to `BaseRepository.save` / `createAndSave` / `softDelete` / `restore`, which stamp `createdBy` / `updatedBy` / `deletedBy` (`AuditableEntity`) on the saved row and on every other auditable row its flush writes.
+- Controllers take it from `@AuthUser()`; `null` is a system write (webhook, outbox handler, job) and stamps nothing.
+- Response DTOs add the audit ids only with `fromEntity(entity, { withAudit: true })`, which controllers set from `isActiveAdmin(user)`.
+
 **Soft delete is a MikroORM filter.**
 
 - Declared on `BaseEntity`: `@Filter({ name: 'softDelete', cond: { deletedAt: null }, default: true })`.

@@ -9,6 +9,7 @@ import { AppModule } from './../../src/app.module.js';
 import { UserService } from './../../src/modules/user/services/user.service.js';
 import { AuthProvider } from './../../src/common/providers/auth.provider.js';
 import { initTestApp } from './../utils/init-test-app.util.js';
+import { UserRole } from '@repo/constants';
 
 describe('WebhookController (e2e)', () => {
   let app: INestApplication<App>;
@@ -89,7 +90,7 @@ describe('WebhookController (e2e)', () => {
         expect(created.firstName).toBe('E2E');
         expect(created.lastName).toBe('Test');
 
-        await userService.remove(created.id);
+        await userService.remove(created.id, null);
       });
     });
 
@@ -108,6 +109,129 @@ describe('WebhookController (e2e)', () => {
         .set('svix-signature', 'v1,tampered-signature')
         .send(body)
         .expect(400);
+    });
+  });
+
+  describe('audit', () => {
+    type AuditRow = { created_by: string | null; updated_by: string | null };
+    const auditRow = async (clerkId: string): Promise<AuditRow> => {
+      const [row] = (await orm.em
+        .getConnection()
+        .execute(
+          'select created_by, updated_by from users where clerk_id = ?',
+          [clerkId],
+        )) as AuditRow[];
+      return row;
+    };
+
+    const send = async (type: string, data: object): Promise<void> => {
+      const body = JSON.stringify({ type, data });
+      const { msgId, timestamp, signature } = signPayload(body);
+      await request(app.getHttpServer())
+        .post('/webhooks/clerk')
+        .set('Content-Type', 'application/json')
+        .set('svix-id', msgId)
+        .set('svix-timestamp', timestamp)
+        .set('svix-signature', signature)
+        .send(body)
+        .expect(200);
+    };
+
+    const clerkUser = (
+      clerkId: string,
+      email: string,
+      overrides: object = {},
+    ): object => ({
+      id: clerkId,
+      email_addresses: [{ id: 'email-1', email_address: email }],
+      primary_email_address_id: 'email-1',
+      first_name: 'Audit',
+      last_name: 'Webhook',
+      phone_numbers: [],
+      primary_phone_number_id: null,
+      image_url: 'https://example.com/avatar.png',
+      public_metadata: {},
+      banned: false,
+      locked: false,
+      ...overrides,
+    });
+
+    const seedEditedByAdmin = async (): Promise<{
+      clerkId: string;
+      email: string;
+      adminId: string;
+    }> => {
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const clerkId = `clerk-e2e-audit-${suffix}`;
+      const email = `audit-${suffix}@example.com`;
+      const adminId = await RequestContext.create(orm.em, async () => {
+        const admin = await userService.create(
+          {
+            clerkId: `clerk-e2e-admin-${suffix}`,
+            email: `admin-${suffix}@example.com`,
+            firstName: 'Audit',
+            lastName: 'Admin',
+            role: UserRole.ADMIN,
+          },
+          null,
+        );
+        await userService.create(
+          {
+            clerkId,
+            email,
+            firstName: 'Audit',
+            lastName: 'Webhook',
+            avatarUrl: 'https://example.com/avatar.png',
+          },
+          admin.id,
+        );
+        return admin.id;
+      });
+      return { clerkId, email, adminId };
+    };
+
+    it('AC4 user.created leaves createdBy null', async () => {
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const clerkId = `clerk-e2e-audit-${suffix}`;
+
+      await send(
+        'user.created',
+        clerkUser(clerkId, `ac4-${suffix}@example.com`),
+      );
+
+      expect(await auditRow(clerkId)).toEqual({
+        created_by: null,
+        updated_by: null,
+      });
+    });
+
+    it("user.updated with a new role keeps the admin's updatedBy", async () => {
+      const { clerkId, email, adminId } = await seedEditedByAdmin();
+
+      await send(
+        'user.updated',
+        clerkUser(clerkId, email, {
+          public_metadata: { role: UserRole.ADMIN },
+        }),
+      );
+
+      const [row] = (await orm.em
+        .getConnection()
+        .execute('select role, updated_by from users where clerk_id = ?', [
+          clerkId,
+        ])) as { role: string; updated_by: string | null }[];
+      expect(row).toEqual({ role: UserRole.ADMIN, updated_by: adminId });
+    });
+
+    it('user.updated with a new first name sets updatedBy null', async () => {
+      const { clerkId, email } = await seedEditedByAdmin();
+
+      await send(
+        'user.updated',
+        clerkUser(clerkId, email, { first_name: 'Renamed' }),
+      );
+
+      expect((await auditRow(clerkId)).updated_by).toBeNull();
     });
   });
 });

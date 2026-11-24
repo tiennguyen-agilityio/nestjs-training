@@ -48,6 +48,9 @@ describe('ProductController', () => {
     processingMethod: null,
     createdAt: new Date(),
     deletedAt: null,
+    createdBy: 'admin-id-1',
+    updatedBy: 'admin-id-1',
+    deletedBy: null,
     images: { getItems: () => [] },
     variants: { getItems: () => [] },
   } as unknown as Product;
@@ -114,6 +117,22 @@ describe('ProductController', () => {
         data: [ResponseProductDto.fromEntity(product)],
         meta,
       });
+    });
+
+    it('lists audit ids for an active admin only', async () => {
+      const meta = { limit: 10, currentPage: 1, pageCount: 1, totalCount: 1 };
+      productService.findAll.mockResolvedValue({ data: [product], meta });
+
+      const asAdmin = await controller.findAll(
+        { page: 1, limit: 10 },
+        adminUser,
+      );
+      const asVisitor = await controller.findAll({ page: 1, limit: 10 });
+
+      expect(asAdmin.data[0]).toMatchObject({ createdBy: 'admin-id-1' });
+      expect(JSON.parse(JSON.stringify(asVisitor.data[0]))).not.toHaveProperty(
+        'createdBy',
+      );
     });
 
     it('includes soft-deleted products for an active admin', async () => {
@@ -220,6 +239,19 @@ describe('ProductController', () => {
       });
     });
 
+    it('reads audit ids for an active admin only', async () => {
+      productService.findOne.mockResolvedValue(product);
+
+      expect(
+        await controller.findOne({ id: 'product-id-1' }, adminUser),
+      ).toEqual(ResponseProductDto.fromEntity(product, { withAudit: true }));
+      expect(
+        JSON.parse(
+          JSON.stringify(await controller.findOne({ id: 'product-id-1' })),
+        ),
+      ).not.toHaveProperty('createdBy');
+    });
+
     it('propagates ItemNotFoundException', async () => {
       productService.findOne.mockRejectedValue(notFound);
 
@@ -244,18 +276,23 @@ describe('ProductController', () => {
     it('delegates to ProductService.create and returns its result', async () => {
       productService.create.mockResolvedValue(product);
 
-      const result = await controller.create(createDto);
+      const result = await controller.create(createDto, adminUser);
 
-      expect(productService.create).toHaveBeenCalledWith(createDto);
-      expect(result).toEqual(ResponseProductDto.fromEntity(product));
+      expect(productService.create).toHaveBeenCalledWith(
+        createDto,
+        'admin-id-1',
+      );
+      expect(result).toEqual(
+        ResponseProductDto.fromEntity(product, { withAudit: true }),
+      );
     });
 
     it('propagates DuplicateResourceException', async () => {
       productService.create.mockRejectedValue(nameExists);
 
-      await expect(controller.create(createDto)).rejects.toBeInstanceOf(
-        DuplicateResourceException,
-      );
+      await expect(
+        controller.create(createDto, adminUser),
+      ).rejects.toBeInstanceOf(DuplicateResourceException);
     });
   });
 
@@ -265,17 +302,31 @@ describe('ProductController', () => {
       const updated = { ...product, name: 'Latte Blend' };
       productService.update.mockResolvedValue(updated);
 
-      const result = await controller.update({ id: 'product-id-1' }, dto);
+      const result = await controller.update(
+        { id: 'product-id-1' },
+        dto,
+        adminUser,
+      );
 
-      expect(productService.update).toHaveBeenCalledWith('product-id-1', dto);
-      expect(result).toEqual(ResponseProductDto.fromEntity(updated));
+      expect(productService.update).toHaveBeenCalledWith(
+        'product-id-1',
+        dto,
+        'admin-id-1',
+      );
+      expect(result).toEqual(
+        ResponseProductDto.fromEntity(updated, { withAudit: true }),
+      );
     });
 
     it('propagates BadRequestException', async () => {
       productService.update.mockRejectedValue(new BadRequestException());
 
       await expect(
-        controller.update({ id: 'product-id-1' }, { name: 'Latte Blend' }),
+        controller.update(
+          { id: 'product-id-1' },
+          { name: 'Latte Blend' },
+          adminUser,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -284,16 +335,19 @@ describe('ProductController', () => {
     it('delegates to ProductService.remove', async () => {
       productService.remove.mockResolvedValue(undefined);
 
-      await controller.remove({ id: 'product-id-1' });
+      await controller.remove({ id: 'product-id-1' }, adminUser);
 
-      expect(productService.remove).toHaveBeenCalledWith('product-id-1');
+      expect(productService.remove).toHaveBeenCalledWith(
+        'product-id-1',
+        'admin-id-1',
+      );
     });
 
     it('propagates ItemNotFoundException', async () => {
       productService.remove.mockRejectedValue(notFound);
 
       await expect(
-        controller.remove({ id: 'missing-id' }),
+        controller.remove({ id: 'missing-id' }, adminUser),
       ).rejects.toBeInstanceOf(ItemNotFoundException);
     });
   });

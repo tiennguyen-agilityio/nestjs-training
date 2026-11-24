@@ -6,7 +6,7 @@ import {
   Property,
   Unique,
 } from '@mikro-orm/decorators/legacy';
-import { BaseEntity } from '../../../common/entities/base.entity.js';
+import { AuditableEntity } from '../../../common/entities/auditable.entity.js';
 import { Product } from '../../product/entities/product.entity.js';
 
 // Checked at commit, so a swap of two positions saves in one flush.
@@ -15,7 +15,7 @@ import { Product } from '../../product/entities/product.entity.js';
   properties: ['product', 'sortOrder'],
   deferMode: DeferMode.INITIALLY_DEFERRED,
 })
-export class ProductImage extends BaseEntity {
+export class ProductImage extends AuditableEntity {
   @ManyToOne(() => Product, { updateRule: 'cascade' })
   product!: Rel<Product>;
 

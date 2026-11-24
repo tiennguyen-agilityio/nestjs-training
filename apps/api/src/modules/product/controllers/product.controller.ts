@@ -66,7 +66,7 @@ export class ProductController {
     );
 
     return mapPaginatedResult(result, (product) =>
-      ResponseProductDto.fromEntity(product),
+      ResponseProductDto.fromEntity(product, { withAudit: asAdmin }),
     );
   }
 
@@ -83,7 +83,7 @@ export class ProductController {
       includeDeleted: asAdmin,
       activeOnly: !asAdmin,
     });
-    return ResponseProductDto.fromEntity(product);
+    return ResponseProductDto.fromEntity(product, { withAudit: asAdmin });
   }
 
   @Post()
@@ -99,9 +99,10 @@ export class ProductController {
   @ApiErrorResponse(HttpStatus.CONFLICT, ERROR_MESSAGES.PRODUCT.NAME_EXISTS)
   async create(
     @Body({ schema: createProductSchema }) dto: CreateProductInput,
+    @AuthUser() user: User,
   ): Promise<ResponseProductDto> {
-    const product = await this.productService.create(dto);
-    return ResponseProductDto.fromEntity(product);
+    const product = await this.productService.create(dto, user.id);
+    return ResponseProductDto.fromEntity(product, { withAudit: true });
   }
 
   @Patch(':id')
@@ -117,9 +118,10 @@ export class ProductController {
   async update(
     @Param({ schema: idParamSchema }) { id }: IdParam,
     @Body({ schema: updateProductSchema }) dto: UpdateProductInput,
+    @AuthUser() user: User,
   ): Promise<ResponseProductDto> {
-    const product = await this.productService.update(id, dto);
-    return ResponseProductDto.fromEntity(product);
+    const product = await this.productService.update(id, dto, user.id);
+    return ResponseProductDto.fromEntity(product, { withAudit: true });
   }
 
   @Delete(':id')
@@ -130,7 +132,8 @@ export class ProductController {
   @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.PRODUCT.NOT_FOUND)
   async remove(
     @Param({ schema: idParamSchema }) { id }: IdParam,
+    @AuthUser() user: User,
   ): Promise<void> {
-    await this.productService.remove(id);
+    await this.productService.remove(id, user.id);
   }
 }

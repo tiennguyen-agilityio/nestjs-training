@@ -11,6 +11,8 @@ import {
 } from '../../../common/exceptions/base.exception.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 
+const ACTOR = 'admin-1';
+
 describe('CategoryService', () => {
   let service: CategoryService;
   let categoryRepository: {
@@ -31,6 +33,9 @@ describe('CategoryService', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
+    createdBy: null,
+    updatedBy: null,
+    deletedBy: null,
     ...overrides,
   });
 
@@ -66,24 +71,24 @@ describe('CategoryService', () => {
       const created = buildCategory();
       categoryRepository.create.mockResolvedValue(created);
 
-      const result = await service.create({ name: 'Espresso' });
+      const result = await service.create({ name: 'Espresso' }, ACTOR);
 
       expect(categoryRepository.findByName).toHaveBeenCalledWith('Espresso', {
         includeDeleted: true,
       });
-      expect(categoryRepository.create).toHaveBeenCalledWith({
-        name: 'Espresso',
-        slug: 'espresso',
-      });
+      expect(categoryRepository.create).toHaveBeenCalledWith(
+        { name: 'Espresso', slug: 'espresso' },
+        ACTOR,
+      );
       expect(result).toBe(created);
     });
 
     it('throws DuplicateResourceException when the name already exists, including soft-deleted rows', async () => {
       categoryRepository.findByName.mockResolvedValue(buildCategory());
 
-      await expect(service.create({ name: 'Espresso' })).rejects.toBeInstanceOf(
-        DuplicateResourceException,
-      );
+      await expect(
+        service.create({ name: 'Espresso' }, ACTOR),
+      ).rejects.toBeInstanceOf(DuplicateResourceException);
       expect(categoryRepository.create).not.toHaveBeenCalled();
     });
   });
@@ -138,16 +143,18 @@ describe('CategoryService', () => {
       categoryRepository.findById.mockResolvedValue(category);
       categoryRepository.findByName.mockResolvedValue(null);
 
-      const result = await service.update('category-id-1', {
-        name: 'Cold Brew',
-      });
+      const result = await service.update(
+        'category-id-1',
+        { name: 'Cold Brew' },
+        ACTOR,
+      );
 
       expect(categoryRepository.findByName).toHaveBeenCalledWith('Cold Brew', {
         includeDeleted: true,
       });
       expect(category.name).toBe('Cold Brew');
       expect(category.slug).toBe('cold-brew');
-      expect(categoryRepository.save).toHaveBeenCalledWith(category);
+      expect(categoryRepository.save).toHaveBeenCalledWith(category, ACTOR);
       expect(result).toBe(category);
     });
 
@@ -155,7 +162,7 @@ describe('CategoryService', () => {
       const category = buildCategory();
       categoryRepository.findById.mockResolvedValue(category);
 
-      await service.update('category-id-1', { name: 'Espresso' });
+      await service.update('category-id-1', { name: 'Espresso' }, ACTOR);
 
       expect(categoryRepository.findByName).not.toHaveBeenCalled();
       expect(category.slug).toBe('espresso');
@@ -169,7 +176,7 @@ describe('CategoryService', () => {
       );
 
       await expect(
-        service.update('category-id-1', { name: 'Cold Brew' }),
+        service.update('category-id-1', { name: 'Cold Brew' }, ACTOR),
       ).rejects.toBeInstanceOf(DuplicateResourceException);
       expect(categoryRepository.save).not.toHaveBeenCalled();
     });
@@ -179,19 +186,30 @@ describe('CategoryService', () => {
       categoryRepository.findById.mockResolvedValue(category);
       categoryRepository.findByName.mockResolvedValue(category);
 
-      const result = await service.update('category-id-1', {
-        name: 'Espresso Doppio',
-      });
+      const result = await service.update(
+        'category-id-1',
+        { name: 'Espresso Doppio' },
+        ACTOR,
+      );
 
       expect(result).toBe(category);
-      expect(categoryRepository.save).toHaveBeenCalledWith(category);
+      expect(categoryRepository.save).toHaveBeenCalledWith(category, ACTOR);
+    });
+
+    it('update stamps updatedBy even when nothing changed', async () => {
+      const category = buildCategory();
+      categoryRepository.findById.mockResolvedValue(category);
+
+      await service.update('category-id-1', {}, ACTOR);
+
+      expect(categoryRepository.save).toHaveBeenCalledWith(category, ACTOR);
     });
 
     it('throws ItemNotFoundException for a missing id', async () => {
       categoryRepository.findById.mockResolvedValue(null);
 
       await expect(
-        service.update('missing-id', { name: 'Cold Brew' }),
+        service.update('missing-id', { name: 'Cold Brew' }, ACTOR),
       ).rejects.toBeInstanceOf(ItemNotFoundException);
       expect(categoryRepository.save).not.toHaveBeenCalled();
     });
@@ -203,28 +221,31 @@ describe('CategoryService', () => {
       categoryRepository.findById.mockResolvedValue(category);
       categoryRepository.countProducts.mockResolvedValue(0);
 
-      await service.remove('category-id-1');
+      await service.remove('category-id-1', ACTOR);
 
       expect(categoryRepository.countProducts).toHaveBeenCalledWith(
         'category-id-1',
       );
-      expect(categoryRepository.softDelete).toHaveBeenCalledWith(category);
+      expect(categoryRepository.softDelete).toHaveBeenCalledWith(
+        category,
+        ACTOR,
+      );
     });
 
     it('throws ResourceInUseException when the category still has products', async () => {
       categoryRepository.findById.mockResolvedValue(buildCategory());
       categoryRepository.countProducts.mockResolvedValue(2);
 
-      await expect(service.remove('category-id-1')).rejects.toBeInstanceOf(
-        ResourceInUseException,
-      );
+      await expect(
+        service.remove('category-id-1', ACTOR),
+      ).rejects.toBeInstanceOf(ResourceInUseException);
       expect(categoryRepository.softDelete).not.toHaveBeenCalled();
     });
 
     it('throws ItemNotFoundException for a missing id', async () => {
       categoryRepository.findById.mockResolvedValue(null);
 
-      await expect(service.remove('missing-id')).rejects.toBeInstanceOf(
+      await expect(service.remove('missing-id', ACTOR)).rejects.toBeInstanceOf(
         ItemNotFoundException,
       );
       expect(categoryRepository.softDelete).not.toHaveBeenCalled();
@@ -240,13 +261,13 @@ describe('CategoryService', () => {
         return Promise.resolve();
       });
 
-      const result = await service.restore('category-id-1');
+      const result = await service.restore('category-id-1', ACTOR);
 
       expect(categoryRepository.findById).toHaveBeenCalledWith(
         'category-id-1',
         { includeDeleted: true },
       );
-      expect(categoryRepository.restore).toHaveBeenCalledWith(category);
+      expect(categoryRepository.restore).toHaveBeenCalledWith(category, ACTOR);
       expect(result.deletedAt).toBeNull();
     });
 
@@ -254,7 +275,7 @@ describe('CategoryService', () => {
       categoryRepository.findById.mockResolvedValue(buildCategory());
 
       const error = await service
-        .restore('category-id-1')
+        .restore('category-id-1', ACTOR)
         .catch((e: unknown) => e);
 
       expect(error).toBeInstanceOf(InvalidStateException);
@@ -267,7 +288,7 @@ describe('CategoryService', () => {
     it('throws ItemNotFoundException for a missing id', async () => {
       categoryRepository.findById.mockResolvedValue(null);
 
-      await expect(service.restore('missing-id')).rejects.toBeInstanceOf(
+      await expect(service.restore('missing-id', ACTOR)).rejects.toBeInstanceOf(
         ItemNotFoundException,
       );
       expect(categoryRepository.restore).not.toHaveBeenCalled();
