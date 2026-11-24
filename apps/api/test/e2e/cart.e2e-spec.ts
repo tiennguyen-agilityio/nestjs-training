@@ -50,6 +50,14 @@ interface CartBody {
   subTotal: number;
 }
 
+interface MergedCartBody extends CartBody {
+  adjusted: {
+    productVariantId: string;
+    requestedQuantity: number;
+    quantity: number;
+  }[];
+}
+
 interface ErrorBody {
   errors: { errCode: string; field: string }[];
 }
@@ -146,6 +154,15 @@ describe('CartController (e2e)', () => {
       .post(ITEMS)
       .set('Idempotency-Key', key)
       .send({ productVariantId: variantId, quantity });
+
+  const merge = (items: unknown, key = randomUUID()) =>
+    request(app.getHttpServer())
+      .post(`${CART}/merge`)
+      .set('Idempotency-Key', key)
+      .send({ items });
+
+  const mergedOf = (body: unknown): MergedCartBody =>
+    (body as { data: MergedCartBody }).data;
 
   const readCart = async (): Promise<CartBody> => {
     const response = await request(app.getHttpServer()).get(CART).expect(200);
@@ -602,6 +619,127 @@ describe('CartController (e2e)', () => {
         responses.map((response) => response.status).sort((a, b) => a - b),
       ).toEqual([201, 409]);
       expect((await readCart()).items[0].quantity).toBe(3);
+    });
+  });
+
+  describe('POST /cart/merge', () => {
+    it("merges the guest lines into the caller's cart", async () => {
+      const user = await createUser();
+      const { variantId } = await createProduct({ stockQuantity: 5 });
+      signIn(user.clerkId);
+
+      const response = await merge([
+        { productVariantId: variantId, quantity: 2 },
+      ]).expect(200);
+
+      const cart = mergedOf(response.body);
+      expect(cart.id).toEqual(expect.any(String));
+      expect(cart.items).toHaveLength(1);
+      expect(cart.items[0]).toMatchObject({
+        productVariantId: variantId,
+        quantity: 2,
+      });
+      expect(cart.adjusted).toEqual([]);
+    });
+
+    it('AC1: the cart has V × 1 and V has 5 left; merging V × 2 gives V × 3 and an empty adjusted', async () => {
+      const user = await createUser();
+      const { variantId } = await createProduct({ stockQuantity: 5 });
+      signIn(user.clerkId);
+      await add(variantId, 1).expect(201);
+
+      const response = await merge([
+        { productVariantId: variantId, quantity: 2 },
+      ]).expect(200);
+
+      const cart = mergedOf(response.body);
+      expect(cart.items).toHaveLength(1);
+      expect(cart.items[0].quantity).toBe(3);
+      expect(cart.adjusted).toEqual([]);
+    });
+
+    it('AC2: V has 3 left and the cart V × 2; merging V × 4 gives V × 3 and adjusted { V, 4, 1 }', async () => {
+      const user = await createUser();
+      const { variantId } = await createProduct({ stockQuantity: 3 });
+      signIn(user.clerkId);
+      await add(variantId, 2).expect(201);
+
+      const response = await merge([
+        { productVariantId: variantId, quantity: 4 },
+      ]).expect(200);
+
+      const cart = mergedOf(response.body);
+      expect(cart.items[0].quantity).toBe(3);
+      expect(cart.adjusted).toEqual([
+        { productVariantId: variantId, requestedQuantity: 4, quantity: 1 },
+      ]);
+    });
+
+    it('AC3: merging a variant of an Inactive product skips it with quantity 0', async () => {
+      const user = await createUser();
+      const { variantId } = await createProduct({
+        status: ProductStatus.INACTIVE,
+        stockQuantity: 5,
+      });
+      signIn(user.clerkId);
+
+      const response = await merge([
+        { productVariantId: variantId, quantity: 1 },
+      ]).expect(200);
+
+      const cart = mergedOf(response.body);
+      expect(cart.items).toEqual([]);
+      expect(cart.adjusted).toEqual([
+        { productVariantId: variantId, requestedQuantity: 1, quantity: 0 },
+      ]);
+      expect(await cartRowsOf(user.id)).toBe(0);
+    });
+
+    it('AC4: items that is not an array answers 400', async () => {
+      const user = await createUser();
+      signIn(user.clerkId);
+
+      const response = await merge('x').expect(400);
+
+      expect(errorOf(response.body).field).toBe('items');
+      expect(await cartRowsOf(user.id)).toBe(0);
+    });
+
+    it('a resend with the same Idempotency-Key replays the first response and adds nothing', async () => {
+      const user = await createUser();
+      const { variantId } = await createProduct({ stockQuantity: 5 });
+      signIn(user.clerkId);
+      const key = randomUUID();
+      const items = [{ productVariantId: variantId, quantity: 2 }];
+
+      const first = await merge(items, key).expect(200);
+      const second = await merge(items, key).expect(200);
+
+      expect(second.headers['idempotent-replayed']).toBe('true');
+      expect(mergedOf(second.body)).toEqual(mergedOf(first.body));
+      expect((await readCart()).items[0].quantity).toBe(2);
+    });
+
+    it('a failing line leaves the cart unchanged', async () => {
+      const user = await createUser();
+      const { variantId } = await createProduct({ stockQuantity: 5 });
+      signIn(user.clerkId);
+      await add(variantId, 1).expect(201);
+
+      await merge([
+        { productVariantId: variantId, quantity: 2 },
+        { productVariantId: 'abc', quantity: 1 },
+      ]).expect(400);
+
+      const cart = await readCart();
+      expect(cart.items).toHaveLength(1);
+      expect(cart.items[0].quantity).toBe(1);
+    });
+
+    it('answers 401 without a user', async () => {
+      await merge([{ productVariantId: randomUUID(), quantity: 1 }]).expect(
+        401,
+      );
     });
   });
 });

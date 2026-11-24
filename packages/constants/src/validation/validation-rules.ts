@@ -24,6 +24,9 @@ export const VALIDATION_RULES = {
   CART_QUANTITY: {
     MIN: 1,
   },
+  CART_MERGE: {
+    MAX_ITEMS: 50,
+  },
   PRICE: {
     MIN: 1,
     MAX: MAX_DECIMAL,

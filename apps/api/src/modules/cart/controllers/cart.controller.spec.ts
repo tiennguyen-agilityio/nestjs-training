@@ -8,7 +8,7 @@ import { User } from '../../user/entities/user.entity.js';
 describe('CartController', () => {
   let controller: CartController;
   let cartService: Record<
-    'getCart' | 'addItem' | 'updateItem' | 'removeItem' | 'clear',
+    'getCart' | 'addItem' | 'updateItem' | 'removeItem' | 'clear' | 'merge',
     Mock
   >;
   const user = { id: 'user-1' } as User;
@@ -21,6 +21,7 @@ describe('CartController', () => {
       updateItem: vi.fn().mockResolvedValue(cart),
       removeItem: vi.fn().mockResolvedValue(cart),
       clear: vi.fn().mockResolvedValue(cart),
+      merge: vi.fn().mockResolvedValue(cart),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CartController],
@@ -59,5 +60,11 @@ describe('CartController', () => {
   it('DELETE /cart empties the cart', async () => {
     await expect(controller.clear(user)).resolves.toBe(cart);
     expect(cartService.clear).toHaveBeenCalledWith('user-1');
+  });
+
+  it("POST /cart/merge merges into the caller's cart", async () => {
+    const body = { items: [{ productVariantId: 'variant-1', quantity: 2 }] };
+    await expect(controller.merge(user, body)).resolves.toBe(cart);
+    expect(cartService.merge).toHaveBeenCalledWith('user-1', body);
   });
 });

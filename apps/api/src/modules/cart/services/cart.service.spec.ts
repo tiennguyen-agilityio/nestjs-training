@@ -14,6 +14,7 @@ import {
   ItemNotFoundException,
 } from '../../../common/exceptions/base.exception.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
+import { ProductStatus } from '@repo/constants';
 
 const USER_ID = 'user-1';
 const CART_ID = 'cart-1';
@@ -33,13 +34,17 @@ describe('CartService', () => {
   let cartItemRepository: Record<
     | 'findInCart'
     | 'findByVariant'
+    | 'findByVariants'
     | 'create'
     | 'save'
     | 'deleteById'
     | 'deleteByCart',
     Mock
   >;
-  let productVariantService: { findPurchasable: Mock };
+  let productVariantService: {
+    findPurchasable: Mock;
+    findManyWithProduct: Mock;
+  };
   let fromEntity: Mock;
   const readBack = { id: CART_ID } as Cart;
   const response = { id: CART_ID } as ResponseCartDto;
@@ -68,6 +73,7 @@ describe('CartService', () => {
     cartItemRepository = {
       findInCart: vi.fn(),
       findByVariant: vi.fn().mockResolvedValue(null),
+      findByVariants: vi.fn().mockResolvedValue([]),
       create: vi.fn(),
       save: vi.fn(),
       deleteById: vi.fn(),
@@ -75,6 +81,7 @@ describe('CartService', () => {
     };
     productVariantService = {
       findPurchasable: vi.fn().mockResolvedValue(variant(10)),
+      findManyWithProduct: vi.fn().mockResolvedValue([]),
     };
     fromEntity = vi
       .spyOn(ResponseCartDto, 'fromEntity')
@@ -355,6 +362,238 @@ describe('CartService', () => {
         .catch(() => undefined);
       expect(locked.updatedAt).toBe(since);
       expect(cartRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('merge', () => {
+    const OTHER_ID = 'variant-2';
+
+    const buyable = (
+      stockQuantity: number,
+      id = VARIANT_ID,
+      status = ProductStatus.ACTIVE,
+    ): ProductVariant =>
+      ({
+        id,
+        stockQuantity,
+        deletedAt: null,
+        product: { status, deletedAt: null },
+      }) as unknown as ProductVariant;
+
+    const lineOf = (quantity: number, id = VARIANT_ID): CartItem =>
+      ({
+        id: `item-${id}`,
+        quantity,
+        productVariant: { id },
+      }) as CartItem;
+
+    const merge = (...items: [string, number][]) =>
+      service.merge(USER_ID, {
+        items: items.map(([productVariantId, quantity]) => ({
+          productVariantId,
+          quantity,
+        })),
+      });
+
+    it('merge adds up an existing line', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([buyable(5)]);
+      const existing = lineOf(1);
+      cartItemRepository.findByVariants.mockResolvedValue([existing]);
+
+      const result = await merge([VARIANT_ID, 2]);
+
+      expect(existing.quantity).toBe(3);
+      expect(cartItemRepository.save).toHaveBeenCalledWith(existing, USER_ID);
+      expect(cartItemRepository.create).not.toHaveBeenCalled();
+      expect(result.adjusted).toEqual([]);
+    });
+
+    it('merge caps a line at the stock', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([buyable(3)]);
+      const existing = lineOf(2);
+      cartItemRepository.findByVariants.mockResolvedValue([existing]);
+
+      const result = await merge([VARIANT_ID, 4]);
+
+      expect(existing.quantity).toBe(3);
+      expect(result.adjusted).toEqual([
+        { productVariantId: VARIANT_ID, requestedQuantity: 4, quantity: 1 },
+      ]);
+    });
+
+    it('merge creates a new line', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([
+        buyable(10),
+      ]);
+
+      const result = await merge([VARIANT_ID, 2]);
+
+      expect(cartItemRepository.create).toHaveBeenCalledWith(
+        CART_ID,
+        VARIANT_ID,
+        2,
+        USER_ID,
+      );
+      expect(cartRepository.save).toHaveBeenCalled();
+      expect(result.adjusted).toEqual([]);
+    });
+
+    it('merge skips an unbuyable variant and keeps its existing line', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([
+        buyable(10, VARIANT_ID, ProductStatus.INACTIVE),
+        buyable(10, 'variant-live'),
+      ]);
+      const existing = lineOf(2);
+      cartItemRepository.findByVariants.mockResolvedValue([existing]);
+
+      const result = await merge(
+        [VARIANT_ID, 1],
+        ['variant-missing', 2],
+        ['variant-live', 1],
+      );
+
+      expect(existing.quantity).toBe(2);
+      expect(cartItemRepository.save).not.toHaveBeenCalledWith(
+        existing,
+        USER_ID,
+      );
+      expect(cartItemRepository.create).toHaveBeenCalledTimes(1);
+      expect(cartItemRepository.create).toHaveBeenCalledWith(
+        CART_ID,
+        'variant-live',
+        1,
+        USER_ID,
+      );
+      expect(result.adjusted).toEqual([
+        { productVariantId: VARIANT_ID, requestedQuantity: 1, quantity: 0 },
+        {
+          productVariantId: 'variant-missing',
+          requestedQuantity: 2,
+          quantity: 0,
+        },
+      ]);
+    });
+
+    it('merge lists a skipped line with quantity 0', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([
+        { ...buyable(5), deletedAt: new Date() } as ProductVariant,
+      ]);
+
+      const result = await merge([VARIANT_ID, 3]);
+
+      expect(result.adjusted).toEqual([
+        { productVariantId: VARIANT_ID, requestedQuantity: 3, quantity: 0 },
+      ]);
+      expect(cartItemRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('merge sums a repeated variant before capping', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([buyable(4)]);
+
+      const result = await merge([VARIANT_ID, 2], [VARIANT_ID, 3]);
+
+      expect(productVariantService.findManyWithProduct).toHaveBeenCalledWith([
+        VARIANT_ID,
+      ]);
+      expect(cartItemRepository.create).toHaveBeenCalledTimes(1);
+      expect(cartItemRepository.create).toHaveBeenCalledWith(
+        CART_ID,
+        VARIANT_ID,
+        4,
+        USER_ID,
+      );
+      expect(result.adjusted).toEqual([
+        { productVariantId: VARIANT_ID, requestedQuantity: 5, quantity: 4 },
+      ]);
+    });
+
+    it('merge matches a productVariantId sent in uppercase', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([buyable(5)]);
+
+      const result = await merge(
+        [VARIANT_ID.toUpperCase(), 1],
+        [VARIANT_ID, 1],
+      );
+
+      expect(productVariantService.findManyWithProduct).toHaveBeenCalledWith([
+        VARIANT_ID,
+      ]);
+      expect(cartItemRepository.create).toHaveBeenCalledWith(
+        CART_ID,
+        VARIANT_ID,
+        2,
+        USER_ID,
+      );
+      expect(result.adjusted).toEqual([]);
+    });
+
+    it('merge never lowers a line already above the stock', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([buyable(2)]);
+      const existing = lineOf(5);
+      cartItemRepository.findByVariants.mockResolvedValue([existing]);
+
+      const result = await merge([VARIANT_ID, 1]);
+
+      expect(existing.quantity).toBe(5);
+      expect(cartItemRepository.save).not.toHaveBeenCalled();
+      expect(cartRepository.save).not.toHaveBeenCalled();
+      expect(result.adjusted).toEqual([
+        { productVariantId: VARIANT_ID, requestedQuantity: 1, quantity: 0 },
+      ]);
+    });
+
+    it('merge creates no cart when no line can be written', async () => {
+      const empty = await service.merge(USER_ID, { items: [] });
+
+      expect(empty.adjusted).toEqual([]);
+
+      productVariantService.findManyWithProduct.mockResolvedValue([buyable(0)]);
+      const soldOut = await merge([VARIANT_ID, 2]);
+
+      expect(cartRepository.lockOrCreateForUser).not.toHaveBeenCalled();
+      expect(cartItemRepository.findByVariants).not.toHaveBeenCalled();
+      expect(cartRepository.save).not.toHaveBeenCalled();
+      expect(soldOut.adjusted).toEqual([
+        { productVariantId: VARIANT_ID, requestedQuantity: 2, quantity: 0 },
+      ]);
+    });
+
+    it('merge reads the lines after locking the cart', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([buyable(5)]);
+
+      await merge([VARIANT_ID, 1]);
+
+      expect(
+        cartRepository.lockOrCreateForUser.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        cartItemRepository.findByVariants.mock.invocationCallOrder[0],
+      );
+      expect(cartRepository.lockOrCreateForUser).toHaveBeenCalledWith(USER_ID);
+    });
+
+    it('merge runs in one transaction', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([
+        buyable(5),
+        buyable(5, OTHER_ID),
+      ]);
+
+      await merge([VARIANT_ID, 1], [OTHER_ID, 1]);
+
+      expect(cartRepository.transactional).toHaveBeenCalledTimes(1);
+      expect(cartItemRepository.findByVariants).toHaveBeenCalledTimes(1);
+      expect(cartItemRepository.findByVariants).toHaveBeenCalledWith(CART_ID, [
+        VARIANT_ID,
+        OTHER_ID,
+      ]);
+    });
+
+    it('merge returns the cart with adjusted', async () => {
+      productVariantService.findManyWithProduct.mockResolvedValue([buyable(5)]);
+
+      const result = await merge([VARIANT_ID, 1]);
+
+      expect(fromEntity).toHaveBeenCalledWith(readBack);
+      expect(result).toEqual({ ...response, adjusted: [] });
     });
   });
 });

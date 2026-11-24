@@ -17,6 +17,7 @@ describe('ProductVariantService', () => {
   let productVariantRepository: {
     findById: Mock;
     findWithProduct: Mock;
+    findManyWithProduct: Mock;
     findBySku: Mock;
     findAllByProduct: Mock;
     create: Mock;
@@ -46,6 +47,7 @@ describe('ProductVariantService', () => {
     productVariantRepository = {
       findById: vi.fn(),
       findWithProduct: vi.fn(),
+      findManyWithProduct: vi.fn(),
       findBySku: vi.fn(),
       findAllByProduct: vi.fn(),
       create: vi.fn(),
@@ -297,6 +299,27 @@ describe('ProductVariantService', () => {
         ItemNotFoundException,
       );
       expect(productVariantRepository.softDelete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findManyWithProduct', () => {
+    it('findManyWithProduct forwards the ids and returns the repository result', async () => {
+      const variants = [buildVariant({ id: 'v1' }), buildVariant({ id: 'v2' })];
+      productVariantRepository.findManyWithProduct.mockResolvedValue(variants);
+
+      await expect(service.findManyWithProduct(['v1', 'v2'])).resolves.toBe(
+        variants,
+      );
+      expect(productVariantRepository.findManyWithProduct).toHaveBeenCalledWith(
+        ['v1', 'v2'],
+      );
+    });
+
+    it('findManyWithProduct returns [] for no ids without a query', async () => {
+      await expect(service.findManyWithProduct([])).resolves.toEqual([]);
+      expect(
+        productVariantRepository.findManyWithProduct,
+      ).not.toHaveBeenCalled();
     });
   });
 

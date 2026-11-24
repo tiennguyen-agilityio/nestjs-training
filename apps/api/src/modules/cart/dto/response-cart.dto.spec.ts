@@ -6,7 +6,7 @@ import { Product } from '../../product/entities/product.entity.js';
 import { ProductImage } from '../../product-image/entities/product-image.entity.js';
 import { ProductVariant } from '../../product-variant/entities/product-variant.entity.js';
 import { User } from '../../user/entities/user.entity.js';
-import { ResponseCartDto } from './response-cart.dto.js';
+import { ResponseCartDto, ResponseMergedCartDto } from './response-cart.dto.js';
 
 const image = (url: string, isPrimary: boolean, deleted = false) =>
   Object.assign(new ProductImage(), {
@@ -142,5 +142,17 @@ describe('ResponseCartDto', () => {
         updatedAt: null,
       }),
     );
+  });
+
+  it('ResponseMergedCartDto.of keeps the cart fields and adds adjusted', () => {
+    const cart = ResponseCartDto.empty('user-1');
+    const adjusted = [
+      { productVariantId: 'variant-1', requestedQuantity: 4, quantity: 1 },
+    ];
+
+    const merged = ResponseMergedCartDto.of(cart, adjusted);
+
+    expect(merged).toBeInstanceOf(ResponseMergedCartDto);
+    expect(merged).toEqual({ ...cart, adjusted });
   });
 });

@@ -16,10 +16,15 @@ import { CartService } from '../services/cart.service.js';
 import {
   addCartItemSchema,
   type AddCartItemInput,
+  mergeCartSchema,
+  type MergeCartInput,
   updateCartItemSchema,
   type UpdateCartItemInput,
 } from '../dto/cart.schema.js';
-import { ResponseCartDto } from '../dto/response-cart.dto.js';
+import {
+  ResponseCartDto,
+  ResponseMergedCartDto,
+} from '../dto/response-cart.dto.js';
 import {
   idParamSchema,
   type IdParam,
@@ -110,6 +115,26 @@ export class CartController {
     @Body({ schema: addCartItemSchema }) dto: AddCartItemInput,
   ): Promise<ResponseCartDto> {
     return this.cartService.addItem(user.id, dto);
+  }
+
+  @Post('merge')
+  @ApiAuthErrors()
+  @HttpCode(HttpStatus.OK)
+  @IdempotentCreate()
+  @ApiOperation({
+    summary:
+      "Merge a guest cart into the signed-in user's cart (lines add up, capped at the stock; unbuyable variants are skipped)",
+  })
+  @ApiDataResponse(HttpStatus.OK, ResponseMergedCartDto)
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    ERROR_MESSAGES.EXCEPTION.VALIDATION_FAILED,
+  )
+  merge(
+    @AuthUser() user: User,
+    @Body({ schema: mergeCartSchema }) dto: MergeCartInput,
+  ): Promise<ResponseMergedCartDto> {
+    return this.cartService.merge(user.id, dto);
   }
 
   @Patch('items/:id')
