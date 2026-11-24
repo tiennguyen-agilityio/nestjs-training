@@ -1,3 +1,4 @@
+export * from './cart.js';
 export * from './category.js';
 export * from './product-image.js';
 export * from './product-variant.js';

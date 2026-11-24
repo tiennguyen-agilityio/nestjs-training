@@ -12,6 +12,13 @@ export class ProductVariantRepository extends BaseRepository<ProductVariant> {
     return this.findOneBy({ sku });
   }
 
+  findWithProduct(id: string): Promise<ProductVariant | null> {
+    return this.findOneBy(
+      { id },
+      { includeDeleted: true, relations: ['product'] },
+    );
+  }
+
   findAllByProduct(productId: string): Promise<ProductVariant[]> {
     return this.findMany({ where: { product: productId } });
   }

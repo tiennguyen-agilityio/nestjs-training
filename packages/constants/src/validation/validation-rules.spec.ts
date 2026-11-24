@@ -13,6 +13,7 @@ describe('VALIDATION_RULES', () => {
       },
       VARIANT: { MIN_COUNT: 1 },
       STOCK_QUANTITY: { MIN: 0 },
+      CART_QUANTITY: { MIN: 1 },
       PRICE: { MIN: 1, MAX: 99999999.99 },
       SIZE: { MIN: 1, MAX: 99999999.99 },
       DISCOUNT: { MIN: 0, MAX: 99999999.99, PERCENT_MAX: 100 },
@@ -36,6 +37,10 @@ describe('VALIDATION_RULES', () => {
     });
     expect(VALIDATION_RULES).not.toHaveProperty('WEIGHT');
     expect(VALIDATION_RULES).not.toHaveProperty('QUANTITY');
+  });
+
+  it('CART_QUANTITY.MIN is 1', () => {
+    expect(VALIDATION_RULES.CART_QUANTITY.MIN).toBe(1);
   });
 
   it('SHIPPING_PRICE allows 0 up to MAX_DECIMAL in cents', () => {

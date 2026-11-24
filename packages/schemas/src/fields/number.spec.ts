@@ -1,4 +1,5 @@
 import {
+  cartQuantityField,
   discountValueField,
   priceField,
   sizeField,
@@ -37,6 +38,22 @@ describe('number fields', () => {
     expect(stockQuantityField.safeParse(1.5).error?.issues[0]).toMatchObject({
       code: 'invalid_type',
       expected: 'int',
+    });
+  });
+
+  it('cartQuantityField accepts 1 and rejects 0, 1.5 and "2"', () => {
+    expect(cartQuantityField.safeParse(1).success).toBe(true);
+    expect(cartQuantityField.safeParse(0).error?.issues[0]).toMatchObject({
+      code: 'too_small',
+      minimum: 1,
+    });
+    expect(cartQuantityField.safeParse(1.5).error?.issues[0]).toMatchObject({
+      code: 'invalid_type',
+      expected: 'int',
+    });
+    expect(cartQuantityField.safeParse('2').error?.issues[0]).toMatchObject({
+      code: 'invalid_type',
+      expected: 'number',
     });
   });
 
