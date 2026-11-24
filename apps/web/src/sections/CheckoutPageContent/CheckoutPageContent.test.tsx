@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ShippingMethodStatus } from '@repo/constants'
 
 import { useAuth } from '@/hooks/useAuth'
+import { useCart, type UseCartResult } from '@/hooks/useCart'
 import {
   useActiveShippingMethods,
   type UseActiveShippingMethodsResult,
@@ -39,6 +40,7 @@ jest.mock('@/components/CheckoutShippingMethods', () => {
   }
 })
 jest.mock('@/store/useCartStore', () => ({ useCartStore: jest.fn() }))
+jest.mock('@/hooks/useCart', () => ({ useCart: jest.fn() }))
 jest.mock('@/hooks/useAuth', () => ({ useAuth: jest.fn() }))
 jest.mock('@/hooks/useShippingMethod', () => ({
   useActiveShippingMethods: jest.fn(),
@@ -51,7 +53,8 @@ jest.mock('@/services/mapboxGeocode', () => ({
 }))
 
 const mockUseRouter = jest.mocked(useRouter)
-const mockUseCart = jest.mocked(useCartStore)
+const mockUseCartStore = jest.mocked(useCartStore)
+const mockUseCart = jest.mocked(useCart)
 const mockUseAuth = jest.mocked(useAuth)
 const mockUseShippingMethods = jest.mocked(useActiveShippingMethods)
 
@@ -75,6 +78,7 @@ const express: ShippingMethod = {
 }
 
 const setItemSnapshots = jest.fn()
+const clearCart = jest.fn()
 
 const cartResult = {
   items: [
@@ -91,14 +95,16 @@ const cartResult = {
     },
   ],
   totals: { subtotal: 24, shipping: null, tax: 0, total: 24 },
+  itemCount: 1,
+  isServerCart: true,
   isLoading: false,
   isError: false,
   errorMessage: null,
   refetch: jest.fn(),
-  clearCart: jest.fn(),
-  setItemSnapshots,
-  removeItem: jest.fn(),
-}
+  addItem: jest.fn(async () => ({ ok: true as const })),
+  changeQuantity: jest.fn(async () => ({ ok: true as const })),
+  removeItem: jest.fn(async () => ({ ok: true as const })),
+} satisfies UseCartResult
 
 const shippingResult = (
   overrides: Partial<UseActiveShippingMethodsResult> = {},
@@ -128,6 +134,7 @@ describe('CheckoutPageContent', () => {
       push: jest.fn(),
     } as unknown as ReturnType<typeof useRouter>)
     mockUseCart.mockReturnValue(cartResult)
+    mockUseCartStore.mockReturnValue({ clearCart, setItemSnapshots })
     mockUseAuth.mockReturnValue({ user: null } as unknown as ReturnType<
       typeof useAuth
     >)
@@ -289,5 +296,73 @@ describe('CheckoutPageContent', () => {
         shippingFee: 12,
       }),
     )
+  })
+
+  it("lists the server cart's lines in the order summary", () => {
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    render(<CheckoutPageContent />)
+
+    expect(screen.getByText('Ethiopian Yirgacheffe')).toBeInTheDocument()
+    expect(placeOrderButton()).toBeEnabled()
+  })
+
+  it('disables Place Order when a server line is unavailable', () => {
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    mockUseCart.mockReturnValue({
+      ...cartResult,
+      items: cartResult.items.map((item) => ({ ...item, isUnavailable: true })),
+    })
+
+    render(<CheckoutPageContent />)
+
+    expect(placeOrderButton()).toBeDisabled()
+  })
+
+  it('disables Place Order while the cart loads', () => {
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    mockUseCart.mockReturnValue({ ...cartResult, isLoading: true })
+
+    render(<CheckoutPageContent />)
+
+    expect(screen.queryByRole('button', { name: /place order/i })).toBeNull()
+  })
+
+  it('disables Place Order when a server line is above the stock', () => {
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    mockUseCart.mockReturnValue({
+      ...cartResult,
+      items: cartResult.items.map((item) => ({ ...item, exceedsStock: true })),
+    })
+
+    render(<CheckoutPageContent />)
+
+    expect(placeOrderButton()).toBeDisabled()
+  })
+
+  it('sends one removal at a time for a line', async () => {
+    const user = userEvent.setup()
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    const removeItem = jest.fn(() => new Promise<{ ok: true }>(() => undefined))
+    mockUseCart.mockReturnValue({ ...cartResult, removeItem })
+
+    render(<CheckoutPageContent />)
+    const remove = screen.getByRole('button', {
+      name: 'Remove Ethiopian Yirgacheffe from order',
+    })
+    await user.click(remove)
+    await user.click(remove)
+
+    expect(removeItem).toHaveBeenCalledTimes(1)
   })
 })

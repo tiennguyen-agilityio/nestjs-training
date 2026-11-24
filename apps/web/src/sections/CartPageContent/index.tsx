@@ -2,37 +2,83 @@
 
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import AlertDialog from '@/components/AlertDialog'
 import { CartLineItem } from '@/components/CartLineItem'
 import { CartSummaryCard } from '@/components/CartSummaryCard'
 import { Button } from '@/components/ui/button'
+import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { CART_CHECKOUT_BLOCKED_MESSAGE } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
+import { useCart, type CartActionResult } from '@/hooks/useCart'
 import { useCartStore } from '@/store/useCartStore'
 import type { CartItem } from '@/types/cart'
 import { formatCurrency } from '@/utils/cart'
-import { isCartItemOutOfStock } from '@/utils/inventory'
+import { isCartItemBlocked } from '@/utils/inventory'
 
 export default function CartPageContent() {
   const router = useRouter()
   const [pendingRemoveItem, setPendingRemoveItem] = useState<CartItem | null>(
     null,
   )
+  const [actionError, setActionError] = useState<string | null>(null)
   const {
     items,
     totals,
+    itemCount,
     isLoading,
     isError,
     errorMessage,
     changeQuantity,
     removeItem,
     refetch,
-  } = useCartStore()
+  } = useCart()
+  const mergeNotice = useCartStore((state) => state.mergeNotice)
+  const setMergeNotice = useCartStore((state) => state.setMergeNotice)
+
+  // The merge notice is shown once, on this visit to the Cart page. The clear
+  // waits a tick: Strict Mode's simulated unmount remounts at once and cancels it.
+  const pendingNoticeClear = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (pendingNoticeClear.current) clearTimeout(pendingNoticeClear.current)
+    return () => {
+      pendingNoticeClear.current = setTimeout(() => setMergeNotice(null), 0)
+    }
+  }, [setMergeNotice])
+
+  // One request at a time per line: a click while it runs would send a stale value.
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set())
+
+  const runForLine = (
+    itemId: string,
+    action: () => Promise<CartActionResult>,
+    fallbackError: string,
+  ) => {
+    if (pendingIds.has(itemId)) return
+    setPendingIds((current) => new Set(current).add(itemId))
+    void action()
+      .then((result) => setActionError(result.ok ? null : result.error))
+      .catch(() => setActionError(fallbackError))
+      .finally(() =>
+        setPendingIds((current) => {
+          const next = new Set(current)
+          next.delete(itemId)
+          return next
+        }),
+      )
+  }
+
+  const handleChangeQuantity = (itemId: string, quantity: number) => {
+    runForLine(
+      itemId,
+      () => changeQuantity(itemId, quantity),
+      API_FALLBACK_ERRORS.CART_UPDATE,
+    )
+  }
 
   const hasItems = items.length > 0
-  const hasOutOfStockItems = items.some(isCartItemOutOfStock)
+  const hasOutOfStockItems = items.some(isCartItemBlocked)
 
   const handleCheckout = () => {
     if (hasOutOfStockItems) {
@@ -100,7 +146,11 @@ export default function CartPageContent() {
         onClickAction={() => {
           const itemId = pendingRemoveItem?.id
           if (!itemId) return
-          removeItem(itemId)
+          runForLine(
+            itemId,
+            () => removeItem(itemId),
+            API_FALLBACK_ERRORS.CART_REMOVE,
+          )
           setPendingRemoveItem(null)
         }}
       >
@@ -133,10 +183,20 @@ export default function CartPageContent() {
         </h1>
         <p className="text-lg text-on-surface-variant">
           {hasItems
-            ? `${items.length} items selected for your next brewing experience.`
+            ? `${itemCount} items selected for your next brewing experience.`
             : 'No items selected for your next brewing experience.'}
         </p>
       </section>
+
+      {mergeNotice ? (
+        <div
+          className="mt-6 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          data-testid="cart-merge-notice"
+          role="alert"
+        >
+          {mergeNotice}
+        </div>
+      ) : null}
 
       {!hasItems ? (
         <section className="mt-10 rounded-3xl border border-outline-variant/70 bg-surface-container-low p-10 text-center">
@@ -153,6 +213,15 @@ export default function CartPageContent() {
         </section>
       ) : (
         <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          {actionError ? (
+            <div
+              className="lg:col-span-2 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              data-testid="cart-action-error"
+              role="alert"
+            >
+              {actionError}
+            </div>
+          ) : null}
           {hasOutOfStockItems ? (
             <div
               className="lg:col-span-2 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
@@ -167,7 +236,8 @@ export default function CartPageContent() {
               <CartLineItem
                 key={item.id}
                 item={item}
-                onChangeQuantity={changeQuantity}
+                onChangeQuantity={handleChangeQuantity}
+                disabled={pendingIds.has(item.id)}
                 onRemove={() => setPendingRemoveItem(item)}
               />
             ))}

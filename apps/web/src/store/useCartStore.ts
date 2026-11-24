@@ -1,5 +1,7 @@
 'use client'
 
+import type { MergeCartPayload } from '@repo/schemas'
+import { v4 as uuidv4 } from 'uuid'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
@@ -27,6 +29,9 @@ const sanitizeItems = (items: unknown): CartItem[] => {
     }))
 }
 
+/** The `Idempotency-Key` of each merge request, by the JSON of the lines it sends. */
+type MergeKeys = Record<string, string>
+
 interface CartStoreState {
   items: CartItem[]
   totals: CartTotals
@@ -35,6 +40,9 @@ interface CartStoreState {
   isError: boolean
   errorMessage: string | null
   itemSnapshots: Order | null
+  mergeKeys: MergeKeys | null
+  mergeNotice: string | null
+  isMerging: boolean
   addItem: (item: CartAddItemInput) => void
   changeQuantity: (itemId: string, amount: number) => void
   removeItem: (itemId: string) => void
@@ -42,6 +50,14 @@ interface CartStoreState {
   setItemSnapshots: (snapshot: Order) => void
   clearItemSnapshots: () => void
   refetch: () => void
+  /** A chunk unchanged since the last call keeps its key; any other gets a new uuid v4. */
+  mergeKeysFor: (chunks: MergeCartPayload[]) => string[]
+  /** After one chunk merged: its lines and its key leave the browser cart. */
+  removeMergedLines: (chunk: MergeCartPayload) => void
+  /** After `POST /cart/merge` succeeds: the browser cart and its keys are gone. */
+  clearMergedCart: () => void
+  setMergeNotice: (notice: string | null) => void
+  setMerging: (value: boolean) => void
 }
 
 const toStateWithItems = (items: CartItem[]) => ({
@@ -51,13 +67,16 @@ const toStateWithItems = (items: CartItem[]) => ({
 
 export const useCartStore = create<CartStoreState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...toStateWithItems([]),
       hasHydrated: false,
       isLoading: true,
       isError: false,
       errorMessage: null,
       itemSnapshots: null,
+      mergeKeys: null,
+      mergeNotice: null,
+      isMerging: false,
       addItem: (nextItem) =>
         set((state) => {
           const existing = state.items.find(
@@ -135,6 +154,39 @@ export const useCartStore = create<CartStoreState>()(
           errorMessage: null,
           isError: false,
         })),
+      mergeKeysFor: (chunks) => {
+        const stored = get().mergeKeys ?? {}
+        const next: MergeKeys = {}
+        const keys = chunks.map((chunk) => {
+          const payload = JSON.stringify(chunk)
+          const key = stored[payload] ?? next[payload] ?? uuidv4()
+          next[payload] = key
+          return key
+        })
+        set(() => ({ mergeKeys: next }))
+        return keys
+      },
+      removeMergedLines: (chunk) =>
+        set((state) => {
+          const merged = new Set(
+            chunk.items.map((item) => item.productVariantId),
+          )
+          const { [JSON.stringify(chunk)]: _merged, ...mergeKeys } =
+            state.mergeKeys ?? {}
+          return {
+            ...toStateWithItems(
+              state.items.filter((item) => !merged.has(item.variantId)),
+            ),
+            mergeKeys,
+          }
+        }),
+      clearMergedCart: () =>
+        set(() => ({
+          ...toStateWithItems([]),
+          mergeKeys: null,
+        })),
+      setMergeNotice: (notice) => set(() => ({ mergeNotice: notice })),
+      setMerging: (value) => set(() => ({ isMerging: value })),
     }),
     {
       name: CART_STORAGE_KEY,
@@ -142,6 +194,7 @@ export const useCartStore = create<CartStoreState>()(
       partialize: (state) => ({
         items: state.items,
         itemSnapshots: state.itemSnapshots,
+        mergeKeys: state.mergeKeys,
       }),
       onRehydrateStorage: () => (state, error) => {
         if (!state) return
@@ -159,6 +212,8 @@ export const useCartStore = create<CartStoreState>()(
           const sanitizedItems = sanitizeItems(state?.items)
           state.items = sanitizedItems
           state.itemSnapshots = state.itemSnapshots
+          // Carts saved before the merge keys existed have none.
+          state.mergeKeys = state.mergeKeys ?? null
           state.totals = buildCartTotals(sanitizedItems)
           state.hasHydrated = true
           state.isLoading = false

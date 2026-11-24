@@ -9,6 +9,7 @@ import { UserRole } from '@repo/constants'
 import { ROUTES } from '@/constants/routes'
 import Header from '@/layouts/Header'
 import { useAuth } from '@/hooks/useAuth'
+import { useCart, type UseCartResult } from '@/hooks/useCart'
 
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
@@ -33,6 +34,10 @@ jest.mock('@clerk/nextjs', () => ({
 
 jest.mock('@/hooks/useAuth', () => ({
   useAuth: jest.fn(),
+}))
+
+jest.mock('@/hooks/useCart', () => ({
+  useCart: jest.fn(),
 }))
 
 const DASHBOARD = 'Go to Dashboard'
@@ -84,6 +89,24 @@ describe('Header', () => {
     } as unknown as ReturnType<typeof useRouter>)
     jest.mocked(usePathname).mockReturnValue('/')
     mockProfile({})
+    jest
+      .mocked(useCart)
+      .mockReturnValue({ itemCount: 0 } as unknown as UseCartResult)
+  })
+
+  it('shows the total quantity of the available lines', () => {
+    mockSession({ role: UserRole.USER })
+    jest
+      .mocked(useCart)
+      .mockReturnValue({ itemCount: 5 } as unknown as UseCartResult)
+
+    render(<Header />)
+
+    const cartLink = screen.getByRole('link', {
+      name: 'Shopping cart, 5 items',
+    })
+    expect(cartLink).toHaveAttribute('href', ROUTES.CART)
+    expect(within(cartLink).getByText('5')).toBeInTheDocument()
   })
 
   it('shows Go to Dashboard for an admin session', async () => {

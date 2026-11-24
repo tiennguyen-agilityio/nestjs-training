@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react'
 
 import { Quantity } from '@/components/Quantity'
 import { Button } from '@/components/ui/button'
+import { ERROR_MESSAGES } from '@/constants/messages'
 import { OUT_OF_STOCK_LABEL } from '@/constants/order'
 import type { CartItem } from '@/types/cart'
 import { formatCurrency } from '@/utils/cart'
@@ -57,6 +58,28 @@ export function CartLineItem({
                 {OUT_OF_STOCK_LABEL}
               </p>
             ) : null}
+            {item.exceedsStock ? (
+              <p
+                className="flex flex-wrap items-center gap-x-2 text-sm font-semibold text-destructive"
+                role="status"
+              >
+                <span>
+                  {ERROR_MESSAGES.CART_LINE_EXCEEDS_STOCK(
+                    maxQuantity,
+                    item.quantity,
+                  )}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto w-auto px-0 py-0 text-sm font-bold text-primary"
+                  onClick={() => onChangeQuantity(item.id, maxQuantity)}
+                  disabled={disabled}
+                >
+                  Change to {maxQuantity}
+                </Button>
+              </p>
+            ) : null}
           </div>
           <p className="shrink-0 text-2xl font-bold text-primary">
             {formatCurrency(item.unitPrice)}
@@ -68,10 +91,11 @@ export function CartLineItem({
             value={item.quantity}
             min={1}
             max={maxQuantity}
+            // A line above the stock steps straight down to the stock left.
             onChange={(amount) => {
-              onChangeQuantity(item.id, amount)
+              onChangeQuantity(item.id, Math.min(amount, maxQuantity))
             }}
-            disabled={lineOutOfStock}
+            disabled={disabled || lineOutOfStock}
           />
 
           <Button

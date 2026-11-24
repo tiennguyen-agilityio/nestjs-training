@@ -21,6 +21,11 @@ jest.mock('@/hooks/useProduct', () => ({
   useProductById: jest.fn(),
 }))
 
+// ProductPurchasePanel adds to the cart through useCart (Clerk + the API).
+jest.mock('@/hooks/useCart', () => ({
+  useCart: () => ({ addItem: jest.fn(async () => ({ ok: true })) }),
+}))
+
 jest.mock('next/image', () => ({
   __esModule: true,
   default: ({
