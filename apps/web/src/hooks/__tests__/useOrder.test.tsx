@@ -2,11 +2,12 @@ import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuth } from '@clerk/nextjs'
-import { OrderStatus, PaymentMethod } from '@repo/constants'
+import { OrderPaymentStatus, OrderStatus, PaymentMethod } from '@repo/constants'
 import type { PlaceOrderPayload } from '@repo/schemas'
 
 import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
+import { ORDER_PAYMENT_POLL } from '@/constants/order'
 import {
   orderDetailRetry,
   ordersQueryKeys,
@@ -441,5 +442,155 @@ describe('useOrderDetail', () => {
       'CH-1',
       expect.objectContaining({ getToken: expect.any(Function) }),
     )
+  })
+})
+
+describe('useOrderDetail polling', () => {
+  const pending = {
+    ...detail,
+    paymentStatus: OrderPaymentStatus.PENDING,
+  } as OrderDetail
+  const paid = {
+    ...detail,
+    paymentStatus: OrderPaymentStatus.PAID,
+  } as OrderDetail
+
+  const advance = (ms: number) =>
+    act(async () => {
+      await jest.advanceTimersByTimeAsync(ms)
+    })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.useFakeTimers()
+    signedIn()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('without a poll option it fetches once', async () => {
+    mockFetchOrderDetail.mockResolvedValue({ ok: true, order: pending })
+    const { result } = renderWithClient(() => useOrderDetail('o-1'))
+
+    await advance(ORDER_PAYMENT_POLL.INTERVAL_MS * 3)
+
+    expect(result.current.order).toEqual(pending)
+    expect(mockFetchOrderDetail).toHaveBeenCalledTimes(1)
+    expect(result.current.isPollExhausted).toBe(false)
+  })
+
+  it('polls while pollWhile holds, at most ORDER_PAYMENT_POLL.MAX_TRIES times', async () => {
+    mockFetchOrderDetail.mockResolvedValue({ ok: true, order: pending })
+    const { result } = renderWithClient(() =>
+      useOrderDetail('o-1', { pollWhile: () => true }),
+    )
+
+    await advance(
+      ORDER_PAYMENT_POLL.INTERVAL_MS * (ORDER_PAYMENT_POLL.MAX_TRIES + 3),
+    )
+
+    expect(mockFetchOrderDetail).toHaveBeenCalledTimes(
+      1 + ORDER_PAYMENT_POLL.MAX_TRIES,
+    )
+    expect(result.current.isPollExhausted).toBe(true)
+  })
+
+  it('counts polls from mount, not the cached query updates', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    for (let i = 0; i < ORDER_PAYMENT_POLL.MAX_TRIES + 2; i += 1) {
+      client.setQueryData(ordersQueryKeys.detail('u1', 'o-1'), pending)
+    }
+    mockFetchOrderDetail.mockResolvedValue({ ok: true, order: pending })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    const { result } = renderHook(
+      () => useOrderDetail('o-1', { pollWhile: () => true }),
+      { wrapper },
+    )
+
+    expect(result.current.isPollExhausted).toBe(false)
+    await advance(
+      ORDER_PAYMENT_POLL.INTERVAL_MS * (ORDER_PAYMENT_POLL.MAX_TRIES + 3),
+    )
+
+    expect(mockFetchOrderDetail).toHaveBeenCalledTimes(
+      ORDER_PAYMENT_POLL.MAX_TRIES,
+    )
+    expect(result.current.isPollExhausted).toBe(true)
+  })
+
+  it('failed polls count toward the limit', async () => {
+    mockFetchOrderDetail
+      .mockResolvedValueOnce({ ok: true, order: pending })
+      .mockResolvedValue({
+        ok: false,
+        error: { statusCode: 500, message: API_FALLBACK_ERRORS.ORDER_LOAD },
+      })
+    const { result } = renderWithClient(() =>
+      useOrderDetail('o-1', { pollWhile: () => true }),
+    )
+
+    await advance(
+      ORDER_PAYMENT_POLL.INTERVAL_MS * (ORDER_PAYMENT_POLL.MAX_TRIES * 3),
+    )
+    await advance(ORDER_PAYMENT_POLL.INTERVAL_MS * 5)
+
+    expect(mockFetchOrderDetail).toHaveBeenCalledTimes(
+      1 + 2 * ORDER_PAYMENT_POLL.MAX_TRIES,
+    )
+    expect(result.current.isPollExhausted).toBe(true)
+    expect(result.current.order).toEqual(pending)
+  })
+
+  it('failed loads before the first data do not use the poll budget', async () => {
+    const failure = {
+      ok: false as const,
+      error: { statusCode: 500, message: API_FALLBACK_ERRORS.ORDER_LOAD },
+    }
+    mockFetchOrderDetail
+      .mockResolvedValueOnce(failure)
+      .mockResolvedValueOnce(failure)
+      .mockResolvedValue({ ok: true, order: pending })
+    const { result } = renderWithClient(() =>
+      useOrderDetail('o-1', { pollWhile: () => true }),
+    )
+    await advance(ORDER_PAYMENT_POLL.INTERVAL_MS)
+    expect(result.current.isError).toBe(true)
+
+    await act(async () => {
+      await result.current.refetch()
+    })
+    const callsAtFirstData = mockFetchOrderDetail.mock.calls.length
+    await advance(
+      ORDER_PAYMENT_POLL.INTERVAL_MS * (ORDER_PAYMENT_POLL.MAX_TRIES + 3),
+    )
+
+    expect(mockFetchOrderDetail).toHaveBeenCalledTimes(
+      callsAtFirstData + ORDER_PAYMENT_POLL.MAX_TRIES,
+    )
+    expect(result.current.isPollExhausted).toBe(true)
+  })
+
+  it('stops polling once pollWhile is false', async () => {
+    mockFetchOrderDetail
+      .mockResolvedValueOnce({ ok: true, order: pending })
+      .mockResolvedValueOnce({ ok: true, order: pending })
+      .mockResolvedValue({ ok: true, order: paid })
+    const { result } = renderWithClient(() =>
+      useOrderDetail('o-1', {
+        pollWhile: (o) => o.paymentStatus === OrderPaymentStatus.PENDING,
+      }),
+    )
+
+    await advance(ORDER_PAYMENT_POLL.INTERVAL_MS * 6)
+
+    expect(mockFetchOrderDetail).toHaveBeenCalledTimes(3)
+    expect(result.current.order?.paymentStatus).toBe(OrderPaymentStatus.PAID)
+    expect(result.current.isPollExhausted).toBe(false)
   })
 })

@@ -26,10 +26,11 @@ import {
   SUCCESS_MESSAGES,
 } from '@/constants/messages'
 import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
-import { ROUTES } from '@/constants/routes'
+import { orderSuccessPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart } from '@/hooks/useCart'
 import { useCreateOrder } from '@/hooks/useOrder'
+import { useStartPayment } from '@/hooks/usePayment'
 import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
 import { parseCheckoutValues } from '@/schemas/checkout'
 import {
@@ -52,6 +53,7 @@ import {
   buildPlaceOrderPayload,
   mapItemFieldErrorsToLineIdMessages,
   omitSubmitErrorsForRemovedLine,
+  paymentErrorMessage,
   PLACE_ORDER_ERR_CODES,
   tagItemErrorsWithLineRefs,
 } from '@/utils/order'
@@ -148,6 +150,7 @@ const CheckoutPageContent = () => {
   const { getToken } = useClerkAuth()
   const { user } = useAuth()
   const { mutateAsync: createOrder } = useCreateOrder()
+  const { mutateAsync: startPayment } = useStartPayment()
 
   const [values, setValues] = useState<CheckoutFormValues>(DEFAULT_VALUES)
   const [fieldErrors, setFieldErrors] = useState<CheckoutFieldErrors>({})
@@ -384,6 +387,18 @@ const CheckoutPageContent = () => {
     }
   }, [values.addressLine])
 
+  const payPlacedOrder = async (orderId: string) => {
+    try {
+      const checkout = await startPayment(orderId)
+      router.replace(checkout.checkoutUrl)
+    } catch (error) {
+      const errCode =
+        error instanceof ServiceError ? error.errors[0]?.errCode : undefined
+      toast.error(paymentErrorMessage(errCode))
+      router.push(orderSuccessPath(orderId, errCode ?? 'unknown'))
+    }
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSubmitErrors(null)
@@ -420,6 +435,12 @@ const CheckoutPageContent = () => {
         getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
       })
       setItemSnapshots(order)
+      if (result.data.paymentMethod === PAYMENT_METHOD.STRIPE) {
+        setHasPlacedOrder(true)
+        void queryClient.invalidateQueries({ queryKey: cartQueryKeys.root })
+        await payPlacedOrder(order.id)
+        return
+      }
       toast.success(SUCCESS_MESSAGES.ORDER_PLACED, {
         description: SUCCESS_MESSAGES.ORDER_TOTAL(
           formatCurrency(order.totalAmount),

@@ -1,17 +1,29 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type React from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   OrderPaymentStatus,
   OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
   ShippingStatus,
 } from '@repo/constants'
 
+import { API_FALLBACK_ERRORS, NOTICE_MESSAGES } from '@/constants/messages'
+import { useOrderDetail, type UseOrderDetailResult } from '@/hooks/useOrder'
+import { useStartPayment } from '@/hooks/usePayment'
 import OrderSuccessPageContent from '@/sections/OrderSuccessPageContent'
 import { useCartStore } from '@/store/useCartStore'
 import type { PlacedOrder } from '@/types/order'
 
-jest.mock('next/navigation', () => ({ useRouter: jest.fn() }))
+jest.mock('next/navigation', () => ({
+  useRouter: jest.fn(),
+  useSearchParams: jest.fn(),
+}))
+jest.mock('@/hooks/useOrder', () => ({ useOrderDetail: jest.fn() }))
+jest.mock('@/hooks/usePayment', () => ({ useStartPayment: jest.fn() }))
 jest.mock('next/image', () => ({
   __esModule: true,
   default: ({
@@ -71,11 +83,69 @@ const withSnapshot = (itemSnapshots: unknown) =>
     clearItemSnapshots: jest.fn(),
   })
 
+const mockUseOrderDetail = jest.mocked(useOrderDetail)
+
+const detailState = (
+  overrides: Partial<UseOrderDetailResult> = {},
+): UseOrderDetailResult => ({
+  order: null,
+  isLoading: false,
+  isError: false,
+  isNotFound: false,
+  errorMessage: null,
+  refetch: jest.fn(),
+  isPollExhausted: false,
+  ...overrides,
+})
+
+const withParams = (query: string) =>
+  jest
+    .mocked(useSearchParams)
+    .mockReturnValue(
+      new URLSearchParams(query) as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    )
+
+const cardOrder = (paymentStatus: OrderPaymentStatus): PlacedOrder => ({
+  ...order,
+  paymentStatus,
+  payments: [
+    {
+      id: 'pay-1',
+      orderId: 'order-1',
+      type: PaymentType.CHARGE,
+      method: PaymentMethod.CARD,
+      status: PaymentStatus.PENDING,
+      amount: 87.24,
+      currency: 'usd',
+      transactionId: null,
+      completedAt: null,
+      failureReason: null,
+      createdAt: '2026-11-24T10:00:00.000Z',
+      updatedAt: '2026-11-24T10:00:00.000Z',
+    },
+  ],
+})
+
+const pollWhileOf = () => mockUseOrderDetail.mock.calls.at(-1)?.[1]?.pollWhile
+
+const paymentRegion = () => screen.getByRole('region', { name: 'Payment' })
+
 describe('OrderSuccessPageContent', () => {
   beforeEach(() => {
     jest.mocked(useRouter).mockReturnValue({
       push: jest.fn(),
+      replace: jest.fn(),
     } as unknown as ReturnType<typeof useRouter>)
+    jest.mocked(useStartPayment).mockReturnValue({
+      mutateAsync: jest.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useStartPayment>)
+    mockUseOrderDetail.mockReset()
+    mockUseOrderDetail.mockReturnValue(detailState())
+    withParams('')
+    withSnapshot(null)
   })
 
   it('renders the order number, items and totals from the PlacedOrder', () => {
@@ -122,5 +192,144 @@ describe('OrderSuccessPageContent', () => {
     expect(
       screen.getByRole('heading', { name: 'Order Summary Unavailable' }),
     ).toBeInTheDocument()
+  })
+
+  it('with orderId it reads the order from the API and shows its payment status', () => {
+    withParams('orderId=o-1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({ order: cardOrder(OrderPaymentStatus.PENDING) }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(mockUseOrderDetail).toHaveBeenCalledWith('o-1', expect.any(Object))
+    expect(screen.getByText('Order ID: NB-000123')).toBeInTheDocument()
+    expect(screen.getByText('Las Hermanas')).toBeInTheDocument()
+    expect(within(paymentRegion()).getByText('Pending')).toBeInTheDocument()
+    expect(
+      within(paymentRegion()).getByRole('button', { name: 'Pay now' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows Paid once a poll returns PAID', () => {
+    withParams('orderId=o-1&session_id=cs_1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({ order: cardOrder(OrderPaymentStatus.PENDING) }),
+    )
+    const { rerender } = render(<OrderSuccessPageContent />)
+
+    expect(
+      within(paymentRegion()).getByText(
+        NOTICE_MESSAGES.ORDER_PAYMENT.CONFIRMING,
+      ),
+    ).toBeInTheDocument()
+    const pollWhile = pollWhileOf()
+    expect(pollWhile?.(cardOrder(OrderPaymentStatus.PENDING))).toBe(true)
+    expect(pollWhile?.(cardOrder(OrderPaymentStatus.FAILED))).toBe(true)
+    expect(pollWhile?.(cardOrder(OrderPaymentStatus.PAID))).toBe(false)
+
+    mockUseOrderDetail.mockReturnValue(
+      detailState({ order: cardOrder(OrderPaymentStatus.PAID) }),
+    )
+    rerender(<OrderSuccessPageContent />)
+
+    expect(within(paymentRegion()).getByText('Paid')).toBeInTheDocument()
+    expect(
+      within(paymentRegion()).getByText(NOTICE_MESSAGES.ORDER_PAYMENT.PAID),
+    ).toBeInTheDocument()
+  })
+
+  it('without session_id an unfinished payment shows Payment not completed and Pay now', () => {
+    withParams('orderId=o-1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({ order: cardOrder(OrderPaymentStatus.PENDING) }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      within(paymentRegion()).getByText(
+        NOTICE_MESSAGES.ORDER_PAYMENT.NOT_COMPLETED,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(paymentRegion()).getByRole('button', { name: 'Pay now' }),
+    ).toBeInTheDocument()
+    expect(pollWhileOf()?.(cardOrder(OrderPaymentStatus.PENDING))).toBe(false)
+  })
+
+  it('a 404 for orderId shows Order Summary Unavailable', () => {
+    withParams('orderId=o-404')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({
+        isNotFound: true,
+        isError: true,
+        errorMessage: API_FALLBACK_ERRORS.ORDER_LOAD,
+      }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      screen.getByRole('heading', { name: 'Order Summary Unavailable' }),
+    ).toBeInTheDocument()
+  })
+
+  it('a 404 during a poll keeps the order on screen', () => {
+    withParams('orderId=o-1&session_id=cs_1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({
+        order: cardOrder(OrderPaymentStatus.PENDING),
+        isNotFound: true,
+        isError: true,
+        errorMessage: API_FALLBACK_ERRORS.ORDER_LOAD,
+      }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(screen.getByText('Order ID: NB-000123')).toBeInTheDocument()
+    expect(paymentRegion()).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Order Summary Unavailable' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('a failed poll keeps the order on screen', () => {
+    withParams('orderId=o-1&session_id=cs_1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({
+        order: cardOrder(OrderPaymentStatus.PENDING),
+        isError: true,
+        errorMessage: API_FALLBACK_ERRORS.ORDER_LOAD,
+      }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(screen.getByText('Order ID: NB-000123')).toBeInTheDocument()
+    expect(paymentRegion()).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Try again' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('a load error shows its message and Try again refetches', async () => {
+    const user = userEvent.setup()
+    const refetch = jest.fn()
+    withParams('orderId=o-1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({
+        isError: true,
+        errorMessage: API_FALLBACK_ERRORS.ORDER_LOAD,
+        refetch,
+      }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(screen.getByText(API_FALLBACK_ERRORS.ORDER_LOAD)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalled()
   })
 })

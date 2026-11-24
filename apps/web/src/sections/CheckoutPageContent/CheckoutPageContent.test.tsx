@@ -17,10 +17,11 @@ import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
 } from '@/constants/messages'
-import { ROUTES } from '@/constants/routes'
+import { orderSuccessPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart, type UseCartResult } from '@/hooks/useCart'
 import { useCreateOrder } from '@/hooks/useOrder'
+import { useStartPayment } from '@/hooks/usePayment'
 import {
   useActiveShippingMethods,
   type UseActiveShippingMethodsResult,
@@ -62,6 +63,7 @@ jest.mock('@/hooks/useCart', () => ({
   cartQueryKeys: { root: ['cart'], detail: (id: string) => ['cart', id] },
 }))
 jest.mock('@/hooks/useOrder', () => ({ useCreateOrder: jest.fn() }))
+jest.mock('@/hooks/usePayment', () => ({ useStartPayment: jest.fn() }))
 jest.mock('@clerk/nextjs', () => ({
   useAuth: () => ({ getToken: jest.fn().mockResolvedValue('session-token') }),
 }))
@@ -83,7 +85,14 @@ const mockUseAuth = jest.mocked(useAuth)
 const mockUseShippingMethods = jest.mocked(useActiveShippingMethods)
 const mockUseCreateOrder = jest.mocked(useCreateOrder)
 const mutateAsync = jest.fn()
+const startPaymentMutate = jest.fn()
 const push = jest.fn()
+const replace = jest.fn()
+const checkout = {
+  paymentId: 'p-1',
+  checkoutUrl: 'https://checkout.stripe.com/c/s',
+  expiresAt: '2026-11-25T00:00:00.000Z',
+}
 
 let queryClient: QueryClient
 let invalidateQueries: jest.SpyInstance
@@ -217,6 +226,9 @@ const deliverySpeed = () =>
 const totalText = () =>
   screen.getByText('Total').nextElementSibling?.textContent ?? ''
 
+const pickCashOnDelivery = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByRole('radio', { name: /cash on delivery/i }))
+
 const placeOrderButton = () =>
   screen.getByRole('button', { name: /place order/i })
 
@@ -225,8 +237,12 @@ describe('CheckoutPageContent', () => {
     setItemSnapshots.mockClear()
     clearCart.mockClear()
     push.mockClear()
+    replace.mockClear()
     mutateAsync.mockReset()
+    startPaymentMutate.mockReset()
+    startPaymentMutate.mockResolvedValue(checkout)
     jest.mocked(toast.success).mockClear()
+    jest.mocked(toast.error).mockClear()
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -236,7 +252,11 @@ describe('CheckoutPageContent', () => {
     } as unknown as ReturnType<typeof useCreateOrder>)
     mockUseRouter.mockReturnValue({
       push,
+      replace,
     } as unknown as ReturnType<typeof useRouter>)
+    jest.mocked(useStartPayment).mockReturnValue({
+      mutateAsync: startPaymentMutate,
+    } as unknown as ReturnType<typeof useStartPayment>)
     mockUseCart.mockReturnValue(cartResult)
     mockUseCartStore.mockReturnValue({ clearCart, setItemSnapshots })
     mockUseAuth.mockReturnValue({ user: null } as unknown as ReturnType<
@@ -424,6 +444,7 @@ describe('CheckoutPageContent', () => {
 
     renderCheckout()
     await fillForm(user)
+    await pickCashOnDelivery(user)
     await user.click(placeOrderButton())
 
     await waitFor(() => expect(push).toHaveBeenCalledWith(ROUTES.ORDER_SUCCESS))
@@ -431,6 +452,98 @@ describe('CheckoutPageContent', () => {
     expect(toast.success).toHaveBeenCalledWith(SUCCESS_MESSAGES.ORDER_PLACED, {
       description: SUCCESS_MESSAGES.ORDER_TOTAL('$115.00'),
     })
+  })
+
+  it('a COD order goes to ROUTES.ORDER_SUCCESS without starting a payment', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue(placedOrder)
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await pickCashOnDelivery(user)
+    await user.click(placeOrderButton())
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith(ROUTES.ORDER_SUCCESS))
+    expect(startPaymentMutate).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('a STRIPE order starts its payment and replaces the location with the checkoutUrl', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue(placedOrder)
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith(checkout.checkoutUrl),
+    )
+    expect(startPaymentMutate).toHaveBeenCalledWith(placedOrder.id)
+    expect(push).not.toHaveBeenCalled()
+    expect(placeOrderButton()).toBeDisabled()
+  })
+
+  it('a failed payment start toasts the mapped error and pushes orderSuccessPath with the errCode', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue(placedOrder)
+    startPaymentMutate.mockRejectedValue(
+      new ServiceError('x', [
+        {
+          errCode: 'paymentGatewayUnavailable',
+          field: 'id',
+          message: 'x',
+          description: 'y',
+        },
+      ]),
+    )
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        orderSuccessPath(placedOrder.id, 'paymentGatewayUnavailable'),
+      ),
+    )
+    expect(toast.error).toHaveBeenCalledWith(
+      ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE,
+    )
+    expect(
+      screen.queryByText(API_FALLBACK_ERRORS.ORDER_CREATE),
+    ).not.toBeInTheDocument()
+    expect(mutateAsync).toHaveBeenCalledTimes(1)
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('a payment start that fails without an errCode pushes the generic code', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue(placedOrder)
+    startPaymentMutate.mockRejectedValue(new Error('x'))
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+    await fillForm(user)
+    await user.click(placeOrderButton())
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        orderSuccessPath(placedOrder.id, 'unknown'),
+      ),
+    )
+    expect(toast.error).toHaveBeenCalledWith(API_FALLBACK_ERRORS.PAYMENT_START)
   })
 
   it('success invalidates the cart query and does not call clearCart', async () => {
@@ -805,6 +918,7 @@ describe('CheckoutPageContent', () => {
 
     const { rerender } = renderCheckout()
     await fillForm(user)
+    await pickCashOnDelivery(user)
     await user.click(placeOrderButton())
     await waitFor(() => expect(push).toHaveBeenCalledWith(ROUTES.ORDER_SUCCESS))
 
