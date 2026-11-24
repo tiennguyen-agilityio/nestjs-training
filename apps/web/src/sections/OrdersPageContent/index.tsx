@@ -15,10 +15,10 @@ import { Button } from '@/components/ui/button'
 import { SUCCESS_MESSAGES } from '@/constants/messages'
 import {
   ALL_ORDER_STATUSES_VALUE,
-  // ALL_SHIPPING_STATUS_VALUE,
+  ALL_SHIPPING_STATUS_VALUE,
   ORDER_STATUS_FILTER_OPTIONS,
   ORDERS_TABLE_COLUMNS,
-  // SHIPPING_STATUS_OPTIONS,
+  SHIPPING_STATUS_OPTIONS,
 } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
 import {
@@ -27,11 +27,11 @@ import {
   useUpdateOrderShippingStatus,
   useUpdateOrderStatus,
 } from '@/hooks/useOrder'
-import type { ORDER_STATUS, Order, SHIPPING_STATUS } from '@/types/order'
+import { OrderStatus, ShippingStatus } from '@repo/constants'
+import type { OrderSummary } from '@/types/order'
 import { useUrlState } from '@/hooks/useUrlState'
 import { useDebouncedUrlSearch } from '@/hooks/useDebouncedUrlSearch'
 import { usePageClamp } from '@/hooks/usePageClamp'
-import { OrderDetailModal } from '@/sections/OrderDetailModal'
 import { OrderTableRow } from '@/sections/OrderTableRow'
 import { buildOrderDashboardStats } from '@/utils/order'
 import { ordersUrlSchema } from '@/utils/url'
@@ -45,8 +45,7 @@ export default function OrdersPageContent() {
     search,
     updateUrl,
   )
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [pendingDelete, setPendingDelete] = useState<Order | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<OrderSummary | null>(null)
   const [pendingStatusOrderId, setPendingStatusOrderId] = useState<
     string | null
   >(null)
@@ -57,6 +56,14 @@ export default function OrdersPageContent() {
   const { mutate: updateOrderStatusMutate } = useUpdateOrderStatus()
   const { mutate: updateOrderShippingStatusMutate } =
     useUpdateOrderShippingStatus()
+
+  // A URL value that is not an option shows every order instead of an API 400.
+  const normalizedStatus = Object.values(OrderStatus).find(
+    (value) => value === status,
+  )
+  const normalizedShippingStatus = Object.values(ShippingStatus).find(
+    (value) => value === shippingStatus,
+  )
 
   const {
     orders,
@@ -70,8 +77,8 @@ export default function OrdersPageContent() {
     page,
     limit,
     search: search.trim(),
-    status: status ?? undefined,
-    shippingStatus: shippingStatus ?? undefined,
+    status: normalizedStatus,
+    shippingStatus: normalizedShippingStatus,
   })
 
   const totalPages = Math.max(1, meta?.pageCount ?? 1)
@@ -88,19 +95,23 @@ export default function OrdersPageContent() {
     })
   }
 
-  // const handleShippingStatusChange = (value: unknown) => {
-  //   if (typeof value !== 'string') return
-  //   updateUrl({
-  //     shippingStatus: value === ALL_SHIPPING_STATUS_VALUE ? null : value,
-  //     page: 1,
-  //   })
-  // }
+  const handleShippingStatusChange = (value: unknown) => {
+    if (typeof value !== 'string') return
+    updateUrl({
+      shippingStatus: value === ALL_SHIPPING_STATUS_VALUE ? null : value,
+      page: 1,
+    })
+  }
 
   const handleQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(event.target.value)
   }
 
-  const handleOrderStatusUpdate = (order: Order, nextStatus: ORDER_STATUS) => {
+  // Status changes come with #32: the row keeps these controls disabled.
+  const handleOrderStatusUpdate = (
+    order: OrderSummary,
+    nextStatus: OrderStatus,
+  ) => {
     const orderId = order.id
     setPendingStatusOrderId(orderId)
     updateOrderStatusMutate(
@@ -122,8 +133,8 @@ export default function OrdersPageContent() {
   }
 
   const handleOrderShippingStatusUpdate = (
-    order: Order,
-    nextShippingStatus: SHIPPING_STATUS,
+    order: OrderSummary,
+    nextShippingStatus: ShippingStatus,
   ) => {
     const orderId = order.id
     setPendingShippingStatusOrderId(orderId)
@@ -159,16 +170,6 @@ export default function OrdersPageContent() {
 
   return (
     <div className="flex flex-col gap-6">
-      <OrderDetailModal
-        order={selectedOrder}
-        open={selectedOrder !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedOrder(null)
-          }
-        }}
-      />
-
       <ConfirmActionDialog
         data-testid="modal-confirm-delete-order"
         item={pendingDelete}
@@ -203,29 +204,31 @@ export default function OrdersPageContent() {
             ref={searchInputRef}
             value={searchInput}
             onChange={handleQueryChange}
-            placeholder="Search orders..."
+            placeholder="Search by order number, customer or email"
             aria-label="Search orders"
             containerClassName="h-12 bg-surface-container-high w-full md:w-auto md:min-w-0 md:max-w-sm md:flex-1"
           />
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
             <div className="flex w-full min-w-0 gap-4 md:w-72 md:max-w-80 md:shrink-0">
               <Select
-                classNameTrigger="h-12 rounded-full"
+                classNameTrigger="rounded-full"
                 placeholder="All statuses"
+                ariaLabel="Status filter"
                 options={ORDER_STATUS_FILTER_OPTIONS}
-                selected={status ?? ALL_ORDER_STATUSES_VALUE}
+                selected={normalizedStatus ?? ALL_ORDER_STATUSES_VALUE}
                 onValueChange={handleStatusChange}
               />
             </div>
-            {/* <div className="w-full flex gap-4 md:w-60 md:max-w-60">
+            <div className="flex w-full min-w-0 gap-4 md:w-60 md:max-w-60 md:shrink-0">
               <Select
-                classNameTrigger="h-12 rounded-full"
+                classNameTrigger="rounded-full"
                 placeholder="All shipping statuses"
+                ariaLabel="Shipping status filter"
                 options={SHIPPING_STATUS_OPTIONS}
-                selected={shippingStatus ?? ALL_SHIPPING_STATUS_VALUE}
+                selected={normalizedShippingStatus ?? ALL_SHIPPING_STATUS_VALUE}
                 onValueChange={handleShippingStatusChange}
               />
-            </div> */}
+            </div>
             <Button
               disabled
               variant="outline"
@@ -258,26 +261,16 @@ export default function OrdersPageContent() {
             columns={ORDERS_TABLE_COLUMNS}
             data={orders}
             getRowKey={(order, index) => order.id ?? `order-${index}`}
-            resolveRowClassName={(order) =>
-              order.deletedAt
-                ? 'border-b border-border bg-muted-foreground/20'
-                : ''
-            }
             renderRow={(order) => (
               <OrderTableRow
                 order={order}
-                isDeleteDisabled={isDeletePending || Boolean(order.deletedAt)}
-                isStatusDisabled={
-                  pendingStatusOrderId === order.id || Boolean(order.deletedAt)
-                }
+                isDeleteDisabled={isDeletePending}
+                isStatusDisabled={pendingStatusOrderId === order.id}
                 isShippingStatusDisabled={
                   pendingShippingStatusOrderId === order.id
                 }
                 onRequestDelete={(nextOrder) => {
                   setPendingDelete(nextOrder)
-                }}
-                onRequestView={(nextOrder) => {
-                  setSelectedOrder(nextOrder)
                 }}
                 onRequestStatusChange={handleOrderStatusUpdate}
                 onRequestShippingStatusChange={handleOrderShippingStatusUpdate}

@@ -16,6 +16,7 @@ import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
+import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
 import type { PlaceOrderInput } from '../dto/order.schema.js';
 import type { Cart } from '../../cart/entities/cart.entity.js';
@@ -112,7 +113,9 @@ describe('OrderService', () => {
     | 'create'
     | 'existsByNumber'
     | 'findMine'
+    | 'findAll'
     | 'findMineByIdOrNumber'
+    | 'findAnyByIdOrNumber'
     | 'transactionalWithOutbox'
     | 'lockMineForCancel'
     | 'saveCancelled',
@@ -143,7 +146,9 @@ describe('OrderService', () => {
       create: vi.fn().mockResolvedValue(created),
       existsByNumber: vi.fn().mockResolvedValue(false),
       findMine: vi.fn(),
+      findAll: vi.fn(),
       findMineByIdOrNumber: vi.fn(),
+      findAnyByIdOrNumber: vi.fn(),
       transactionalWithOutbox: vi.fn(
         (work: (enqueue: Mock) => Promise<unknown>) =>
           work(enqueueCheckoutExpire),
@@ -508,9 +513,13 @@ describe('OrderService', () => {
     it('looks up by id for a UUID and by orderNumber otherwise', async () => {
       const order = { id: ORDER_ID } as Order;
       orderRepository.findMineByIdOrNumber.mockResolvedValue(order);
+      const detail = { id: ORDER_ID } as ResponseOrderDetailDto;
+      const detailOf = vi
+        .spyOn(ResponseOrderDetailDto, 'fromEntity')
+        .mockReturnValue(detail);
 
       await expect(service.findMineOne(USER_ID, ORDER_ID)).resolves.toBe(
-        response,
+        detail,
       );
       await service.findMineOne(USER_ID, 'CH-261124-0001');
 
@@ -524,7 +533,7 @@ describe('OrderService', () => {
         USER_ID,
         { orderNumber: 'CH-261124-0001' },
       );
-      expect(fromEntity).toHaveBeenCalledWith(order);
+      expect(detailOf).toHaveBeenCalledWith(order);
     });
 
     it('throws ItemNotFoundException when nothing matches', async () => {
@@ -728,6 +737,70 @@ describe('OrderService', () => {
       expect(orderRepository.lockMineForCancel).toHaveBeenCalledTimes(1);
       expect(orderRepository.findMineByIdOrNumber).not.toHaveBeenCalled();
       expect(orderRepository.transactional).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findAll', () => {
+    it("findAll maps the repository's orders through ResponseOrderRowDto", async () => {
+      const order = { id: 'order-1' } as Order;
+      const row = { id: 'order-1' } as ResponseOrderRowDto;
+      const meta = { limit: 10, currentPage: 1, pageCount: 1, totalCount: 1 };
+      orderRepository.findAll.mockResolvedValue({ data: [order], meta });
+      const rowOf = vi
+        .spyOn(ResponseOrderRowDto, 'fromEntity')
+        .mockReturnValue(row);
+
+      const result = await service.findAll({
+        page: 2,
+        limit: 10,
+        search: 'lan',
+        sort: 'createdAt',
+        order: 'DESC',
+        all: true,
+      });
+
+      expect(result).toEqual({ data: [row], meta });
+      expect(rowOf).toHaveBeenCalledWith(order);
+      expect(orderRepository.findAll).toHaveBeenCalledWith(
+        { page: 2, limit: 10 },
+        { search: 'lan', sort: 'createdAt', order: 'DESC', all: true },
+      );
+    });
+  });
+
+  describe('findAnyOne', () => {
+    const ORDER_ID = '8b0c6f2e-4d1a-4c3b-9e5f-6a7b8c9d0e1f';
+
+    it('findAnyOne reads by id for a UUID and by orderNumber otherwise', async () => {
+      const order = { id: ORDER_ID } as Order;
+      const detail = { id: ORDER_ID } as ResponseOrderDetailDto;
+      orderRepository.findAnyByIdOrNumber.mockResolvedValue(order);
+      const detailOf = vi
+        .spyOn(ResponseOrderDetailDto, 'fromEntity')
+        .mockReturnValue(detail);
+
+      await expect(service.findAnyOne(ORDER_ID)).resolves.toBe(detail);
+      await service.findAnyOne('CH-261124-0001');
+
+      expect(orderRepository.findAnyByIdOrNumber).toHaveBeenNthCalledWith(1, {
+        id: ORDER_ID,
+      });
+      expect(orderRepository.findAnyByIdOrNumber).toHaveBeenNthCalledWith(2, {
+        orderNumber: 'CH-261124-0001',
+      });
+      expect(detailOf).toHaveBeenCalledWith(order);
+    });
+
+    it('findAnyOne throws orderNotFound when the repository returns null', async () => {
+      orderRepository.findAnyByIdOrNumber.mockResolvedValue(null);
+
+      const error = await errorOf(service.findAnyOne('CH-0'));
+
+      expect(error).toBeInstanceOf(ItemNotFoundException);
+      expect(error.getErrors()[0]).toMatchObject({
+        errCode: ERROR_CODES.ORDER.NOT_FOUND,
+        field: 'idOrOrderNumber',
+      });
     });
   });
 });

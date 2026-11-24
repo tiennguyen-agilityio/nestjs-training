@@ -108,7 +108,6 @@ export const DASHBOARD_MENU: DashboardMenuItem[] = [
     href: ROUTES.DASHBOARD_ORDERS,
     icon: FileText,
     match: 'prefix',
-    disabled: true,
   },
   {
     label: 'Users',

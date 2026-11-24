@@ -2,6 +2,7 @@ import {
   applyDecorators,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -22,6 +23,8 @@ import {
 } from '../dto/order.schema.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
+import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
+import { isActiveAdmin } from '../../../common/utils/user.util.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import { AuthGuard } from '../../../common/guards/auth.guard.js';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator.js';
@@ -39,6 +42,18 @@ import {
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 
 const OUT_OF_STOCK_EXAMPLE = { available: 1, sku: 'COL-HUI-250G' };
+
+/** 401, and one 403 naming both causes (a second 403 entry would replace the first). */
+const ApiListAuthErrors = (): MethodDecorator =>
+  applyDecorators(
+    ApiErrorResponse(
+      HttpStatus.UNAUTHORIZED,
+      ERROR_MESSAGES.AUTH.UNAUTHENTICATED,
+    ),
+    ApiErrorResponse(HttpStatus.FORBIDDEN, ERROR_MESSAGES.AUTH.FORBIDDEN, {
+      description: `${ERROR_MESSAGES.AUTH.INACTIVE_ACCOUNT}, or \`all=true\` from a caller who is not an active admin.`,
+    }),
+  );
 
 const ApiAuthErrors = (): MethodDecorator =>
   applyDecorators(
@@ -60,11 +75,11 @@ export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
   @Get()
-  @ApiAuthErrors()
+  @ApiListAuthErrors()
   @ApiOperation({
-    summary: "List the signed-in user's orders",
+    summary: "List the signed-in user's orders, or every order for an admin",
     description:
-      'Every role sees only its own orders. Newest first by default; `paymentStatus` filters on the value the rows show.',
+      'Without `all`, every role sees only its own orders. `all=true` lists every order for an active admin (403 for anyone else). `search` matches every word, accents ignored, against the order number, recipient and customer name or email. Newest first by default.',
   })
   @ApiPaginatedResponse(ResponseOrderRowDto)
   @ApiErrorResponse(
@@ -75,17 +90,22 @@ export class OrderController {
     @AuthUser() user: User,
     @Query({ schema: orderQuerySchema }) query: OrderQueryInput,
   ): Promise<PaginatedResult<ResponseOrderRowDto>> {
-    return this.orderService.findMine(user.id, query);
+    if (!query.all) return this.orderService.findMine(user.id, query);
+    if (!isActiveAdmin(user)) {
+      throw new ForbiddenException(ERROR_MESSAGES.AUTH.FORBIDDEN);
+    }
+
+    return this.orderService.findAll(query);
   }
 
   @Get(':idOrOrderNumber')
   @ApiAuthErrors()
   @ApiOperation({
-    summary: "Get one of the signed-in user's orders by id or order number",
+    summary: 'Get one order by id or order number, with its customer',
     description:
-      "A UUID looks up by id, anything else by orderNumber. Another user's order returns 404.",
+      "A UUID looks up by id, anything else by orderNumber. An active admin reads any order; anyone else only their own (another user's order returns 404).",
   })
-  @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
+  @ApiDataResponse(HttpStatus.OK, ResponseOrderDetailDto)
   @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.ORDER.NOT_FOUND, {
     errCode: ERROR_CODES.ORDER.NOT_FOUND,
     field: 'idOrOrderNumber',
@@ -94,8 +114,10 @@ export class OrderController {
   findOne(
     @AuthUser() user: User,
     @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
-  ): Promise<ResponseOrderDto> {
-    return this.orderService.findMineOne(user.id, idOrOrderNumber);
+  ): Promise<ResponseOrderDetailDto> {
+    return isActiveAdmin(user)
+      ? this.orderService.findAnyOne(idOrOrderNumber)
+      : this.orderService.findMineOne(user.id, idOrOrderNumber);
   }
 
   @Post()

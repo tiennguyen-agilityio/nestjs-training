@@ -1,7 +1,8 @@
 import type { TableColumn } from '@/components/Table'
-import { PaymentMethod } from '@repo/constants'
+import { OrderStatus, PaymentMethod, ShippingStatus } from '@repo/constants'
 
-import { ORDER_STATUS, SHIPPING_STATUS } from '@/types/order'
+import type { OptionItem } from '@/types/common'
+import { SHIPPING_STATUS } from '@/types/order'
 
 export const OUT_OF_STOCK_LABEL = 'Out of stock'
 
@@ -13,30 +14,30 @@ export const CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE =
 
 export const ALL_ORDER_STATUSES_VALUE = 'all'
 
-export const ORDER_STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
+export const ORDER_STATUS_FILTER_OPTIONS: OptionItem[] = [
   { value: ALL_ORDER_STATUSES_VALUE, label: 'All statuses' },
-  { value: ORDER_STATUS.PENDING, label: 'Pending' },
-  { value: ORDER_STATUS.CONFIRMED, label: 'Confirmed' },
-  { value: ORDER_STATUS.COMPLETED, label: 'Completed' },
-  { value: ORDER_STATUS.CANCELLED, label: 'Cancelled' },
+  { value: OrderStatus.PENDING, label: 'Pending' },
+  { value: OrderStatus.CONFIRMED, label: 'Confirmed' },
+  { value: OrderStatus.COMPLETED, label: 'Completed' },
+  { value: OrderStatus.CANCELLED, label: 'Cancelled' },
 ]
 
 export const ALL_SHIPPING_STATUS_VALUE = 'all'
-export const SHIPPING_STATUS_OPTIONS: { value: string; label: string }[] = [
+export const SHIPPING_STATUS_OPTIONS: OptionItem[] = [
   { value: ALL_SHIPPING_STATUS_VALUE, label: 'All shipping statuses' },
-  { value: SHIPPING_STATUS.PENDING, label: 'Pending' },
-  { value: SHIPPING_STATUS.SHIPPING, label: 'Shipping' },
-  { value: SHIPPING_STATUS.DELIVERED, label: 'Delivered' },
-  { value: SHIPPING_STATUS.RETURNED, label: 'Returned' },
+  { value: ShippingStatus.PENDING, label: 'Pending' },
+  { value: ShippingStatus.SHIPPING, label: 'Shipping' },
+  { value: ShippingStatus.DELIVERED, label: 'Delivered' },
+  { value: ShippingStatus.RETURNED, label: 'Returned' },
 ]
 
 export const ORDER_TRANSITIONS: Readonly<
-  Record<ORDER_STATUS, readonly ORDER_STATUS[]>
+  Record<OrderStatus, readonly OrderStatus[]>
 > = {
-  [ORDER_STATUS.PENDING]: [ORDER_STATUS.CONFIRMED, ORDER_STATUS.CANCELLED],
-  [ORDER_STATUS.CONFIRMED]: [ORDER_STATUS.COMPLETED, ORDER_STATUS.CANCELLED],
-  [ORDER_STATUS.COMPLETED]: [],
-  [ORDER_STATUS.CANCELLED]: [],
+  [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  [OrderStatus.CONFIRMED]: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
+  [OrderStatus.COMPLETED]: [],
+  [OrderStatus.CANCELLED]: [],
 }
 
 export const SHIPPING_TRANSITIONS: Readonly<
@@ -55,12 +56,12 @@ export const ORDERS_TABLE_COLUMNS: TableColumn[] = [
   {
     key: 'orderId',
     label: 'Order ID',
-    className: 'w-[23%] min-w-0 px-6 py-4',
+    className: 'w-[18%] min-w-0 px-6 py-4',
   },
   {
     key: 'date',
     label: 'Date',
-    className: 'w-[14%] min-w-0 px-6 py-4',
+    className: 'w-[11%] min-w-0 px-6 py-4',
   },
   {
     key: 'customer',
@@ -70,22 +71,22 @@ export const ORDERS_TABLE_COLUMNS: TableColumn[] = [
   {
     key: 'status',
     label: 'Status',
-    className: 'w-[16%] min-w-[84px] text-center',
+    className: 'w-[12%] min-w-[84px] text-center',
   },
-  // {
-  //   key: 'shippingStatus',
-  //   label: 'Shipping status',
-  //   className: 'w-[12%] px-6 py-4 text-center',
-  // },
+  {
+    key: 'shippingStatus',
+    label: 'Shipping status',
+    className: 'w-[12%] px-6 py-4 text-center',
+  },
   {
     key: 'total',
     label: 'Total',
-    className: 'w-[12%] text-center',
+    className: 'w-[10%] text-center',
   },
   {
     key: 'actions',
     label: 'Actions',
-    className: 'w-[12%] text-center',
+    className: 'w-[10%] text-center',
   },
 ]
 

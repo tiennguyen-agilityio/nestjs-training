@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { ChevronDown, Eye, Trash2 } from 'lucide-react'
+import type { OrderStatus, ShippingStatus } from '@repo/constants'
 
 import {
   ALL_ORDER_STATUSES_VALUE,
@@ -12,7 +14,7 @@ import {
 } from '@/constants/order'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,28 +22,24 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EMPTY_IMAGE } from '@/constants/images'
-import {
-  type ORDER_STATUS,
-  type Order,
-  type SHIPPING_STATUS,
-} from '@/types/order'
+import { dashboardOrderPath } from '@/constants/routes'
+import { type OrderSummary } from '@/types/order'
 import { formatPrice } from '@/utils/common'
 import {
   formatOrderCustomerName,
   formatOrderListDate,
   getOrderStatusPresentation,
-  // getShippingStatusPresentation,
+  getShippingStatusPresentation,
 } from '@/utils/order'
 import { cn } from '@/utils/styles'
 
 export interface OrderTableRowProps {
-  order: Order
-  onRequestView?: (order: Order) => void
-  onRequestDelete?: (order: Order) => void
-  onRequestStatusChange?: (order: Order, nextStatus: ORDER_STATUS) => void
+  order: OrderSummary
+  onRequestDelete?: (order: OrderSummary) => void
+  onRequestStatusChange?: (order: OrderSummary, nextStatus: OrderStatus) => void
   onRequestShippingStatusChange?: (
-    order: Order,
-    nextShippingStatus: SHIPPING_STATUS,
+    order: OrderSummary,
+    nextShippingStatus: ShippingStatus,
   ) => void
   isDeleteDisabled?: boolean
   isStatusDisabled?: boolean
@@ -50,7 +48,6 @@ export interface OrderTableRowProps {
 
 export function OrderTableRow({
   order,
-  onRequestView,
   onRequestDelete,
   onRequestStatusChange,
   // onRequestShippingStatusChange,
@@ -61,16 +58,15 @@ export function OrderTableRow({
   const orderLabel = order.orderNumber?.trim() || order.id
   const displayId = orderLabel.startsWith('#') ? orderLabel : `#${orderLabel}`
   const customerName = formatOrderCustomerName(order)
-  const { firstName = '', lastName = '', avatarUrl = '' } = order.user || {}
+  const { firstName = '', lastName = '', email = '' } = order.customer || {}
   const initials =
     `${firstName?.trim().charAt(0) ?? ''}${lastName?.trim().charAt(0) ?? ''}`
       .toUpperCase()
       .trim()
   const avatarFallback = initials || '?'
   const statusP = getOrderStatusPresentation(order.status)
-  const isOrderDeleted = Boolean(order.deletedAt)
-  const isDeleteActionDisabled = isOrderDeleted || isDeleteDisabled
-  // const shipping = getShippingStatusPresentation(order.shippingStatus)
+  const isDeleteActionDisabled = isDeleteDisabled
+  const shipping = getShippingStatusPresentation(order.shippingStatus)
   const nextOrderStatuses = ORDER_TRANSITIONS[order.status]
   // const nextShippingStatuses = SHIPPING_TRANSITIONS[order.shippingStatus]
   // const isOrderTerminal =
@@ -79,7 +75,7 @@ export function OrderTableRow({
   // const canUpdateShippingStatus =
   //   !isOrderTerminal && nextShippingStatuses.length > 0
 
-  const getOrderStatusLabel = (status: ORDER_STATUS) =>
+  const getOrderStatusLabel = (status: OrderStatus) =>
     ORDER_STATUS_FILTER_OPTIONS.find(
       (option) =>
         option.value !== ALL_ORDER_STATUSES_VALUE && option.value === status,
@@ -112,14 +108,19 @@ export function OrderTableRow({
       <td className="min-w-0 px-6 py-4 align-middle">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar className="size-10 shrink-0">
-            <AvatarImage src={avatarUrl ?? EMPTY_IMAGE} alt="" />
+            <AvatarImage src={EMPTY_IMAGE} alt="" />
             <AvatarFallback className="text-xs font-semibold">
               {avatarFallback}
             </AvatarFallback>
           </Avatar>
-          <p className="truncate font-semibold text-foreground">
-            {customerName}
-          </p>
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-foreground">
+              {customerName}
+            </p>
+            <p title={email} className="truncate text-xs text-muted-foreground">
+              {email}
+            </p>
+          </div>
         </div>
       </td>
       <td className="min-w-0 px-6 py-4 align-middle text-center">
@@ -210,25 +211,34 @@ export function OrderTableRow({
         )}
       </td> */}
       <td className="px-6 py-4 align-middle text-center">
+        <Badge
+          className={cn(
+            'h-7 px-3 text-[0.65rem] font-semibold uppercase',
+            shipping.badgeClassName,
+          )}
+        >
+          {shipping.label}
+        </Badge>
+      </td>
+      <td className="px-6 py-4 align-middle text-center">
         <p className="text-sm font-bold text-foreground">
           {formatPrice(order.totalAmount)}
         </p>
       </td>
       <td className="px-6 py-4 align-middle">
         <div className="flex justify-center gap-1">
-          {/* View/Delete disabled: order feature not implemented on backend yet */}
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-9"
-            disabled
-            onClick={() => onRequestView?.(order)}
+          {/* Delete disabled: order feature not implemented on backend yet */}
+          <Link
+            href={dashboardOrderPath(order.orderNumber)}
+            className={cn(
+              buttonVariants({ variant: 'ghost', size: 'icon' }),
+              'inline-flex size-9',
+            )}
             title="View order details"
             aria-label={`View order ${displayId}`}
           >
             <Eye className="size-4" aria-hidden />
-          </Button>
+          </Link>
           <Button
             type="button"
             size="icon"
@@ -238,9 +248,7 @@ export function OrderTableRow({
             onClick={() => onRequestDelete?.(order)}
             title={
               isDeleteActionDisabled
-                ? isOrderDeleted
-                  ? 'Deleted order cannot be modified'
-                  : 'Delete order in progress'
+                ? 'Delete order in progress'
                 : 'Delete this order'
             }
             aria-label={`Delete order ${displayId}`}

@@ -16,6 +16,7 @@ import { ProductVariantService } from '../../product-variant/services/product-va
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
+import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
 import type { OrderQueryInput, PlaceOrderInput } from '../dto/order.schema.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import { mapPaginatedResult } from '../../../common/utils/pagination.util.js';
@@ -68,7 +69,7 @@ export class OrderService {
     private readonly shippingMethodService: ShippingMethodService,
   ) {}
 
-  /** The caller's own orders only, whatever their role (#31 adds ADMIN-wide). */
+  /** The caller's own orders only, whatever their role (`findAll` lists every order). */
   async findMine(
     userId: string,
     { page, limit, ...filters }: OrderQueryInput,
@@ -91,14 +92,37 @@ export class OrderService {
   async findMineOne(
     userId: string,
     idOrOrderNumber: string,
-  ): Promise<ResponseOrderDto> {
+  ): Promise<ResponseOrderDetailDto> {
     const order = await this.orderRepository.findMineByIdOrNumber(
       userId,
       whereOf(idOrOrderNumber),
     );
     if (!order) throw this.orderNotFound();
 
-    return ResponseOrderDto.fromEntity(order);
+    return ResponseOrderDetailDto.fromEntity(order);
+  }
+
+  /** Every order: the controller lets only an active admin through. */
+  async findAll({
+    page,
+    limit,
+    ...filters
+  }: OrderQueryInput): Promise<PaginatedResult<ResponseOrderRowDto>> {
+    const result = await this.orderRepository.findAll({ page, limit }, filters);
+
+    return mapPaginatedResult(result, (order) =>
+      ResponseOrderRowDto.fromEntity(order),
+    );
+  }
+
+  /** Any order, as `findMineOne` reads one: the controller lets only an active admin through. */
+  async findAnyOne(idOrOrderNumber: string): Promise<ResponseOrderDetailDto> {
+    const order = await this.orderRepository.findAnyByIdOrNumber(
+      whereOf(idOrOrderNumber),
+    );
+    if (!order) throw this.orderNotFound();
+
+    return ResponseOrderDetailDto.fromEntity(order);
   }
 
   /**

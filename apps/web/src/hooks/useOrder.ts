@@ -3,7 +3,11 @@
 import { useAuth } from '@clerk/nextjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { VALIDATION_RULES, type OrderStatus } from '@repo/constants'
+import {
+  VALIDATION_RULES,
+  type OrderStatus,
+  type ShippingStatus,
+} from '@repo/constants'
 
 import type { PlaceOrderPayload } from '@repo/schemas'
 
@@ -22,14 +26,7 @@ import {
   type FetchOrdersOptions,
 } from '@/services/order'
 import type { ResponseMeta } from '@/types/api'
-import type {
-  Order,
-  OrderDetail,
-  OrderSummary,
-  ORDER_STATUS,
-  PlacedOrder,
-  SHIPPING_STATUS,
-} from '@/types/order'
+import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 import {
   detailQueryOptions,
   listQueryOptions,
@@ -47,6 +44,18 @@ export const ordersQueryKeys = {
     ['orders', 'mine', userId, params.page, params.status ?? ''] as const,
   detail: (userId: string, orderNumber: string) =>
     ['orders', 'detail', userId, orderNumber] as const,
+  /** Every order (the admin dashboard). */
+  all: (userId: string, params: FetchOrdersOptions) =>
+    [
+      'orders',
+      'all',
+      userId,
+      params.page ?? 1,
+      params.limit ?? PAGE_SIZE,
+      params.search ?? '',
+      params.status ?? '',
+      params.shippingStatus ?? '',
+    ] as const,
 }
 
 const ordersQueryRoot = ordersQueryKeys.root
@@ -120,7 +129,7 @@ export function useUpdateOrderStatus() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (input: { id: string; status: ORDER_STATUS }) => {
+    mutationFn: async (input: { id: string; status: OrderStatus }) => {
       const result = await updateOrderStatus(input.id, input.status)
       if (!result.ok) throw new Error(result.error)
     },
@@ -136,7 +145,7 @@ export function useUpdateOrderShippingStatus() {
   return useMutation({
     mutationFn: async (input: {
       id: string
-      shippingStatus: SHIPPING_STATUS
+      shippingStatus: ShippingStatus
     }) => {
       const result = await updateOrderShippingStatus(
         input.id,
@@ -150,10 +159,10 @@ export function useUpdateOrderShippingStatus() {
   })
 }
 
-export type UseOrdersParams = FetchOrdersOptions
+export type UseOrdersParams = Omit<FetchOrdersOptions, 'getToken'>
 
 export interface UseOrdersResult {
-  orders: Order[]
+  orders: OrderSummary[]
   meta: ResponseMeta | null
   isLoading: boolean
   isFetching: boolean
@@ -162,29 +171,24 @@ export interface UseOrdersResult {
   refetch: () => Promise<void>
 }
 
-export function ordersListQueryKey(params: FetchOrdersOptions) {
-  return [
-    'orders',
-    'list',
-    params.page ?? 1,
-    params.limit ?? PAGE_SIZE,
-    params.search ?? '',
-    params.status ?? '',
-    params.shippingStatus ?? '',
-  ] as const
-}
-
+/** Every order, for the admin dashboard; waits for a signed-in Clerk session. */
 export function useOrders(params: UseOrdersParams = {}): UseOrdersResult {
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth()
+
   const query = useQuery({
-    queryKey: ordersListQueryKey(params),
+    queryKey: ordersQueryKeys.all(userId ?? '', params),
     queryFn: async () => {
-      const result = await fetchOrders(params)
+      const result = await fetchOrders({
+        ...params,
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+      })
       if (!result.ok) throw new Error(result.error.message)
       return {
         orders: result.orders,
         meta: result.meta ?? null,
       }
     },
+    enabled: Boolean(isLoaded && isSignedIn && userId),
     ...listQueryOptions,
   })
 
@@ -192,6 +196,7 @@ export function useOrders(params: UseOrdersParams = {}): UseOrdersResult {
     orders: query.data?.orders ?? [],
     meta: query.data?.meta ?? null,
     ...toQueryResult(query),
+    isLoading: query.isPending && (!isLoaded || Boolean(isSignedIn && userId)),
   }
 }
 
@@ -279,7 +284,7 @@ const fetchesOf = (
 const pollsRunOf = (fetchCount: number, baseCount: number): number =>
   Math.max(fetchCount - Math.max(baseCount, 1), 0)
 
-/** One of the shopper's orders; nothing is fetched without an order number. */
+/** One order the caller may read (own, or any for an active admin); nothing is fetched without an order number. */
 export function useOrderDetail(
   orderNumber: string | null,
   options: UseOrderDetailOptions = {},

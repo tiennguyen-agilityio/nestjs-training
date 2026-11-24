@@ -7,9 +7,6 @@ import type {
   ShippingStatus,
 } from '@repo/constants'
 
-import { type AddressSnapshot, type PaymentMethod } from './checkout'
-import { type User } from './user'
-
 export enum ORDER_STATUS {
   PENDING = 'PENDING',
   CONFIRMED = 'CONFIRMED',
@@ -38,30 +35,6 @@ export interface OrderItem extends OrderItemPayload {
   finalPrice: number
   subTotal: number
   discountAmount: number
-}
-
-/** An order in the admin dashboard. */
-export interface Order {
-  shippingMethodId: string
-  paymentMethod: PaymentMethod
-  note?: string
-  items: OrderItem[]
-  id: string
-  userId: string
-  orderNumber: string
-  status: ORDER_STATUS
-  shippingStatus: SHIPPING_STATUS
-  paymentStatus: ORDER_STATUS
-  subTotal: number
-  tax: number
-  shippingFee: number
-  totalAmount: number
-  shippingMethodName: string
-  addressSnapshot: AddressSnapshot
-  user: User
-  createdAt: string
-  updatedAt: string
-  deletedAt: string | null
 }
 
 /** A line of the API's `ResponseOrderDto` (`POST /orders`). */
@@ -128,12 +101,19 @@ export interface PlacedOrder {
   updatedAt: string
 }
 
+/** The account that placed an order. */
+export interface OrderCustomer {
+  firstName: string
+  lastName: string
+  email: string
+}
+
 /** One row of `GET /orders` (OROW of the API design). */
 export interface OrderSummary {
   id: string
   orderNumber: string
   userId: string
-  customer: { firstName: string; lastName: string; email: string }
+  customer: OrderCustomer
   status: OrderStatus
   shippingStatus: ShippingStatus
   paymentStatus: OrderPaymentStatus
@@ -144,9 +124,9 @@ export interface OrderSummary {
 }
 
 /**
- * `GET /orders/{idOrOrderNumber}` returns the same `ResponseOrderDto` as
- * `POST /orders`, so the order details reuse its types.
+ * `GET /orders/{idOrOrderNumber}`: the `ResponseOrderDto` of `POST /orders`
+ * plus the customer.
  */
-export type OrderDetail = PlacedOrder
+export type OrderDetail = PlacedOrder & { customer: OrderCustomer }
 export type OrderDetailItem = PlacedOrderItem
 export type OrderPayment = PlacedOrderPayment

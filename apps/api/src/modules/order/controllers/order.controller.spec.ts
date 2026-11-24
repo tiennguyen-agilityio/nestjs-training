@@ -1,6 +1,7 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { Mock } from 'vitest';
-import { PaymentMethod } from '@repo/constants';
+import { PaymentMethod, UserRole, UserStatus } from '@repo/constants';
 import { OrderController } from './order.controller.js';
 import { OrderService } from '../services/order.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
@@ -10,17 +11,24 @@ import { User } from '../../user/entities/user.entity.js';
 describe('OrderController', () => {
   let controller: OrderController;
   let orderService: Record<
-    'place' | 'findMine' | 'findMineOne' | 'cancel',
+    'place' | 'findMine' | 'findAll' | 'findMineOne' | 'findAnyOne' | 'cancel',
     Mock
   >;
   const user = { id: 'user-1' } as User;
+  const admin = {
+    id: 'admin-1',
+    role: UserRole.ADMIN,
+    status: UserStatus.ACTIVE,
+  } as User;
   const order = { id: 'order-1' } as ResponseOrderDto;
 
   beforeEach(async () => {
     orderService = {
       place: vi.fn().mockResolvedValue(order),
       findMine: vi.fn(),
+      findAll: vi.fn(),
       findMineOne: vi.fn().mockResolvedValue(order),
+      findAnyOne: vi.fn().mockResolvedValue(order),
       cancel: vi.fn().mockResolvedValue(order),
     };
     const module: TestingModule = await Test.createTestingModule({
@@ -58,6 +66,7 @@ describe('OrderController', () => {
       limit: 10,
       sort: 'createdAt',
       order: 'DESC',
+      all: false,
     };
 
     await expect(controller.list(user, query)).resolves.toBe(page);
@@ -82,5 +91,48 @@ describe('OrderController', () => {
       'user-1',
       'CH-261124-0001',
     );
+  });
+
+  describe('all orders', () => {
+    const page = {
+      data: [],
+      meta: { limit: 10, currentPage: 1, pageCount: 0, totalCount: 0 },
+    };
+    const query: OrderQueryInput = {
+      page: 1,
+      limit: 10,
+      sort: 'createdAt',
+      order: 'DESC',
+      all: true,
+    };
+
+    it('list with all=true as an active admin calls findAll', async () => {
+      orderService.findAll.mockResolvedValue(page);
+
+      await expect(controller.list(admin, query)).resolves.toBe(page);
+      expect(orderService.findAll).toHaveBeenCalledWith(query);
+      expect(orderService.findMine).not.toHaveBeenCalled();
+    });
+
+    it('list with all=true as a customer throws ForbiddenException', () => {
+      expect(() => controller.list(user, query)).toThrow(ForbiddenException);
+      expect(orderService.findAll).not.toHaveBeenCalled();
+    });
+
+    it('list with all=true as an INACTIVE admin throws ForbiddenException', () => {
+      const inactive = { ...admin, status: UserStatus.INACTIVE } as User;
+
+      expect(() => controller.list(inactive, query)).toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('findOne as an active admin calls findAnyOne', async () => {
+      await expect(
+        controller.findOne(admin, { idOrOrderNumber: 'CH-261124-0001' }),
+      ).resolves.toBe(order);
+      expect(orderService.findAnyOne).toHaveBeenCalledWith('CH-261124-0001');
+      expect(orderService.findMineOne).not.toHaveBeenCalled();
+    });
   });
 });

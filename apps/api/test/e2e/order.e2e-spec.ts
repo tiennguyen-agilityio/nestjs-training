@@ -95,15 +95,18 @@ describe('OrderController (e2e)', () => {
     (getAuth as Mock).mockReturnValue({ userId: clerkId });
   };
 
-  const createUser = (): Promise<{ id: string; clerkId: string }> =>
+  const createUser = (
+    role: UserRole = UserRole.USER,
+    lastName = 'Shopper',
+  ): Promise<{ id: string; clerkId: string }> =>
     RequestContext.create(orm.em, async () => {
       const clerkId = `clerk-order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const user = await userService.create({
         clerkId,
         email: `${clerkId}@example.com`,
         firstName: 'Order',
-        lastName: 'Shopper',
-        role: UserRole.USER,
+        lastName,
+        role,
       });
       return { id: user.id, clerkId };
     });
@@ -695,7 +698,11 @@ describe('OrderController (e2e)', () => {
         expect(data.items).toHaveLength(1);
         expect(data.payments[0].method).toBe('COD');
         expect(data.paymentStatus).toBe('UNPAID');
-        expect(data).not.toHaveProperty('customer');
+        expect(data.customer).toEqual({
+          firstName: 'Order',
+          lastName: 'Shopper',
+          email: `${u1.clerkId}@example.com`,
+        });
       }
     });
 
@@ -873,6 +880,184 @@ describe('OrderController (e2e)', () => {
 
     it('POST /orders/:idOrOrderNumber/cancel without a session returns 401', async () => {
       await cancel(randomUUID()).expect(401);
+    });
+  });
+
+  describe('admin: every order', () => {
+    const list = (query: string) =>
+      request(app.getHttpServer()).get(`${ORDERS}${query}`);
+
+    const ids = (response: { body: unknown }): string[] =>
+      (response.body as ListBody).data.map((row) => row.id);
+
+    const tag = (): string => `Tag${Math.random().toString(36).slice(2, 8)}`;
+
+    /** Places one COD order for `clerkId` with one line per quantity given. */
+    const placeFor = async (
+      clerkId: string,
+      methodId: string,
+      lines: number[] = [1],
+    ): Promise<OrderBody> => {
+      signIn(clerkId);
+      for (const quantity of lines) {
+        const { variantId } = await createProduct(10);
+        await addToCart(variantId, quantity);
+      }
+      return orderOf(await place(methodId).expect(201));
+    };
+
+    it('GET /orders?all=true as an active admin returns the orders of both users (AC1)', async () => {
+      const methodId = await createMethod();
+      const admin = await createUser(UserRole.ADMIN);
+      const o1 = await placeFor((await createUser()).clerkId, methodId);
+      const o2 = await placeFor((await createUser()).clerkId, methodId);
+
+      signIn(admin.clerkId);
+      const response = await list('?all=true').expect(200);
+
+      expect(ids(response)).toEqual(expect.arrayContaining([o1.id, o2.id]));
+    });
+
+    it('GET /orders?all=true&search=<number> returns only that order (AC2)', async () => {
+      const methodId = await createMethod();
+      const admin = await createUser(UserRole.ADMIN);
+      const o1 = await placeFor((await createUser()).clerkId, methodId);
+      await placeFor((await createUser()).clerkId, methodId);
+
+      signIn(admin.clerkId);
+      const response = await list(
+        `?all=true&search=${encodeURIComponent(o1.orderNumber)}`,
+      ).expect(200);
+
+      expect(ids(response)).toEqual([o1.id]);
+    });
+
+    it('GET /orders?all=true&status=PENDING returns only the PENDING order (AC3)', async () => {
+      const methodId = await createMethod();
+      const admin = await createUser(UserRole.ADMIN);
+      const lastName = tag();
+      const o1 = await placeFor(
+        (await createUser(UserRole.USER, lastName)).clerkId,
+        methodId,
+      );
+      const o2 = await placeFor(
+        (await createUser(UserRole.USER, lastName)).clerkId,
+        methodId,
+      );
+      await execute("update orders set status = 'CONFIRMED' where id = ?", [
+        o2.id,
+      ]);
+
+      signIn(admin.clerkId);
+      const response = await list(
+        `?all=true&status=PENDING&search=${lastName}`,
+      ).expect(200);
+
+      expect(ids(response)).toEqual([o1.id]);
+    });
+
+    it('GET /orders?all=true as a customer returns 403 (AC4)', async () => {
+      const customer = await createUser();
+      signIn(customer.clerkId);
+
+      const response = await list('?all=true').expect(403);
+
+      expect(response.body).toMatchObject({
+        statusCode: 403,
+        errors: [expect.objectContaining({ errCode: 'forbidden' })],
+      });
+    });
+
+    it('GET /orders?all=true&search=<email> as a customer returns 403', async () => {
+      const methodId = await createMethod();
+      const other = await createUser();
+      await placeFor(other.clerkId, methodId);
+      const customer = await createUser();
+      signIn(customer.clerkId);
+
+      await list(
+        `?all=true&search=${encodeURIComponent(`${other.clerkId}@example.com`)}`,
+      ).expect(403);
+    });
+
+    it("GET /orders?search=<another user's number> as a customer returns no rows", async () => {
+      const methodId = await createMethod();
+      const theirs = await placeFor((await createUser()).clerkId, methodId);
+      const customer = await createUser();
+      await placeFor(customer.clerkId, methodId);
+
+      signIn(customer.clerkId);
+      const response = await list(
+        `?search=${encodeURIComponent(theirs.orderNumber)}`,
+      ).expect(200);
+
+      expect(ids(response)).toEqual([]);
+      expect((response.body as ListBody).meta.totalCount).toBe(0);
+    });
+
+    it('GET /orders?all=true paginates newest first', async () => {
+      const methodId = await createMethod();
+      const admin = await createUser(UserRole.ADMIN);
+      const lastName = tag();
+      const customer = await createUser(UserRole.USER, lastName);
+      const placed: OrderBody[] = [];
+      for (let i = 0; i < 3; i += 1) {
+        placed.push(await placeFor(customer.clerkId, methodId, [1, 2]));
+      }
+
+      signIn(admin.clerkId);
+      const response = await list(
+        `?all=true&search=${lastName}&limit=2`,
+      ).expect(200);
+
+      const body = response.body as ListBody;
+      expect(ids(response)).toEqual([placed[2].id, placed[1].id]);
+      expect(body.data.map((row) => row.itemCount)).toEqual([3, 3]);
+      expect(body.meta).toMatchObject({ totalCount: 3, pageCount: 2 });
+    });
+
+    it("GET /orders/:idOrOrderNumber as an active admin returns another user's order with items, payments and customer", async () => {
+      const methodId = await createMethod();
+      const admin = await createUser(UserRole.ADMIN);
+      const customer = await createUser();
+      const placed = await placeFor(customer.clerkId, methodId);
+
+      signIn(admin.clerkId);
+      for (const value of [placed.id, placed.orderNumber]) {
+        const response = await request(app.getHttpServer())
+          .get(`${ORDERS}/${encodeURIComponent(value)}`)
+          .expect(200);
+        const data = orderOf(response) as OrderBody & {
+          customer: { firstName: string; lastName: string; email: string };
+        };
+        expect(data.id).toBe(placed.id);
+        expect(data.items).toHaveLength(1);
+        expect(data.payments[0].method).toBe('COD');
+        expect(data.customer).toEqual({
+          firstName: 'Order',
+          lastName: 'Shopper',
+          email: `${customer.clerkId}@example.com`,
+        });
+      }
+    });
+
+    it("GET /orders/:idOrOrderNumber of another customer's order returns 404", async () => {
+      const methodId = await createMethod();
+      const theirs = await placeFor((await createUser()).clerkId, methodId);
+      const customer = await createUser();
+
+      signIn(customer.clerkId);
+      const response = await request(app.getHttpServer())
+        .get(`${ORDERS}/${encodeURIComponent(theirs.orderNumber)}`)
+        .expect(404);
+
+      expect((response.body as ErrorBody).errors[0].errCode).toBe(
+        'orderNotFound',
+      );
+    });
+
+    it('GET /orders?all=true without a session returns 401', async () => {
+      await list('?all=true').expect(401);
     });
   });
 });

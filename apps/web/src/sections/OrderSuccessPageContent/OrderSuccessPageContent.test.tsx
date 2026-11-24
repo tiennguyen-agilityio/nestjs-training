@@ -16,7 +16,7 @@ import { useOrderDetail, type UseOrderDetailResult } from '@/hooks/useOrder'
 import { useStartPayment } from '@/hooks/usePayment'
 import OrderSuccessPageContent from '@/sections/OrderSuccessPageContent'
 import { useCartStore } from '@/store/useCartStore'
-import type { PlacedOrder } from '@/types/order'
+import type { OrderDetail, PlacedOrder } from '@/types/order'
 
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
@@ -107,8 +107,13 @@ const withParams = (query: string) =>
       >,
     )
 
-const cardOrder = (paymentStatus: OrderPaymentStatus): PlacedOrder => ({
+const cardOrder = (paymentStatus: OrderPaymentStatus): OrderDetail => ({
   ...order,
+  customer: {
+    firstName: 'Ada',
+    lastName: 'Lovelace',
+    email: 'ada@example.com',
+  },
   paymentStatus,
   payments: [
     {

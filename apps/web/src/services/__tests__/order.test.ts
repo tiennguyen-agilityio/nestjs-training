@@ -14,6 +14,7 @@ import {
   createOrder,
   fetchMyOrders,
   fetchOrderDetail,
+  fetchOrders,
 } from '@/services/order'
 import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 
@@ -290,6 +291,74 @@ describe('cancelOrder', () => {
     expect(result).toMatchObject({
       ok: false,
       error: API_FALLBACK_ERRORS.ORDER_CANCEL,
+    })
+  })
+})
+
+describe('order service (admin)', () => {
+  const originalFetch = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('fetchOrders sends all=true with the filters', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ data: [summary], meta }))
+    globalThis.fetch = fetchMock
+
+    const result = await fetchOrders({
+      getToken,
+      page: 2,
+      limit: 10,
+      search: ' lan ',
+      status: OrderStatus.PENDING,
+      shippingStatus: ShippingStatus.SHIPPING,
+    })
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] as string)
+    expect(`${url.origin}${url.pathname}`).toBe(API_ROUTES.ORDERS)
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      all: 'true',
+      page: '2',
+      limit: '10',
+      search: 'lan',
+      status: 'PENDING',
+      shippingStatus: 'SHIPPING',
+    })
+    expect(requestInit(fetchMock).credentials).toBe('include')
+    const headers = requestInit(fetchMock).headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer tok')
+    expect(result).toEqual({ ok: true, orders: [summary], meta })
+  })
+
+  it('fetchOrders sends only all=true without filters', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ data: [], meta }))
+    globalThis.fetch = fetchMock
+
+    await fetchOrders({ getToken })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${API_ROUTES.ORDERS}?all=true`)
+  })
+
+  it('fetchOrders returns the API error on 403', async () => {
+    globalThis.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        fetchResponse(
+          { statusCode: 403, message: 'Forbidden', errors: [] },
+          403,
+        ),
+      )
+
+    const result = await fetchOrders({ getToken })
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({ statusCode: 403 }),
     })
   })
 })

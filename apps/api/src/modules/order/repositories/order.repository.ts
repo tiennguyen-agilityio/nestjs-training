@@ -1,21 +1,29 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Outbox } from '@nestjs/outbox';
-import { InventoryMovementType, PaymentMethod } from '@repo/constants';
+import {
+  InventoryMovementType,
+  type OrderPaymentStatus,
+  PaymentMethod,
+} from '@repo/constants';
 import { Order } from '../entities/order.entity.js';
 import { InventoryMovement } from '../entities/inventory-movement.entity.js';
 import { OUTBOX_TOPICS } from '../../../common/constants/outbox.constant.js';
 import type { PaymentCheckoutExpirePayload } from '../../../common/interfaces/outbox-payload.interface.js';
 import { BaseRepository } from '../../../common/repositories/base.repository.js';
 import type { ActorId } from '../../../common/utils/audit.util.js';
-import type { ListOptions } from '../../../common/interfaces/repository-options.interface.js';
+import type {
+  ListOptions,
+  SearchOptions,
+} from '../../../common/interfaces/repository-options.interface.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import { QueryParams } from '../../../common/dto/query-params.dto.js';
 import type { OrderFilters } from '../dto/order.schema.js';
 
 /**
- * The ids of a user's orders whose payment status (worked out exactly as
- * `paymentStatusOf` does, over the non-deleted payments) equals the second
- * parameter. Parameters: user id, OrderPaymentStatus.
+ * The ids of a user's orders (every order when the user id is null) whose
+ * payment status (worked out exactly as `paymentStatusOf` does, over the
+ * non-deleted payments) equals the last parameter. Parameters:
+ * `paymentStatusParams(userId, status)`.
  */
 /**
  * Locks the non-deleted CHARGE rows of one of a user's orders, in id order,
@@ -44,13 +52,31 @@ left join lateral (
   select p.method, p.status, p.checkout_session_id from payments p
   where p.order_id = o.id and p.type = 'CHARGE' and p.deleted_at is null
   order by p.created_at desc limit 1) c on true
-where o.user_id = ? and o.deleted_at is null and (case
+where (?::uuid is null or o.user_id = ?) and o.deleted_at is null and (case
   when t.refunded > 0 and t.refunded >= t.charged then 'REFUNDED'
   when t.refunded > 0 then 'PARTIALLY_REFUNDED'
   when c.status is null then 'UNPAID'
   when c.method = 'COD' and c.status = 'PENDING' then 'UNPAID'
   when c.method in ('CARD', 'PAYPAL') and c.status = 'PENDING' and c.checkout_session_id is null then 'UNPAID'
   else c.status::text end) = ?`;
+
+export const paymentStatusParams = (
+  userId: string | null,
+  status: OrderPaymentStatus,
+): unknown[] => [userId, userId, status];
+
+/** Order number, recipient and the customer's name and email, word by word, accents ignored. */
+const ORDER_SEARCH: Omit<SearchOptions<Order>, 'term'> = {
+  fields: [
+    'orderNumber',
+    'recipientName',
+    'user.firstName',
+    'user.lastName',
+    'user.email',
+  ],
+  splitWords: true,
+  ignoreAccents: true,
+};
 
 export interface CreateOrderData {
   userId: string;
@@ -170,34 +196,87 @@ export class OrderRepository extends BaseRepository<Order> {
   async findMine(
     userId: string,
     query: QueryParams,
-    { status, shippingStatus, paymentStatus, sort, order }: OrderFilters,
+    {
+      search,
+      status,
+      shippingStatus,
+      paymentStatus,
+      sort,
+      order,
+    }: OrderFilters,
   ): Promise<PaginatedResult<Order>> {
     const where: ListOptions<Order>['where'] = { user: userId };
     if (status) where.status = status;
     if (shippingStatus) where.shippingStatus = shippingStatus;
     if (paymentStatus) {
-      where.id = await this.selectIds(PAYMENT_STATUS_IDS_SQL, [
-        userId,
-        paymentStatus,
-      ]);
+      where.id = await this.selectIds(
+        PAYMENT_STATUS_IDS_SQL,
+        paymentStatusParams(userId, paymentStatus),
+      );
     }
 
     return this.paginate(query, {
       where,
+      search: { ...ORDER_SEARCH, term: search },
       relations: ['user', 'items', 'payments'],
       orderBy: { field: sort, direction: order },
     });
   }
 
-  /** One of the user's orders, with its items and payments. */
+  /**
+   * Every order, for an active admin. `includeDeleted` keeps the orders of a
+   * soft-deleted account; it also loads soft-deleted items and payments, which
+   * nothing soft-deletes today.
+   */
+  async findAll(
+    query: QueryParams,
+    {
+      search,
+      status,
+      shippingStatus,
+      paymentStatus,
+      sort,
+      order,
+    }: OrderFilters,
+  ): Promise<PaginatedResult<Order>> {
+    const where: ListOptions<Order>['where'] = {};
+    if (status) where.status = status;
+    if (shippingStatus) where.shippingStatus = shippingStatus;
+    if (paymentStatus) {
+      where.id = await this.selectIds(
+        PAYMENT_STATUS_IDS_SQL,
+        paymentStatusParams(null, paymentStatus),
+      );
+    }
+
+    return this.paginate(query, {
+      where,
+      search: { ...ORDER_SEARCH, term: search },
+      relations: ['user', 'items', 'payments'],
+      orderBy: { field: sort, direction: order },
+      includeDeleted: true,
+    });
+  }
+
+  /** One of the user's orders, with its customer, items and payments. */
   findMineByIdOrNumber(
     userId: string,
     where: { id: string } | { orderNumber: string },
   ): Promise<Order | null> {
     return this.findOneBy(
       { ...where, user: userId },
-      { relations: ['items', 'payments'] },
+      { relations: ['user', 'items', 'payments'] },
     );
+  }
+
+  /** Any order, for an active admin (soft-deleted relations kept, as `findAll`). */
+  findAnyByIdOrNumber(
+    where: { id: string } | { orderNumber: string },
+  ): Promise<Order | null> {
+    return this.findOneBy(where, {
+      relations: ['user', 'items', 'payments'],
+      includeDeleted: true,
+    });
   }
 
   create(

@@ -34,6 +34,11 @@ export function profileOrderPath(orderNumber: string): string {
   return `${ROUTES.USER_PROFILE}/orders/${encodeURIComponent(orderNumber)}`
 }
 
+/** The admin's order details page. */
+export function dashboardOrderPath(orderNumber: string): string {
+  return `${ROUTES.DASHBOARD_ORDERS}/${encodeURIComponent(orderNumber)}`
+}
+
 export function dashboardEditPath(base: string, id: string): string {
   return `${base}/${encodeURIComponent(id)}/edit`
 }
