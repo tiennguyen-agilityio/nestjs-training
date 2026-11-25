@@ -58,6 +58,7 @@ export const API_BASE_URL =
 
 export const API_ROUTES = {
   ME: `${API_BASE_URL}/api/v1/users/me`,
+  MY_ADDRESSES: `${API_BASE_URL}/api/v1/users/me/addresses`,
   USERS: `${API_BASE_URL}/api/v1/users`,
   CATEGORIES: `${API_BASE_URL}/api/v1/categories`,
   PRODUCTS: `${API_BASE_URL}/api/v1/products`,

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type React from 'react'
@@ -20,6 +20,7 @@ import {
 import { orderSuccessPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart, type UseCartResult } from '@/hooks/useCart'
+import { addressQueryKeys, useMyAddresses } from '@/hooks/useMyAddresses'
 import { useCreateOrder } from '@/hooks/useOrder'
 import { useStartPayment } from '@/hooks/usePayment'
 import {
@@ -27,9 +28,11 @@ import {
   type UseActiveShippingMethodsResult,
 } from '@/hooks/useShippingMethod'
 import CheckoutPageContent from '@/sections/CheckoutPageContent'
+import { findMapboxAddressSuggestions } from '@/services/mapboxGeocode'
 import { useCartStore } from '@/store/useCartStore'
 import type { PlacedOrder } from '@/types/order'
 import type { ShippingMethod } from '@/types/shippingMethod'
+import type { User, UserAddress } from '@/types/user'
 import { ServiceError } from '@/utils/query'
 
 jest.mock('next/navigation', () => ({ useRouter: jest.fn() }))
@@ -68,6 +71,13 @@ jest.mock('@clerk/nextjs', () => ({
   useAuth: () => ({ getToken: jest.fn().mockResolvedValue('session-token') }),
 }))
 jest.mock('@/hooks/useAuth', () => ({ useAuth: jest.fn() }))
+jest.mock('@/hooks/useMyAddresses', () => ({
+  useMyAddresses: jest.fn(),
+  addressQueryKeys: {
+    root: ['addresses'],
+    mine: (userId: string | null) => ['addresses', 'mine', userId],
+  },
+}))
 jest.mock('@/hooks/useShippingMethod', () => ({
   useActiveShippingMethods: jest.fn(),
 }))
@@ -82,6 +92,7 @@ const mockUseRouter = jest.mocked(useRouter)
 const mockUseCartStore = jest.mocked(useCartStore)
 const mockUseCart = jest.mocked(useCart)
 const mockUseAuth = jest.mocked(useAuth)
+const mockUseMyAddresses = jest.mocked(useMyAddresses)
 const mockUseShippingMethods = jest.mocked(useActiveShippingMethods)
 const mockUseCreateOrder = jest.mocked(useCreateOrder)
 const mutateAsync = jest.fn()
@@ -220,6 +231,32 @@ const shippingResult = (
   ...overrides,
 })
 
+const savedAddress: UserAddress = {
+  id: 'address-1',
+  userId: 'user-1',
+  addressLine: '12 Roast Street',
+  ward: 'Ben Nghe',
+  district: 'District 1',
+  city: 'Ho Chi Minh',
+  postalCode: '700000',
+  isDefault: true,
+  createdAt: '2026-11-01T00:00:00.000Z',
+  updatedAt: '2026-11-01T00:00:00.000Z',
+}
+
+const addressesResult = (
+  overrides: Partial<ReturnType<typeof useMyAddresses>> = {},
+): ReturnType<typeof useMyAddresses> => ({
+  addresses: overrides.defaultAddress ? [overrides.defaultAddress] : [],
+  defaultAddress: null,
+  isLoading: false,
+  isFetching: false,
+  isError: false,
+  errorMessage: null,
+  refetch: jest.fn().mockResolvedValue(undefined),
+  ...overrides,
+})
+
 const deliverySpeed = () =>
   within(screen.getByRole('region', { name: 'Delivery Speed' }))
 
@@ -262,6 +299,158 @@ describe('CheckoutPageContent', () => {
     mockUseAuth.mockReturnValue({ user: null } as unknown as ReturnType<
       typeof useAuth
     >)
+    mockUseMyAddresses.mockReturnValue(addressesResult())
+    jest.mocked(findMapboxAddressSuggestions).mockClear()
+  })
+
+  describe('prefill', () => {
+    const profile = (overrides: Partial<User> = {}) =>
+      mockUseAuth.mockReturnValue({
+        user: {
+          id: 'user-1',
+          email: 'jane@example.com',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          phoneNumber: '0912345678',
+          name: 'Jane Doe',
+          avatarUrl: null,
+          ...overrides,
+        },
+      } as unknown as ReturnType<typeof useAuth>)
+
+    const field = (name: string) =>
+      screen.getByRole<HTMLInputElement>('textbox', { name })
+
+    it('prefills the address from the default address and the phone from the profile (R4, R6)', () => {
+      profile()
+      mockUseMyAddresses.mockReturnValue(
+        addressesResult({ defaultAddress: savedAddress }),
+      )
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      const { unmount } = renderCheckout()
+
+      expect(field('First Name').value).toBe('Jane')
+      expect(field('Last Name').value).toBe('Doe')
+      expect(field('Phone Number').value).toBe('0912345678')
+      expect(field('Delivery Address').value).toBe('12 Roast Street')
+      expect(field('City').value).toBe('Ho Chi Minh')
+      expect(field('District').value).toBe('District 1')
+      expect(field('Ward').value).toBe('Ben Nghe')
+      expect(field('Postal Code').value).toBe('700000')
+
+      unmount()
+      profile({ phoneNumber: null })
+      renderCheckout()
+
+      expect(field('Phone Number').value).toBe('')
+    })
+
+    it('keeps what the shopper typed when the default address loads later (R4)', async () => {
+      const user = userEvent.setup()
+      profile()
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      const { rerender } = renderCheckout()
+      await user.click(field('Delivery Address'))
+      await user.paste('5 Typed Lane')
+      mockUseMyAddresses.mockReturnValue(
+        addressesResult({ defaultAddress: savedAddress }),
+      )
+      rerender(<CheckoutPageContent />)
+
+      await waitFor(() => expect(field('First Name').value).toBe('Jane'))
+      expect(field('Delivery Address').value).toBe('5 Typed Lane')
+      expect(field('City').value).toBe('')
+      expect(field('District').value).toBe('')
+      expect(field('Ward').value).toBe('')
+      expect(field('Postal Code').value).toBe('')
+    })
+
+    it('fills the default address when the shopper typed only a name (R4)', async () => {
+      const user = userEvent.setup()
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      const { rerender } = renderCheckout()
+      await user.click(field('First Name'))
+      await user.paste('Ada')
+      mockUseMyAddresses.mockReturnValue(
+        addressesResult({ defaultAddress: savedAddress }),
+      )
+      rerender(<CheckoutPageContent />)
+
+      await waitFor(() =>
+        expect(field('Delivery Address').value).toBe('12 Roast Street'),
+      )
+      expect(field('City').value).toBe('Ho Chi Minh')
+      expect(field('District').value).toBe('District 1')
+      expect(field('Ward').value).toBe('Ben Nghe')
+      expect(field('Postal Code').value).toBe('700000')
+      expect(field('First Name').value).toBe('Ada')
+    })
+
+    it('a prefilled address does not look up suggestions', async () => {
+      profile()
+      mockUseMyAddresses.mockReturnValue(
+        addressesResult({ defaultAddress: savedAddress }),
+      )
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      renderCheckout()
+      await act(() => new Promise((resolve) => setTimeout(resolve, 400)))
+
+      expect(field('Delivery Address').value).toBe('12 Roast Street')
+      expect(findMapboxAddressSuggestions).not.toHaveBeenCalled()
+    })
+
+    it('leaves the address empty when the addresses request fails', async () => {
+      const user = userEvent.setup()
+      mockUseMyAddresses.mockReturnValue(
+        addressesResult({
+          isError: true,
+          errorMessage: API_FALLBACK_ERRORS.ADDRESSES_LOAD,
+        }),
+      )
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      renderCheckout()
+
+      expect(field('Delivery Address').value).toBe('')
+      await fillForm(user)
+      expect(placeOrderButton()).toBeEnabled()
+    })
+
+    it.each([['COD'], ['STRIPE']])(
+      'invalidates the addresses after a placed order (%s)',
+      async (method) => {
+        const user = userEvent.setup()
+        mutateAsync.mockResolvedValue(placedOrder)
+        mockUseShippingMethods.mockReturnValue(
+          shippingResult({ shippingMethods: [standard] }),
+        )
+
+        renderCheckout()
+        await fillForm(user)
+        if (method === 'COD') await pickCashOnDelivery(user)
+        await user.click(placeOrderButton())
+
+        await waitFor(() =>
+          expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: addressQueryKeys.root,
+          }),
+        )
+      },
+    )
   })
 
   it('AC1: offers the ACTIVE methods from the API with their fees', () => {

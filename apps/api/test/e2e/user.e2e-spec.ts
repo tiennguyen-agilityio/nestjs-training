@@ -13,6 +13,7 @@ import { UserRole, UserStatus, VALIDATION_RULES } from '@repo/constants';
 import { API_BASE_PATH } from './../utils/api-path.util.js';
 import { initTestApp } from './../utils/init-test-app.util.js';
 import type { User } from './../../src/modules/user/entities/user.entity.js';
+import { UserAddressRepository } from './../../src/modules/user/repositories/user-address.repository.js';
 
 vi.mock('@clerk/express', async () => {
   const actual: object = await vi.importActual('@clerk/express');
@@ -110,6 +111,12 @@ describe('UserController auth (e2e)', () => {
     });
   });
 
+  it('GET /users/me/addresses without a session returns 401', async () => {
+    await request(app.getHttpServer())
+      .get(`${API_BASE_PATH}/users/me/addresses`)
+      .expect(401);
+  });
+
   describe('Clerk session with no matching local user', () => {
     it('GET /users responds 401', async () => {
       mockSessionFor('clerk-id-that-does-not-exist');
@@ -171,9 +178,96 @@ describe('UserController auth (e2e)', () => {
           role: user.role,
           status: user.status,
           avatarUrl: user.avatarUrl,
+          phoneNumber: null,
           deletedAt: user.deletedAt,
         },
       });
+    });
+
+    it('GET /users/me returns phoneNumber', async () => {
+      const clerkId = generateClerkId();
+      const user = await RequestContext.create(orm.em, () =>
+        userService.create(
+          {
+            clerkId,
+            email: `${clerkId}@example.com`,
+            firstName: 'E2E',
+            lastName: 'Phone',
+            phoneNumber: '0912345678',
+          },
+          null,
+        ),
+      );
+      createdUserIds.push(user.id);
+      mockSessionFor(user.clerkId);
+
+      const response = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/users/me`)
+        .expect(200);
+
+      expect(
+        (response.body as { data: { phoneNumber: string | null } }).data
+          .phoneNumber,
+      ).toBe('0912345678');
+    });
+
+    it("GET /users/me/addresses returns the caller's addresses, default first (R3)", async () => {
+      const user = await createTestUser({ role: UserRole.USER });
+      const other = await createTestUser({ role: UserRole.USER });
+      const addresses = app.get(UserAddressRepository);
+      const fields = {
+        ward: 'Ben Nghe',
+        district: 'District 1',
+        city: 'Ho Chi Minh',
+        postalCode: '700000',
+      };
+      await RequestContext.create(orm.em, async () => {
+        await addresses.create({
+          userId: user.id,
+          addressLine: '5 Side Lane',
+          ...fields,
+          isDefault: false,
+        });
+        await addresses.create({
+          userId: user.id,
+          addressLine: '12 Roast Street',
+          ...fields,
+          isDefault: true,
+        });
+        await addresses.create({
+          userId: other.id,
+          addressLine: '1 Not Mine Road',
+          ...fields,
+          isDefault: true,
+        });
+      });
+      mockSessionFor(user.clerkId);
+
+      const response = await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/users/me/addresses`)
+        .expect(200);
+
+      const { data } = response.body as { data: Record<string, unknown>[] };
+      expect(data.map((row) => row.addressLine)).toEqual([
+        '12 Roast Street',
+        '5 Side Lane',
+      ]);
+      expect(data.map((row) => row.isDefault)).toEqual([true, false]);
+      expect(Object.keys(data[0]).sort()).toEqual(
+        [
+          'id',
+          'userId',
+          'addressLine',
+          'ward',
+          'district',
+          'city',
+          'postalCode',
+          'isDefault',
+          'createdAt',
+          'updatedAt',
+        ].sort(),
+      );
+      expect(data[0]).toMatchObject({ userId: user.id, ...fields });
     });
   });
 

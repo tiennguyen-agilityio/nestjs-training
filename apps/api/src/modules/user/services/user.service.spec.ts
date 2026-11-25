@@ -5,6 +5,7 @@ import { User } from '../entities/user.entity.js';
 import { UserRole, UserStatus } from '@repo/constants';
 import { AuthProvider } from '../../../common/providers/auth.provider.js';
 import { UserRepository } from '../repositories/user.repository.js';
+import { UserAddressService } from './user-address.service.js';
 import type { Mock } from 'vitest';
 import {
   DuplicateResourceException,
@@ -27,7 +28,10 @@ describe('UserService', () => {
     findRoleByClerkId: Mock;
     save: Mock;
     softDelete: Mock;
+    transactional: Mock;
   };
+  let userAddressService: { softDeleteAllOf: Mock };
+  let insideTransaction: boolean;
 
   const buildUser = (overrides: Partial<User> = {}): User => ({
     id: 'user-id-1',
@@ -60,13 +64,24 @@ describe('UserService', () => {
       findRoleByClerkId: vi.fn(),
       save: vi.fn(),
       softDelete: vi.fn(),
+      transactional: vi.fn(async (work: () => Promise<unknown>) => {
+        insideTransaction = true;
+        try {
+          return await work();
+        } finally {
+          insideTransaction = false;
+        }
+      }),
     };
+    insideTransaction = false;
+    userAddressService = { softDeleteAllOf: vi.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
         { provide: UserRepository, useValue: userRepository },
         { provide: AuthProvider, useValue: authProvider },
+        { provide: UserAddressService, useValue: userAddressService },
       ],
     }).compile();
 
@@ -706,6 +721,39 @@ describe('UserService', () => {
         ItemNotFoundException,
       );
       expect(userRepository.softDelete).not.toHaveBeenCalled();
+    });
+
+    it("remove soft-deletes the user's addresses in the same transaction", async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+      const calledInside: Record<string, boolean> = {};
+      userAddressService.softDeleteAllOf.mockImplementation(() => {
+        calledInside.addresses = insideTransaction;
+      });
+      userRepository.softDelete.mockImplementation(() => {
+        calledInside.user = insideTransaction;
+      });
+
+      await service.remove('user-id-1', ACTOR);
+
+      expect(userRepository.transactional).toHaveBeenCalledTimes(1);
+      expect(userAddressService.softDeleteAllOf).toHaveBeenCalledWith(
+        'user-id-1',
+        ACTOR,
+      );
+      expect(userRepository.softDelete).toHaveBeenCalledWith(user, ACTOR);
+      expect(calledInside).toEqual({ addresses: true, user: true });
+    });
+
+    it('remove from the webhook passes a null actor', async () => {
+      userRepository.findById.mockResolvedValue(buildUser());
+
+      await service.remove('user-id-1', null);
+
+      expect(userAddressService.softDeleteAllOf).toHaveBeenCalledWith(
+        'user-id-1',
+        null,
+      );
     });
   });
 });
