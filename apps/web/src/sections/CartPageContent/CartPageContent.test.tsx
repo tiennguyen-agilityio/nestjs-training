@@ -10,16 +10,19 @@ import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
 import type React from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 import {
   CART_CHECKOUT_BLOCKED_MESSAGE,
   OUT_OF_STOCK_LABEL,
 } from '@/constants/order'
+import { CART_QUANTITY_DEBOUNCE_MS } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { useCart, type UseCartResult } from '@/hooks/useCart'
 import CartPageContent from '@/sections/CartPageContent'
 import { useCartStore } from '@/store/useCartStore'
 
+jest.mock('sonner', () => ({ toast: { error: jest.fn() } }))
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }))
@@ -223,7 +226,12 @@ describe('CartPageContent', () => {
       name: 'Increase quantity',
     })
     await user.click(firstLineIncrease)
-    expect(baseUseCartResult.changeQuantity).toHaveBeenCalledWith('line-1', 2)
+    await waitFor(() =>
+      expect(baseUseCartResult.changeQuantity).toHaveBeenCalledWith(
+        'line-1',
+        2,
+      ),
+    )
 
     await user.click(
       screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
@@ -319,34 +327,194 @@ describe('CartPageContent', () => {
     ).toBeDisabled()
   })
 
-  it('sends one change at a time for a line', async () => {
-    const user = userEvent.setup()
-    let settle: (value: { ok: true }) => void = () => undefined
-    const changeQuantity = jest.fn(
-      () =>
-        new Promise<{ ok: true }>((resolve) => {
-          settle = resolve
-        }),
-    )
-    mockUseCart.mockReturnValue({ ...baseUseCartResult, changeQuantity })
-    render(<CartPageContent />)
+  it('debounces quick quantity clicks into one change with the last value', async () => {
+    jest.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime })
+      const changeQuantity = jest.fn(async () => ({ ok: true as const }))
+      mockUseCart.mockReturnValue({ ...baseUseCartResult, changeQuantity })
+      render(<CartPageContent />)
 
-    const [firstLineIncrease] = screen.getAllByRole('button', {
-      name: 'Increase quantity',
-    })
-    await user.click(firstLineIncrease)
-    await user.click(firstLineIncrease)
-    expect(changeQuantity).toHaveBeenCalledTimes(1)
-    expect(
-      screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
-    ).toBeDisabled()
+      const [firstLine] = screen.getAllByRole('group', {
+        name: 'Quantity controls',
+      })
+      const increase = within(firstLine).getByRole('button', {
+        name: 'Increase quantity',
+      })
+      await user.click(increase)
+      await user.click(increase)
 
-    await act(async () => {
-      settle({ ok: true })
-    })
-    expect(
-      screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
-    ).toBeEnabled()
+      // The stepper shows each click at once; nothing is sent yet.
+      expect(firstLine).toHaveTextContent('3')
+      expect(changeQuantity).not.toHaveBeenCalled()
+      expect(
+        screen.getByRole('button', { name: 'Proceed to Checkout' }),
+      ).toBeDisabled()
+
+      await act(async () => {
+        jest.advanceTimersByTime(CART_QUANTITY_DEBOUNCE_MS)
+      })
+
+      expect(changeQuantity).toHaveBeenCalledTimes(1)
+      expect(changeQuantity).toHaveBeenCalledWith('line-1', 3)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('sends a queued quantity at once when the page unmounts', async () => {
+    jest.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime })
+      const changeQuantity = jest.fn(async () => ({ ok: true as const }))
+      mockUseCart.mockReturnValue({ ...baseUseCartResult, changeQuantity })
+      const { unmount } = render(<CartPageContent />)
+
+      const [firstLineIncrease] = screen.getAllByRole('button', {
+        name: 'Increase quantity',
+      })
+      await user.click(firstLineIncrease)
+      unmount()
+
+      expect(changeQuantity).toHaveBeenCalledTimes(1)
+      expect(changeQuantity).toHaveBeenCalledWith('line-1', 2)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('toasts the error when the quantity sent on unmount fails', async () => {
+    jest.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime })
+      const changeQuantity = jest.fn(async () => ({
+        ok: false as const,
+        error: 'Only 1 left for this variant',
+      }))
+      mockUseCart.mockReturnValue({ ...baseUseCartResult, changeQuantity })
+      const { unmount } = render(<CartPageContent />)
+
+      const [firstLineIncrease] = screen.getAllByRole('button', {
+        name: 'Increase quantity',
+      })
+      await user.click(firstLineIncrease)
+      unmount()
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(toast.error).toHaveBeenCalledWith('Only 1 left for this variant')
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('runs a Remove confirmed while the line saves once the save lands', async () => {
+    jest.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime })
+      let settle: (value: { ok: true }) => void = () => undefined
+      const changeQuantity = jest.fn(
+        () =>
+          new Promise<{ ok: true }>((resolve) => {
+            settle = resolve
+          }),
+      )
+      const removeItem = jest.fn(async () => ({ ok: true as const }))
+      mockUseCart.mockReturnValue({
+        ...baseUseCartResult,
+        changeQuantity,
+        removeItem,
+      })
+      render(<CartPageContent />)
+
+      const [firstLineIncrease] = screen.getAllByRole('button', {
+        name: 'Increase quantity',
+      })
+      await user.click(firstLineIncrease)
+      await user.click(
+        screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
+      )
+      // The quantity goes while the dialog is open.
+      await act(async () => {
+        jest.advanceTimersByTime(CART_QUANTITY_DEBOUNCE_MS)
+      })
+      expect(changeQuantity).toHaveBeenCalledWith('line-1', 2)
+
+      const modal = screen.getByRole('alertdialog', { name: 'Remove item?' })
+      await user.click(within(modal).getByRole('button', { name: 'Remove' }))
+      expect(removeItem).not.toHaveBeenCalled()
+      // The saving quantity stays shown until its reply lands.
+      const [firstLine] = screen.getAllByRole('group', {
+        name: 'Quantity controls',
+      })
+      expect(firstLine).toHaveTextContent('2')
+
+      await act(async () => {
+        settle({ ok: true })
+      })
+      expect(removeItem).toHaveBeenCalledWith('line-1')
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('frees the line when a quantity change throws at once', async () => {
+    jest.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime })
+      const changeQuantity = jest.fn(() => {
+        throw new Error('no cart id')
+      })
+      mockUseCart.mockReturnValue({ ...baseUseCartResult, changeQuantity })
+      render(<CartPageContent />)
+
+      const [firstLineIncrease] = screen.getAllByRole('button', {
+        name: 'Increase quantity',
+      })
+      await user.click(firstLineIncrease)
+      await act(async () => {
+        jest.advanceTimersByTime(CART_QUANTITY_DEBOUNCE_MS)
+      })
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        API_FALLBACK_ERRORS.CART_UPDATE,
+      )
+      expect(
+        screen.getByRole('button', { name: 'Proceed to Checkout' }),
+      ).toBeEnabled()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('sends no queued change for a line that is removed', async () => {
+    jest.useFakeTimers()
+    try {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime })
+      const changeQuantity = jest.fn(async () => ({ ok: true as const }))
+      mockUseCart.mockReturnValue({ ...baseUseCartResult, changeQuantity })
+      render(<CartPageContent />)
+
+      const [firstLineIncrease] = screen.getAllByRole('button', {
+        name: 'Increase quantity',
+      })
+      await user.click(firstLineIncrease)
+      await user.click(
+        screen.getByRole('button', { name: 'Remove Ethiopian Yirgacheffe' }),
+      )
+      const modal = screen.getByRole('alertdialog', { name: 'Remove item?' })
+      await user.click(within(modal).getByRole('button', { name: 'Remove' }))
+
+      await act(async () => {
+        jest.advanceTimersByTime(CART_QUANTITY_DEBOUNCE_MS)
+      })
+
+      expect(changeQuantity).not.toHaveBeenCalled()
+      expect(baseUseCartResult.removeItem).toHaveBeenCalledWith('line-1')
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('shows the fallback error when a cart action throws', async () => {

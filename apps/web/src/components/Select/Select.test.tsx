@@ -105,4 +105,21 @@ describe('Select', () => {
 
     expect(screen.getByLabelText('Origin')).toBeDisabled()
   })
+
+  it.each([
+    ['filter', 'rounded-full'],
+    ['form', 'h-14'],
+  ] as const)('styles the %s variant trigger with %s', (variant, className) => {
+    render(
+      <Select
+        variant={variant}
+        ariaLabel="Status"
+        options={[{ value: 'a', label: 'A' }]}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Status' })).toHaveClass(
+      className,
+    )
+  })
 })

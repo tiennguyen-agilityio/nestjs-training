@@ -3,9 +3,9 @@ import Link from 'next/link'
 
 import { type RoastCollection } from '@/constants/roast'
 import { shopRoastDetailPath } from '@/constants/routes'
-import { formatPrice } from '@/utils/common'
 import { cn } from '@/utils/styles'
 import { EMPTY_IMAGE } from '@/constants/images'
+import SalePrice from '@/components/SalePrice'
 
 export interface ProductCardProps {
   item: RoastCollection
@@ -46,8 +46,12 @@ const ProductCard = ({ item }: ProductCardProps) => {
           <h3 className="line-clamp-2 font-headline text-lg leading-tight text-on-surface">
             {item.name}
           </h3>
-          <span className="shrink-0 font-bold text-primary">
-            {formatPrice(item.price)}
+          <span className="shrink-0 text-right font-bold text-primary">
+            <SalePrice
+              price={item.salePrice}
+              listPrice={item.price}
+              listPriceClassName="text-xs"
+            />
           </span>
         </div>
         <p className="truncate text-xs font-medium tracking-wider text-on-surface-variant uppercase">

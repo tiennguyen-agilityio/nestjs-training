@@ -80,3 +80,13 @@ export const checkoutSchema = z
 
 export const parseCheckoutValues = (values: CheckoutFormValues) =>
   checkoutSchema.safeParse(values)
+
+/** The first schema message for one field (a blur check), or undefined. */
+export const validateCheckoutField = (
+  values: CheckoutFormValues,
+  field: keyof CheckoutFormValues,
+): string | undefined => {
+  const result = checkoutSchema.safeParse(values)
+  if (result.success) return undefined
+  return result.error.issues.find((issue) => issue.path[0] === field)?.message
+}

@@ -108,7 +108,7 @@ export default function CheckoutShippingMethods({
     <section aria-label="Delivery Speed">
       <div className="flex items-center justify-start gap-2">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ring text-sm font-semibold text-primary-foreground">
-          3
+          2
         </div>
         <h2 className="text-2xl font-medium text-on-surface">Delivery Speed</h2>
       </div>

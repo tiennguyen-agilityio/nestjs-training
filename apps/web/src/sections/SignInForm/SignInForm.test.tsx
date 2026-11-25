@@ -199,6 +199,26 @@ describe('SignInForm', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows the social buttons before the email form', () => {
+    render(<SignInForm />)
+
+    expect(
+      screen
+        .getByText('Social buttons')
+        .compareDocumentPosition(
+          screen.getByPlaceholderText('example@gmail.com'),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('keeps Keep me signed in disabled', () => {
+    render(<SignInForm />)
+
+    expect(
+      screen.getByRole('checkbox', { name: 'Keep me signed in' }),
+    ).toBeDisabled()
+  })
+
   it('disables submit action when global loading is active', () => {
     state.globalLoading = true
 

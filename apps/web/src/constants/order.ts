@@ -4,6 +4,7 @@ import { OrderStatus, PaymentMethod, ShippingStatus } from '@repo/constants'
 import type { OptionItem } from '@/types/common'
 
 export const OUT_OF_STOCK_LABEL = 'Out of stock'
+export const LOW_STOCK_LABEL = 'Low Stock'
 
 export const CART_CHECKOUT_BLOCKED_MESSAGE =
   'Remove or update out-of-stock items before proceeding to checkout.'
@@ -131,6 +132,12 @@ export const ORDERS_HISTORY_TABLE_COLUMNS: TableColumn[] = [
     label: 'Total',
     className:
       'px-6 py-5 text-right font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
+  },
+  {
+    key: 'actions',
+    label: 'Actions',
+    className:
+      'px-6 py-5 text-center font-sans text-xs font-semibold uppercase tracking-wider text-on-surface-variant',
   },
 ]
 

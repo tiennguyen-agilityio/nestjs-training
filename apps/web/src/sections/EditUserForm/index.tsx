@@ -222,6 +222,7 @@ export function EditUserForm({ open, onOpenChange, user }: EditUserFormProps) {
               name="role"
               render={({ field }) => (
                 <Select
+                  variant="form"
                   label="Role"
                   disabled={isPending}
                   selected={field.value}
@@ -242,6 +243,7 @@ export function EditUserForm({ open, onOpenChange, user }: EditUserFormProps) {
               name="status"
               render={({ field }) => (
                 <Select
+                  variant="form"
                   label="Status"
                   disabled={isPending}
                   selected={field.value}

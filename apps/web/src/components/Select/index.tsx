@@ -24,6 +24,16 @@ export interface SelectProps extends Omit<
   selected?: string | number
   options: OptionItem[]
   classNameTrigger?: string
+  /** `filter`: a list toolbar filter; `form`: a form field, as tall as an input. */
+  variant?: SelectVariant
+}
+
+export type SelectVariant = 'default' | 'filter' | 'form'
+
+export const SELECT_TRIGGER_VARIANT_CLASS: Record<SelectVariant, string> = {
+  default: '',
+  filter: 'rounded-full',
+  form: 'h-14',
 }
 
 export const Select = ({
@@ -36,6 +46,7 @@ export const Select = ({
   onValueChange,
   errorMessage,
   classNameTrigger = '',
+  variant = 'default',
   ...rootProps
 }: SelectProps) => {
   const controlId = React.useId()
@@ -79,6 +90,7 @@ export const Select = ({
           aria-label={ariaLabel}
           className={cn(
             'w-full',
+            SELECT_TRIGGER_VARIANT_CLASS[variant],
             classNameTrigger,
             Boolean(errorMessage) ? 'border border-destructive' : undefined,
           )}

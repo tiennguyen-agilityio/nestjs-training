@@ -166,6 +166,7 @@ export function ProfilePageView() {
             </h2>
             <div className="w-56">
               <Select
+                variant="filter"
                 ariaLabel="Filter by order status"
                 options={ORDER_STATUS_FILTER_OPTIONS}
                 selected={status ?? ALL_ORDER_STATUSES_VALUE}

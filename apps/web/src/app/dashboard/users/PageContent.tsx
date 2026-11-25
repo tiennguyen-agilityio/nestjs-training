@@ -236,7 +236,8 @@ export const PageContent = () => {
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
             <div className="min-w-40">
               <Select
-                classNameTrigger="rounded-full capitalize"
+                variant="filter"
+                classNameTrigger="capitalize"
                 selected={normalizedRole ?? ROLE_FILTER_OPTIONS[0]}
                 onValueChange={handleRoleChange}
                 options={ROLE_FILTER_OPTIONS.map((option) => ({
@@ -252,7 +253,7 @@ export const PageContent = () => {
             </div>
             <div className="min-w-40">
               <Select
-                classNameTrigger="rounded-full"
+                variant="filter"
                 selected={normalizedStatus ?? STATUS_FILTER_OPTIONS[0].value}
                 onValueChange={handleStatusChange}
                 options={[...STATUS_FILTER_OPTIONS]}

@@ -503,7 +503,7 @@ const ProductForm = ({
                     name="categoryId"
                     render={({ field }) => (
                       <Select
-                        classNameTrigger="h-14"
+                        variant="form"
                         label="Category"
                         placeholder="Select category"
                         options={categoryOptions}
@@ -577,7 +577,7 @@ const ProductForm = ({
                   render={({ field }) => (
                     <Select
                       label="Unit"
-                      classNameTrigger="h-14"
+                      variant="form"
                       placeholder="Select unit"
                       options={UNIT_OPTIONS}
                       selected={field.value}

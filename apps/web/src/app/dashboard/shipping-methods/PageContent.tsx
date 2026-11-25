@@ -171,7 +171,7 @@ export const PageContent = () => {
           />
           <div className="min-w-40">
             <Select
-              classNameTrigger="rounded-full"
+              variant="filter"
               selected={statusFilter ?? SHIPPING_METHOD_STATUS_FILTER_ALL}
               onValueChange={handleStatusFilterChange}
               options={[...SHIPPING_METHOD_STATUS_FILTER_OPTIONS]}

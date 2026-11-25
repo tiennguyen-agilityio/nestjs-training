@@ -11,7 +11,7 @@ import PageHeader from '@/components/PageHeader'
 import { PaginationBar } from '@/components/Pagination'
 import Table, { type TableColumn } from '@/components/Table'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Select } from '@/components/Select'
 import {
   API_FALLBACK_ERRORS,
   ERROR_MESSAGES,
@@ -70,6 +70,23 @@ const FILTER_TYPES = [
   InventoryMovementType.RESERVE,
   InventoryMovementType.RELEASE,
 ]
+
+const ALL_TYPES_VALUE = 'all'
+
+const TYPE_FILTER_OPTIONS = [
+  { value: ALL_TYPES_VALUE, label: 'All types' },
+  ...FILTER_TYPES.map((value) => ({
+    value,
+    label: MOVEMENT_TYPES[value].label,
+  })),
+]
+
+const FILTER_TYPE_VALUES = new Set<string>(FILTER_TYPES)
+
+const toFilterType = (value: unknown): InventoryMovementType | undefined =>
+  typeof value === 'string' && FILTER_TYPE_VALUES.has(value)
+    ? (value as InventoryMovementType)
+    : undefined
 
 const signed = (quantity: number) =>
   quantity > 0 ? `+${quantity}` : `−${Math.abs(quantity)}`
@@ -170,23 +187,16 @@ export default function InventoryHistoryPageContent() {
       {header}
 
       <section className="overflow-hidden rounded-3xl border border-outline-variant/40 bg-card">
-        <div
-          role="group"
-          aria-label="Movement type"
-          className="flex flex-wrap gap-2 border-b border-outline-variant/30 p-4"
-        >
-          {[undefined, ...FILTER_TYPES].map((value) => (
-            <Button
-              key={value ?? 'all'}
-              size="sm"
-              variant={type === value ? 'default' : 'outline'}
-              aria-pressed={type === value}
-              className="w-auto rounded-full px-4"
-              onClick={() => selectType(value)}
-            >
-              {value ? MOVEMENT_TYPES[value].label : 'All'}
-            </Button>
-          ))}
+        <div className="flex justify-end border-b border-outline-variant/30 p-4">
+          <div className="w-full md:w-56">
+            <Select
+              variant="filter"
+              ariaLabel="Movement type"
+              options={TYPE_FILTER_OPTIONS}
+              selected={type ?? ALL_TYPES_VALUE}
+              onValueChange={(value) => selectType(toFilterType(value))}
+            />
+          </div>
         </div>
 
         <ListBody

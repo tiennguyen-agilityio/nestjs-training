@@ -165,6 +165,7 @@ describe('ProfilePageView', () => {
       'Shipping',
       'Payment',
       'Total',
+      'Actions',
     ])
     for (const [order, status] of [
       [o2, 'Pending'],
@@ -182,6 +183,7 @@ describe('ProfilePageView', () => {
         'Pending',
         'Unpaid',
         formatPrice(order.totalAmount),
+        '',
       ])
     }
     expect(lastOrdersCall()).toEqual({ page: 1 })
@@ -197,6 +199,19 @@ describe('ProfilePageView', () => {
     await user.click(within(row).getByText(formatPrice(o1.totalAmount)))
 
     expect(mockPush).toHaveBeenCalledWith(profileOrderPath(o1.orderNumber))
+  })
+
+  it('the eye action links to the order details page', async () => {
+    const user = userEvent.setup()
+    render(<ProfilePageView />)
+
+    const view = screen.getByRole('link', {
+      name: `View order #${o1.orderNumber}`,
+    })
+    expect(view).toHaveAttribute('href', profileOrderPath(o1.orderNumber))
+
+    await user.click(view)
+    expect(mockPush).not.toHaveBeenCalled()
   })
 
   it('changing the status filter goes back to page 1', async () => {

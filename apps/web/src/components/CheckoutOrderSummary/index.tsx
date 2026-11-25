@@ -23,6 +23,8 @@ export interface CheckoutOrderSummaryProps {
   hasBlockingItemErrors?: boolean
   isPlacingOrder?: boolean
   isPlaceOrderDisabled?: boolean
+  /** The button's text: "Continue to payment" for a card payment; "Place Order" by default. */
+  placeOrderLabel?: string
   /** Rendered instead of the Place Order button (PayPal's own button). */
   placeOrderAction?: ReactNode
   /** A note above the button: info as status, error as alert. */
@@ -40,6 +42,7 @@ export const CheckoutOrderSummary = ({
   hasBlockingItemErrors = false,
   isPlacingOrder = false,
   isPlaceOrderDisabled = false,
+  placeOrderLabel = 'Place Order',
   placeOrderAction,
   notice,
   className,
@@ -88,7 +91,9 @@ export const CheckoutOrderSummary = ({
                   {item.name}
                 </p>
                 <p className="truncate text-sm text-on-surface-variant">
-                  {item.meta}
+                  {[item.meta, `Qty ${item.quantity}`]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </p>
                 <p className="mt-1 font-semibold text-primary">
                   <SalePrice
@@ -198,7 +203,7 @@ export const CheckoutOrderSummary = ({
           className="mt-4 h-14 rounded-full text-base"
           onClick={onPlaceOrder}
         >
-          Place Order
+          {placeOrderLabel}
           <ShoppingBag className="size-4" aria-hidden />
         </Button>
       )}
