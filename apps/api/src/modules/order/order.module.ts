@@ -10,6 +10,7 @@ import { OrderController } from './controllers/order.controller.js';
 import { CartModule } from '../cart/cart.module.js';
 import { ProductVariantModule } from '../product-variant/product-variant.module.js';
 import { ShippingMethodModule } from '../shipping-method/shipping-method.module.js';
+import { UserModule } from '../user/user.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ShippingMethodModule } from '../shipping-method/shipping-method.module.
     CartModule,
     ProductVariantModule,
     ShippingMethodModule,
+    UserModule,
   ],
   providers: [OrderService, OrderRepository],
   controllers: [OrderController],

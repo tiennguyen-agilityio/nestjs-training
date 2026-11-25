@@ -6,21 +6,24 @@ export interface User {
   email: string | null
   firstName: string | null
   lastName: string | null
-  address?: {
-    firstName: string | null
-    lastName: string | null
-    phoneNumber: string | null
-    addressLine: string | null
-    district: string | null
-    ward: string | null
-    city: string | null
-    postalCode: string | null
-    isDefault: boolean | null
-  } | null
+  phoneNumber?: string | null
   name: string | null
   avatarUrl: string | null
   role?: UserRole
   status?: UserStatus
+}
+
+export interface UserAddress {
+  id: string
+  userId: string
+  addressLine: string
+  ward: string
+  district: string
+  city: string
+  postalCode: string
+  isDefault: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export interface ClerkUser extends User {

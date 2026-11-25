@@ -1,4 +1,4 @@
-import type { User } from '@/types/user'
+import type { User, UserAddress } from '@/types/user'
 import { UserRole, UserStatus } from '@repo/constants'
 import type { UpdateUserPayload } from '@repo/schemas'
 import type { Response, ResponseMeta } from '@/types/api'
@@ -49,18 +49,6 @@ function getStatus(value: unknown): User['status'] {
   return undefined
 }
 
-function readAddressFromAddresses(value: unknown): User['address'] {
-  if (!Array.isArray(value) || value.length === 0) return null
-
-  const address = value.filter(
-    (item): item is Record<string, unknown> =>
-      item !== null && typeof item === 'object' && !Array.isArray(item),
-  )
-  if (!address.length) return null
-
-  return address[0] as User['address']
-}
-
 function readDeletedAt(payload: Record<string, unknown>): string | null {
   const raw =
     payload.deletedAt !== undefined ? payload.deletedAt : payload.deleted_at
@@ -92,7 +80,6 @@ function normalizeUserListItem(item: unknown): User | null {
     readString(payload.avatarUrl) ??
     readString(payload.avatar_url) ??
     readString(payload.picture)
-  const address = readAddressFromAddresses(payload.addresses)
   const role = getRole(payload.role)
   const status = getStatus(payload.status)
   const deletedAt = readDeletedAt(payload)
@@ -103,7 +90,6 @@ function normalizeUserListItem(item: unknown): User | null {
     email,
     firstName,
     lastName,
-    address,
     name,
     avatarUrl: imageUrl,
     role,
@@ -164,7 +150,7 @@ export async function fetchUser(
     readString(payload.avatarUrl) ??
     readString(payload.avatar_url) ??
     readString(payload.picture)
-  const address = readAddressFromAddresses(payload.addresses)
+  const phoneNumber = readString(payload.phoneNumber)
   const role = getRole(payload.role)
   const status = getStatus(payload.status)
   const deletedAt = readDeletedAt(payload)
@@ -174,7 +160,7 @@ export async function fetchUser(
     email,
     firstName,
     lastName,
-    address,
+    phoneNumber,
     name,
     avatarUrl: imageUrl,
     role,
@@ -182,6 +168,25 @@ export async function fetchUser(
   }
 
   return { ok: true, user }
+}
+
+export async function fetchMyAddresses(
+  getToken?: () => Promise<string | null>,
+): Promise<
+  | { ok: true; addresses: UserAddress[] }
+  | { ok: false; error: string; status?: number }
+> {
+  const result = await apiClient.get<Response<UserAddress[]>>(
+    API_ROUTES.MY_ADDRESSES,
+    {
+      getToken,
+      fallbackError: API_FALLBACK_ERRORS.ADDRESSES_LOAD,
+    },
+  )
+  if (!result.ok) return result
+
+  const { data } = result.data
+  return { ok: true, addresses: Array.isArray(data) ? data : [] }
 }
 
 export async function fetchUsers(

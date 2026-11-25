@@ -84,6 +84,7 @@ export const FORM_MESSAGES = {
 } as const
 
 export const API_FALLBACK_ERRORS = {
+  ADDRESSES_LOAD: 'Could not load your saved addresses',
   CATEGORY_CREATE: 'Could not create category',
   CATEGORY_DELETE: 'Could not delete category',
   CATEGORY_LOAD: 'Could not load category',

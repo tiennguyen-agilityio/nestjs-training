@@ -15,6 +15,7 @@ import { OrderRepository } from '../repositories/order.repository.js';
 import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
+import { UserAddressService } from '../../user/services/user-address.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
 import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
@@ -125,6 +126,7 @@ describe('OrderService', () => {
   let cartService: Record<'lockForCheckout' | 'clearItems', Mock>;
   let productVariantService: Record<'reserve' | 'reload' | 'release', Mock>;
   let shippingMethodService: Record<'findForOrder', Mock>;
+  let userAddressService: Record<'saveFirstAsDefault', Mock>;
   let fromEntity: Mock;
   const created = { id: 'order-1' } as Order;
   const response = { id: 'order-1' } as ResponseOrderDto;
@@ -168,6 +170,7 @@ describe('OrderService', () => {
     shippingMethodService = {
       findForOrder: vi.fn().mockResolvedValue(method()),
     };
+    userAddressService = { saveFirstAsDefault: vi.fn() };
     fromEntity = vi
       .spyOn(ResponseOrderDto, 'fromEntity')
       .mockReturnValue(response);
@@ -179,6 +182,7 @@ describe('OrderService', () => {
         { provide: CartService, useValue: cartService },
         { provide: ProductVariantService, useValue: productVariantService },
         { provide: ShippingMethodService, useValue: shippingMethodService },
+        { provide: UserAddressService, useValue: userAddressService },
       ],
     }).compile();
     service = module.get(OrderService);
@@ -477,6 +481,38 @@ describe('OrderService', () => {
     );
     expect(fromEntity).toHaveBeenCalledWith(created);
     expect(orderRepository.transactional).toHaveBeenCalledTimes(1);
+  });
+
+  it('place saves the order address as the first default address', async () => {
+    await service.place(USER_ID, input());
+
+    expect(userAddressService.saveFirstAsDefault).toHaveBeenCalledTimes(1);
+    expect(userAddressService.saveFirstAsDefault).toHaveBeenCalledWith(
+      USER_ID,
+      {
+        addressLine: '12 Le Loi',
+        ward: 'Ben Nghe',
+        district: 'District 1',
+        city: 'Ho Chi Minh City',
+        postalCode: '700000',
+      },
+    );
+    const saveOrder =
+      userAddressService.saveFirstAsDefault.mock.invocationCallOrder[0];
+    expect(orderRepository.create.mock.invocationCallOrder[0]).toBeLessThan(
+      saveOrder,
+    );
+    expect(saveOrder).toBeLessThan(
+      cartService.clearItems.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('place saves no address when the cart is empty', async () => {
+    cartService.lockForCheckout.mockResolvedValueOnce(cartWith());
+
+    await errorOf(service.place(USER_ID, input()));
+
+    expect(userAddressService.saveFirstAsDefault).not.toHaveBeenCalled();
   });
 
   describe('findMine', () => {
