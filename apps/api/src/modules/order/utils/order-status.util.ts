@@ -1,6 +1,25 @@
-import { OrderStatus, ShippingStatus } from '@repo/constants';
+import {
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  ShippingStatus,
+} from '@repo/constants';
 
-/** The order status moves an admin may make; every other move is refused. */
+export interface StatusFacts {
+  status: OrderStatus;
+  shippingStatus: ShippingStatus;
+  charges: {
+    method: PaymentMethod;
+    status: PaymentStatus;
+    transactionId: string | null;
+  }[];
+}
+
+export type OrderMoveBlock =
+  'notAMove' | 'unpaidOnline' | 'shipped' | 'paymentHeld' | 'notDelivered';
+
+export type ShippingMoveBlock = 'notAMove' | 'notConfirmed' | 'paymentHeld';
+
 const ORDER_STATUS_MOVES: Readonly<
   Record<OrderStatus, readonly OrderStatus[]>
 > = {
@@ -10,7 +29,6 @@ const ORDER_STATUS_MOVES: Readonly<
   [OrderStatus.CANCELLED]: [],
 };
 
-/** The shipping status moves an admin may make; every other move is refused. */
 const SHIPPING_STATUS_MOVES: Readonly<
   Record<ShippingStatus, readonly ShippingStatus[]>
 > = {
@@ -23,12 +41,59 @@ const SHIPPING_STATUS_MOVES: Readonly<
   [ShippingStatus.RETURNED]: [],
 };
 
-export const canMoveOrderStatus = (
-  from: OrderStatus,
-  to: OrderStatus,
-): boolean => ORDER_STATUS_MOVES[from].includes(to);
+const isCod = (facts: StatusFacts): boolean =>
+  facts.charges.some((charge) => charge.method === PaymentMethod.COD);
 
-export const canMoveShippingStatus = (
-  from: ShippingStatus,
+const hasPaidCharge = (facts: StatusFacts): boolean =>
+  facts.charges.some((charge) => charge.status === PaymentStatus.PAID);
+
+const hasHeldCharge = (facts: StatusFacts): boolean =>
+  facts.charges.some(
+    (charge) =>
+      charge.status === PaymentStatus.PENDING && Boolean(charge.transactionId),
+  );
+
+export const orderMoveBlockOf = (
+  facts: StatusFacts,
+  to: OrderStatus,
+): OrderMoveBlock | null => {
+  if (!ORDER_STATUS_MOVES[facts.status].includes(to)) return 'notAMove';
+  switch (to) {
+    case OrderStatus.CONFIRMED:
+      return isCod(facts) || hasPaidCharge(facts) ? null : 'unpaidOnline';
+    case OrderStatus.CANCELLED:
+      if (facts.shippingStatus !== ShippingStatus.PENDING) return 'shipped';
+      return hasHeldCharge(facts) ? 'paymentHeld' : null;
+    case OrderStatus.COMPLETED:
+      return facts.shippingStatus === ShippingStatus.DELIVERED
+        ? null
+        : 'notDelivered';
+    default:
+      return null;
+  }
+};
+
+export const shippingMoveBlockOf = (
+  facts: StatusFacts,
   to: ShippingStatus,
-): boolean => SHIPPING_STATUS_MOVES[from].includes(to);
+): ShippingMoveBlock | null => {
+  if (!SHIPPING_STATUS_MOVES[facts.shippingStatus].includes(to)) {
+    return 'notAMove';
+  }
+  if (facts.status !== OrderStatus.CONFIRMED) return 'notConfirmed';
+  return to === ShippingStatus.RETURNED && hasHeldCharge(facts)
+    ? 'paymentHeld'
+    : null;
+};
+
+export const allowedStatusesOf = (facts: StatusFacts): OrderStatus[] =>
+  Object.values(OrderStatus).filter(
+    (to) => orderMoveBlockOf(facts, to) === null,
+  );
+
+export const allowedShippingStatusesOf = (
+  facts: StatusFacts,
+): ShippingStatus[] =>
+  Object.values(ShippingStatus).filter(
+    (to) => shippingMoveBlockOf(facts, to) === null,
+  );

@@ -133,6 +133,18 @@ export class ProductVariantRepository extends BaseRepository<ProductVariant> {
     );
   }
 
+  async sell(id: string, quantity: number, actorId: ActorId): Promise<boolean> {
+    if (!(await this.release(id, quantity, actorId))) return false;
+    return this.incrementGuarded(
+      id,
+      'stockQuantity',
+      -quantity,
+      'stock_quantity - ? >= reserved_quantity',
+      [quantity],
+      actorId,
+    );
+  }
+
   reload(variant: ProductVariant): Promise<ProductVariant | null> {
     return this.reloadEntity(variant);
   }

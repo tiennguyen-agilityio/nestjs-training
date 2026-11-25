@@ -1,5 +1,10 @@
 import { Collection } from '@mikro-orm/core';
-import { OrderPaymentStatus, PaymentMethod } from '@repo/constants';
+import {
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+  ShippingStatus,
+} from '@repo/constants';
 import { ResponseOrderDetailDto } from './response-order-detail.dto.js';
 import { Order } from '../entities/order.entity.js';
 import { OrderItem } from '../entities/order-item.entity.js';
@@ -39,6 +44,33 @@ const orderOf = (user: User): Order => {
 };
 
 describe('ResponseOrderDetailDto', () => {
+  it('fromEntity leaves the allowed statuses out unless given', () => {
+    const user = Object.assign(new User(), {
+      id: 'user-1',
+      firstName: 'Lan',
+      lastName: 'Nguyễn',
+      email: 'lan@example.com',
+    });
+
+    const plain = JSON.parse(
+      JSON.stringify(ResponseOrderDetailDto.fromEntity(orderOf(user))),
+    ) as Record<string, unknown>;
+    expect(plain).not.toHaveProperty('allowedStatuses');
+    expect(plain).not.toHaveProperty('allowedShippingStatuses');
+
+    const withAllowed = ResponseOrderDetailDto.fromEntity(orderOf(user), {
+      statuses: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+      shippingStatuses: [ShippingStatus.SHIPPING],
+    });
+    expect(withAllowed.allowedStatuses).toEqual([
+      OrderStatus.CONFIRMED,
+      OrderStatus.CANCELLED,
+    ]);
+    expect(withAllowed.allowedShippingStatuses).toEqual([
+      ShippingStatus.SHIPPING,
+    ]);
+  });
+
   it('ResponseOrderDetailDto adds the customer', () => {
     const user = Object.assign(new User(), {
       id: 'user-1',

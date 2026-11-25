@@ -218,6 +218,18 @@ export class OrderRepository extends BaseRepository<Order> {
     await this.save(order, actorId);
   }
 
+  async saveDelivered(order: Order, actorId: ActorId): Promise<void> {
+    for (const item of order.items.getItems()) {
+      this.createRelated(InventoryMovement.name, {
+        productVariant: item.productVariant,
+        order,
+        type: InventoryMovementType.SALE,
+        quantity: item.quantity,
+      });
+    }
+    await this.save(order, actorId);
+  }
+
   async existsByNumber(orderNumber: string): Promise<boolean> {
     return (
       (await this.findOneBy({ orderNumber }, { includeDeleted: true })) !== null

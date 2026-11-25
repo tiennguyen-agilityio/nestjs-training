@@ -65,6 +65,10 @@ export class ProductVariantService {
     return this.productVariantRepository.release(id, quantity, actorId);
   }
 
+  sell(id: string, quantity: number, actorId: ActorId): Promise<boolean> {
+    return this.productVariantRepository.sell(id, quantity, actorId);
+  }
+
   reload(variant: ProductVariant): Promise<ProductVariant | null> {
     return this.productVariantRepository.reload(variant);
   }

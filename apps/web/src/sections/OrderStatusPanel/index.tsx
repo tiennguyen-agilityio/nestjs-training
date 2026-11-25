@@ -5,11 +5,10 @@ import { toast } from 'sonner'
 import {
   OrderPaymentStatus,
   OrderStatus,
-  type ShippingStatus,
+  ShippingStatus,
 } from '@repo/constants'
 
 import type { OrderDetail } from '@/types/order'
-import { ORDER_TRANSITIONS, SHIPPING_TRANSITIONS } from '@/constants/order'
 import { DIALOG_MESSAGES, SUCCESS_MESSAGES } from '@/constants/messages'
 import {
   useUpdateOrderShippingStatus,
@@ -43,9 +42,9 @@ const ORDER_PREFIX = 'order:'
 const SHIPPING_PREFIX = 'shipping:'
 
 /**
- * The admin's "Update status" panel: picks one allowed next step of the
- * order status or of the shipping status and applies it. Cancelling asks
- * first; every other step applies at once.
+ * The admin's "Update status" panel: lists every other order and shipping
+ * status, enables the ones the API allows now and applies the chosen one.
+ * Cancelling and marking returned ask first; every other step applies at once.
  */
 export default function OrderStatusPanel({
   order,
@@ -55,12 +54,26 @@ export default function OrderStatusPanel({
   const [choice, setChoice] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<OrderDetail | null>(null)
+  const [confirmingReturn, setConfirmingReturn] = useState<OrderDetail | null>(
+    null,
+  )
   const orderStatus = useUpdateOrderStatus()
   const shippingStatus = useUpdateOrderShippingStatus()
   const isPending = orderStatus.isPending || shippingStatus.isPending
 
-  const orderSteps = ORDER_TRANSITIONS[order.status]
-  const shippingSteps = SHIPPING_TRANSITIONS[order.shippingStatus]
+  const allowedStatuses = order.allowedStatuses ?? []
+  const allowedShippingStatuses = order.allowedShippingStatuses ?? []
+  const orderSteps = Object.values(OrderStatus).filter(
+    (status) => status !== order.status,
+  )
+  const shippingSteps = Object.values(ShippingStatus).filter(
+    (status) => status !== order.shippingStatus,
+  )
+  const isClosed =
+    (order.status === OrderStatus.COMPLETED ||
+      order.status === OrderStatus.CANCELLED) &&
+    allowedStatuses.length === 0 &&
+    allowedShippingStatuses.length === 0
   const labelOf = (value: string): string =>
     value.startsWith(ORDER_PREFIX)
       ? `Order → ${getOrderStatusPresentation(value.slice(ORDER_PREFIX.length) as OrderStatus).label}`
@@ -83,6 +96,10 @@ export default function OrderStatusPanel({
     setErrorMessage(null)
     if (choice === `${ORDER_PREFIX}${OrderStatus.CANCELLED}`) {
       setConfirming(order)
+      return
+    }
+    if (choice === `${SHIPPING_PREFIX}${ShippingStatus.RETURNED}`) {
+      setConfirmingReturn(order)
       return
     }
     if (choice.startsWith(ORDER_PREFIX)) {
@@ -123,7 +140,7 @@ export default function OrderStatusPanel({
       <h2 id={headingId} className="font-semibold text-on-surface">
         Update status
       </h2>
-      {orderSteps.length === 0 && shippingSteps.length === 0 ? (
+      {isClosed ? (
         <p className="text-sm text-on-surface-variant">
           This order is closed. No further changes.
         </p>
@@ -146,29 +163,30 @@ export default function OrderStatusPanel({
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {orderSteps.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel>Order</SelectLabel>
-                  {orderSteps.map((status) => (
-                    <SelectItem key={status} value={`${ORDER_PREFIX}${status}`}>
-                      {labelOf(`${ORDER_PREFIX}${status}`)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-              {shippingSteps.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel>Shipping</SelectLabel>
-                  {shippingSteps.map((status) => (
-                    <SelectItem
-                      key={status}
-                      value={`${SHIPPING_PREFIX}${status}`}
-                    >
-                      {labelOf(`${SHIPPING_PREFIX}${status}`)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
+              <SelectGroup>
+                <SelectLabel>Order</SelectLabel>
+                {orderSteps.map((status) => (
+                  <SelectItem
+                    key={status}
+                    value={`${ORDER_PREFIX}${status}`}
+                    disabled={!allowedStatuses.includes(status)}
+                  >
+                    {labelOf(`${ORDER_PREFIX}${status}`)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Shipping</SelectLabel>
+                {shippingSteps.map((status) => (
+                  <SelectItem
+                    key={status}
+                    value={`${SHIPPING_PREFIX}${status}`}
+                    disabled={!allowedShippingStatuses.includes(status)}
+                  >
+                    {labelOf(`${SHIPPING_PREFIX}${status}`)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           {errorMessage && (
@@ -215,6 +233,40 @@ export default function OrderStatusPanel({
         )}
         textAction={DIALOG_MESSAGES.ORDER.CANCEL.ACTION}
         textCancel={DIALOG_MESSAGES.ORDER.CANCEL.KEEP}
+        actionVariant="destructive"
+      />
+      <ConfirmActionDialog
+        item={confirmingReturn}
+        onClose={() => {
+          setConfirmingReturn(null)
+          setChoice('')
+        }}
+        mutate={(id, options) =>
+          shippingStatus.mutate(
+            { id, shippingStatus: ShippingStatus.RETURNED },
+            options,
+          )
+        }
+        isPending={shippingStatus.isPending}
+        successMessage={SUCCESS_MESSAGES.ORDER_SHIPPING_STATUS_UPDATED}
+        title={DIALOG_MESSAGES.ORDER.RETURN.TITLE}
+        renderDescription={(current) => (
+          <>
+            <span>
+              {DIALOG_MESSAGES.ORDER.RETURN.DESCRIPTION(
+                current?.orderNumber ?? order.orderNumber,
+              )}
+            </span>
+            {order.paymentStatus === OrderPaymentStatus.PAID && (
+              <>
+                {' '}
+                <span>{DIALOG_MESSAGES.ORDER.CANCEL.NOT_REFUNDED}</span>
+              </>
+            )}
+          </>
+        )}
+        textAction={DIALOG_MESSAGES.ORDER.RETURN.ACTION}
+        textCancel={DIALOG_MESSAGES.ORDER.RETURN.KEEP}
         actionVariant="destructive"
       />
     </section>

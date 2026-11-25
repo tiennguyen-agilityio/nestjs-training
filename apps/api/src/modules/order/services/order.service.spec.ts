@@ -30,6 +30,10 @@ import {
   ValidationException,
 } from '../../../common/exceptions/base.exception.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
+import {
+  ERROR_DESCRIPTIONS,
+  ERROR_MESSAGES,
+} from '../../../common/constants/message.constant.js';
 
 const USER_ID = 'user-1';
 const CART_ID = 'cart-1';
@@ -122,12 +126,16 @@ describe('OrderService', () => {
     | 'lockMineForCancel'
     | 'lockForStatusChange'
     | 'save'
-    | 'saveCancelled',
+    | 'saveCancelled'
+    | 'saveDelivered',
     Mock
   >;
   let enqueueCheckoutExpire: Mock;
   let cartService: Record<'lockForCheckout' | 'clearItems', Mock>;
-  let productVariantService: Record<'reserve' | 'reload' | 'release', Mock>;
+  let productVariantService: Record<
+    'reserve' | 'reload' | 'release' | 'sell',
+    Mock
+  >;
   let shippingMethodService: Record<'findForOrder', Mock>;
   let userAddressService: Record<'saveFirstAsDefault', Mock>;
   let fromEntity: Mock;
@@ -162,6 +170,7 @@ describe('OrderService', () => {
       lockForStatusChange: vi.fn(),
       save: vi.fn(),
       saveCancelled: vi.fn(),
+      saveDelivered: vi.fn(),
     };
     cartService = {
       lockForCheckout: vi.fn().mockResolvedValue(cartWith(lineOf())),
@@ -171,6 +180,7 @@ describe('OrderService', () => {
       reserve: vi.fn().mockResolvedValue(true),
       reload: vi.fn((variant: unknown) => Promise.resolve(variant)),
       release: vi.fn().mockResolvedValue(true),
+      sell: vi.fn().mockResolvedValue(true),
     };
     shippingMethodService = {
       findForOrder: vi.fn().mockResolvedValue(method()),
@@ -551,6 +561,19 @@ describe('OrderService', () => {
   describe('findMineOne', () => {
     const ORDER_ID = '8b0c6f2e-4d1a-4c3b-9e5f-6a7b8c9d0e1f';
 
+    it('findMineOne returns no allowed statuses', async () => {
+      const order = { id: ORDER_ID } as Order;
+      orderRepository.findMineByIdOrNumber.mockResolvedValue(order);
+      const detailOf = vi
+        .spyOn(ResponseOrderDetailDto, 'fromEntity')
+        .mockReturnValue({} as ResponseOrderDetailDto);
+
+      await service.findMineOne(USER_ID, ORDER_ID);
+
+      expect(detailOf).toHaveBeenCalledWith(order);
+      expect(detailOf.mock.calls[0]).toHaveLength(1);
+    });
+
     it('looks up by id for a UUID and by orderNumber otherwise', async () => {
       const order = { id: ORDER_ID } as Order;
       orderRepository.findMineByIdOrNumber.mockResolvedValue(order);
@@ -619,10 +642,12 @@ describe('OrderService', () => {
     const orderWith = (
       status: OrderStatus = OrderStatus.PENDING,
       payments = [charge()],
+      shippingStatus: ShippingStatus = ShippingStatus.PENDING,
     ) =>
       ({
         id: ORDER_ID,
         status,
+        shippingStatus,
         expiresAt: new Date('2026-11-24T12:00:00Z'),
         items: {
           getItems: () => [
@@ -634,6 +659,37 @@ describe('OrderService', () => {
       }) as unknown as Order & {
         payments: { getItems: () => typeof payments };
       };
+
+    it('cancel of a returned order names its status, not the shipping', async () => {
+      orderRepository.lockMineForCancel.mockResolvedValue(
+        orderWith(OrderStatus.CANCELLED, [charge()], ShippingStatus.RETURNED),
+      );
+
+      const error = await errorOf(service.cancel(USER_ID, ORDER_ID));
+
+      expect(error.getErrors()[0]).toMatchObject({
+        field: 'status',
+        message: ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('cancelled'),
+      });
+    });
+
+    it("cancel refuses a shopper's order whose shipping has started", async () => {
+      orderRepository.lockMineForCancel.mockResolvedValue(
+        orderWith(OrderStatus.PENDING, [charge()], ShippingStatus.SHIPPING),
+      );
+
+      const error = await errorOf(service.cancel(USER_ID, ORDER_ID));
+
+      expect(error).toBeInstanceOf(InvalidStateException);
+      expect(error.getErrors()[0]).toMatchObject({
+        errCode: 'statusNotAllowed',
+        field: 'shippingStatus',
+        message: ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('shipped'),
+        description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_SHIPPED_SHOPPER,
+      });
+      expect(productVariantService.release).not.toHaveBeenCalled();
+      expect(orderRepository.saveCancelled).not.toHaveBeenCalled();
+    });
 
     it('cancel releases each item, fails the PENDING charge and cancels the order in one save', async () => {
       const order = orderWith();
@@ -836,8 +892,40 @@ describe('OrderService', () => {
   describe('findAnyOne', () => {
     const ORDER_ID = '8b0c6f2e-4d1a-4c3b-9e5f-6a7b8c9d0e1f';
 
+    const detailOrder = () =>
+      ({
+        id: ORDER_ID,
+        status: OrderStatus.CONFIRMED,
+        shippingStatus: ShippingStatus.SHIPPING,
+        payments: {
+          getItems: () => [
+            {
+              type: PaymentType.CHARGE,
+              method: PaymentMethod.COD,
+              status: PaymentStatus.PENDING,
+              transactionId: null,
+            },
+          ],
+        },
+      }) as unknown as Order;
+
+    it('findAnyOne returns the allowed statuses', async () => {
+      const order = detailOrder();
+      orderRepository.findAnyByIdOrNumber.mockResolvedValue(order);
+      const detailOf = vi
+        .spyOn(ResponseOrderDetailDto, 'fromEntity')
+        .mockReturnValue({} as ResponseOrderDetailDto);
+
+      await service.findAnyOne(ORDER_ID);
+
+      expect(detailOf).toHaveBeenCalledWith(order, {
+        statuses: [],
+        shippingStatuses: [ShippingStatus.DELIVERED, ShippingStatus.RETURNED],
+      });
+    });
+
     it('findAnyOne reads by id for a UUID and by orderNumber otherwise', async () => {
-      const order = { id: ORDER_ID } as Order;
+      const order = detailOrder();
       const detail = { id: ORDER_ID } as ResponseOrderDetailDto;
       orderRepository.findAnyByIdOrNumber.mockResolvedValue(order);
       const detailOf = vi
@@ -853,7 +941,7 @@ describe('OrderService', () => {
       expect(orderRepository.findAnyByIdOrNumber).toHaveBeenNthCalledWith(2, {
         orderNumber: 'CH-261124-0001',
       });
-      expect(detailOf).toHaveBeenCalledWith(order);
+      expect(detailOf).toHaveBeenCalledWith(order, expect.any(Object));
     });
 
     it('findAnyOne throws orderNotFound when the repository returns null', async () => {
@@ -876,13 +964,145 @@ describe('OrderService', () => {
       status: PaymentStatus = PaymentStatus.PENDING,
       checkoutSessionId: string | null = null,
       paymentMethod: PaymentMethod = PaymentMethod.COD,
+      transactionId: string | null = null,
     ) => ({
       id: `payment-${paymentMethod}-${status}`,
       type: PaymentType.CHARGE,
       method: paymentMethod,
       status,
       checkoutSessionId,
+      transactionId,
       failureReason: null as string | null,
+    });
+
+    const refusalOf = async (
+      run: Promise<unknown>,
+      field: 'status' | 'shippingStatus',
+      message: string,
+    ) => {
+      const error = await errorOf(run);
+      expect(error).toBeInstanceOf(InvalidStateException);
+      expect(error.getStatus()).toBe(409);
+      expect(error.getErrors()[0]).toMatchObject({
+        errCode: 'statusNotAllowed',
+        field,
+        message,
+      });
+      expect(orderRepository.save).not.toHaveBeenCalled();
+      expect(orderRepository.saveCancelled).not.toHaveBeenCalled();
+      expect(productVariantService.release).not.toHaveBeenCalled();
+    };
+
+    it('updateStatus refuses CONFIRMED on an unpaid card order', async () => {
+      const order = orderWith(OrderStatus.PENDING, ShippingStatus.PENDING, [
+        charge(PaymentStatus.PENDING, 'cs_1', PaymentMethod.CARD),
+      ]);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await refusalOf(
+        service.updateStatus(ORDER_ID, OrderStatus.CONFIRMED, ADMIN_ID),
+        'status',
+        ERROR_MESSAGES.ORDER.NOT_CONFIRMABLE_UNPAID,
+      );
+      expect(order.status).toBe(OrderStatus.PENDING);
+    });
+
+    it('updateStatus refuses CANCELLED once shipping has started', async () => {
+      const order = orderWith(OrderStatus.CONFIRMED, ShippingStatus.SHIPPING);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await refusalOf(
+        service.updateStatus(ORDER_ID, OrderStatus.CANCELLED, ADMIN_ID),
+        'status',
+        ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('shipped'),
+      );
+      expect(order.status).toBe(OrderStatus.CONFIRMED);
+    });
+
+    it('updateStatus refuses CANCELLED while the payment is held', async () => {
+      const order = orderWith(OrderStatus.PENDING, ShippingStatus.PENDING, [
+        charge(PaymentStatus.PENDING, 'cs_1', PaymentMethod.CARD, 'pi_1'),
+      ]);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await refusalOf(
+        service.updateStatus(ORDER_ID, OrderStatus.CANCELLED, ADMIN_ID),
+        'status',
+        ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('under payment review'),
+      );
+      const error = await errorOf(
+        service.updateStatus(ORDER_ID, OrderStatus.CANCELLED, ADMIN_ID),
+      );
+      expect(error.getErrors()[0].description).toBe(
+        ERROR_DESCRIPTIONS.ORDER.PAYMENT_HELD_ADMIN,
+      );
+    });
+
+    it('updateStatus refuses COMPLETED before DELIVERED', async () => {
+      const order = orderWith(OrderStatus.CONFIRMED, ShippingStatus.SHIPPING);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await refusalOf(
+        service.updateStatus(ORDER_ID, OrderStatus.COMPLETED, ADMIN_ID),
+        'status',
+        ERROR_MESSAGES.ORDER.NOT_COMPLETABLE_UNDELIVERED,
+      );
+    });
+
+    it('updateStatus still refuses a move outside the table with STATUS_NOT_ALLOWED', async () => {
+      orderRepository.lockForStatusChange.mockResolvedValue(
+        orderWith(OrderStatus.CANCELLED),
+      );
+
+      await refusalOf(
+        service.updateStatus(ORDER_ID, OrderStatus.CONFIRMED, ADMIN_ID),
+        'status',
+        ERROR_MESSAGES.ORDER.STATUS_NOT_ALLOWED('CANCELLED', 'CONFIRMED'),
+      );
+    });
+
+    it('updateShippingStatus refuses RETURNED while the payment is held', async () => {
+      const order = orderWith(OrderStatus.CONFIRMED, ShippingStatus.SHIPPING, [
+        charge(PaymentStatus.PENDING, 'cs_1', PaymentMethod.CARD, 'pi_1'),
+      ]);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await refusalOf(
+        service.updateShippingStatus(
+          ORDER_ID,
+          ShippingStatus.RETURNED,
+          ADMIN_ID,
+        ),
+        'shippingStatus',
+        ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('under payment review'),
+      );
+      expect(order.shippingStatus).toBe(ShippingStatus.SHIPPING);
+      const error = await errorOf(
+        service.updateShippingStatus(
+          ORDER_ID,
+          ShippingStatus.RETURNED,
+          ADMIN_ID,
+        ),
+      );
+      expect(error.getErrors()[0].description).toBe(
+        ERROR_DESCRIPTIONS.ORDER.PAYMENT_HELD_ADMIN,
+      );
+    });
+
+    it('updateShippingStatus refuses SHIPPING on a PENDING order', async () => {
+      const order = orderWith();
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await refusalOf(
+        service.updateShippingStatus(
+          ORDER_ID,
+          ShippingStatus.SHIPPING,
+          ADMIN_ID,
+        ),
+        'shippingStatus',
+        ERROR_MESSAGES.ORDER.SHIPPING_NEEDS_CONFIRMED,
+      );
+      expect(order.shippingStatus).toBe(ShippingStatus.PENDING);
     });
 
     const orderWith = (
@@ -1044,7 +1264,7 @@ describe('OrderService', () => {
     });
 
     it('updateShippingStatus moves PENDING to SHIPPING (AC3)', async () => {
-      const order = orderWith();
+      const order = orderWith(OrderStatus.CONFIRMED);
       orderRepository.lockForStatusChange.mockResolvedValue(order);
 
       await expect(
@@ -1056,7 +1276,7 @@ describe('OrderService', () => {
       ).resolves.toBe(response);
 
       expect(order.shippingStatus).toBe(ShippingStatus.SHIPPING);
-      expect(order.status).toBe(OrderStatus.PENDING);
+      expect(order.status).toBe(OrderStatus.CONFIRMED);
       expect(orderRepository.save).toHaveBeenCalledWith(order, ADMIN_ID);
     });
 
@@ -1083,20 +1303,129 @@ describe('OrderService', () => {
       expect(order.shippingStatus).toBe(ShippingStatus.DELIVERED);
     });
 
-    it('updateShippingStatus RETURNED releases no stock', async () => {
+    it('updateShippingStatus DELIVERED sells each item and marks the COD charge PAID', async () => {
+      const cod = charge();
+      const order = orderWith(OrderStatus.CONFIRMED, ShippingStatus.SHIPPING, [
+        cod,
+      ]);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await expect(
+        service.updateShippingStatus(
+          ORDER_ID,
+          ShippingStatus.DELIVERED,
+          ADMIN_ID,
+        ),
+      ).resolves.toBe(response);
+
+      expect(productVariantService.sell).toHaveBeenNthCalledWith(
+        1,
+        'variant-a',
+        2,
+        ADMIN_ID,
+      );
+      expect(productVariantService.sell).toHaveBeenNthCalledWith(
+        2,
+        'variant-b',
+        1,
+        ADMIN_ID,
+      );
+      expect(order.shippingStatus).toBe(ShippingStatus.DELIVERED);
+      expect(cod.status).toBe(PaymentStatus.PAID);
+      expect((cod as { completedAt?: Date }).completedAt).toBeInstanceOf(Date);
+      expect(orderRepository.saveDelivered).toHaveBeenCalledWith(
+        order,
+        ADMIN_ID,
+      );
+      expect(orderRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('updateShippingStatus DELIVERED throws and saves nothing when a sale fails', async () => {
       orderRepository.lockForStatusChange.mockResolvedValue(
         orderWith(OrderStatus.CONFIRMED, ShippingStatus.SHIPPING),
+      );
+      productVariantService.sell.mockResolvedValueOnce(false);
+
+      const error = await errorOf(
+        service.updateShippingStatus(
+          ORDER_ID,
+          ShippingStatus.DELIVERED,
+          ADMIN_ID,
+        ),
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(DomainException);
+      expect(orderRepository.saveDelivered).not.toHaveBeenCalled();
+    });
+
+    it('updateShippingStatus DELIVERED leaves an online charge as it is', async () => {
+      const paid = charge(
+        PaymentStatus.PAID,
+        'cs_1',
+        PaymentMethod.CARD,
+        'pi_1',
+      );
+      orderRepository.lockForStatusChange.mockResolvedValue(
+        orderWith(OrderStatus.CONFIRMED, ShippingStatus.SHIPPING, [paid]),
       );
 
       await service.updateShippingStatus(
         ORDER_ID,
-        ShippingStatus.RETURNED,
+        ShippingStatus.DELIVERED,
         ADMIN_ID,
       );
 
-      expect(productVariantService.release).not.toHaveBeenCalled();
-      expect(orderRepository.saveCancelled).not.toHaveBeenCalled();
-      expect(orderRepository.save).toHaveBeenCalledTimes(1);
+      expect(paid.status).toBe(PaymentStatus.PAID);
+      expect((paid as { completedAt?: Date }).completedAt).toBeUndefined();
+      expect(orderRepository.saveDelivered).toHaveBeenCalledTimes(1);
+    });
+
+    it('updateShippingStatus RETURNED cancels the order and releases the stock', async () => {
+      const paid = charge(
+        PaymentStatus.PAID,
+        'cs_1',
+        PaymentMethod.CARD,
+        'pi_1',
+      );
+      const order = orderWith(OrderStatus.CONFIRMED, ShippingStatus.SHIPPING, [
+        paid,
+      ]);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await expect(
+        service.updateShippingStatus(
+          ORDER_ID,
+          ShippingStatus.RETURNED,
+          ADMIN_ID,
+        ),
+      ).resolves.toBe(response);
+
+      expect(productVariantService.release).toHaveBeenNthCalledWith(
+        1,
+        'variant-a',
+        2,
+        ADMIN_ID,
+      );
+      expect(productVariantService.release).toHaveBeenNthCalledWith(
+        2,
+        'variant-b',
+        1,
+        ADMIN_ID,
+      );
+      expect(order.shippingStatus).toBe(ShippingStatus.RETURNED);
+      expect(order.status).toBe(OrderStatus.CANCELLED);
+      expect(paid.status).toBe(PaymentStatus.PAID);
+      expect(orderRepository.saveCancelled).toHaveBeenCalledWith(
+        order,
+        ADMIN_ID,
+      );
+      expect(productVariantService.sell).not.toHaveBeenCalled();
+      expect(enqueueCheckoutExpire).toHaveBeenCalledWith({
+        paymentId: paid.id,
+        method: PaymentMethod.CARD,
+        checkoutSessionId: 'cs_1',
+      });
     });
   });
 });
