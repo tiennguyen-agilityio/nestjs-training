@@ -32,13 +32,33 @@ export type GatewayEvent =
       paymentId: string;
       checkoutSessionId?: string;
       reason: string;
+    }
+  | {
+      /** The gateway holds the money for review; the payment waits again. */
+      kind: 'pending';
+      paymentId: string;
+      checkoutSessionId?: string;
+      transactionId: string;
     };
+
+/** A checkout the payer approved that the shop still has to capture. */
+export interface ApprovedCheckout {
+  kind: 'approved';
+  checkoutSessionId: string;
+}
 
 export interface VerifiedWebhook {
   id: string;
   type: string;
-  event: GatewayEvent | null;
+  event: GatewayEvent | ApprovedCheckout | null;
 }
+
+/** What capturing an approved checkout gave. */
+export type CaptureOutcome =
+  | { kind: 'succeeded'; transactionId: string; paidAt: Date }
+  | { kind: 'failed'; reason: string; retryable: boolean }
+  | { kind: 'pending'; transactionId: string }
+  | { kind: 'not_approved' };
 
 export abstract class PaymentGateway {
   abstract createCheckout(request: CheckoutRequest): Promise<CheckoutSession>;
@@ -51,5 +71,8 @@ export abstract class PaymentGateway {
   abstract parseWebhook(
     rawBody: Buffer | undefined,
     headers: IncomingHttpHeaders,
-  ): VerifiedWebhook;
+  ): Promise<VerifiedWebhook>;
+
+  /** Captures an approved checkout; `null` when the gateway has no capture step. */
+  abstract capture(checkoutId: string): Promise<CaptureOutcome | null>;
 }

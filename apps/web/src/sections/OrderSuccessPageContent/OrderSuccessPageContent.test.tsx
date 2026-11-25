@@ -244,6 +244,22 @@ describe('OrderSuccessPageContent', () => {
     ).toBeInTheDocument()
   })
 
+  it('payment=pending (a PayPal capture held for review) polls like a Stripe return', () => {
+    withParams('orderId=o-1&payment=pending')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({ order: cardOrder(OrderPaymentStatus.PENDING) }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      within(paymentRegion()).getByText(
+        NOTICE_MESSAGES.ORDER_PAYMENT.CONFIRMING,
+      ),
+    ).toBeInTheDocument()
+    expect(pollWhileOf()?.(cardOrder(OrderPaymentStatus.PENDING))).toBe(true)
+  })
+
   it('without session_id an unfinished payment shows Payment not completed and Pay now', () => {
     withParams('orderId=o-1')
     mockUseOrderDetail.mockReturnValue(

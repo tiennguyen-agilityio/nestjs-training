@@ -23,9 +23,11 @@ export const ROUTES = {
 export function orderSuccessPath(
   orderId: string,
   paymentError?: string,
+  { confirming = false }: { confirming?: boolean } = {},
 ): string {
   const params = new URLSearchParams({ orderId })
   if (paymentError !== undefined) params.set('paymentError', paymentError)
+  if (confirming) params.set('payment', 'pending')
   return `${ROUTES.ORDER_SUCCESS}?${params.toString()}`
 }
 
