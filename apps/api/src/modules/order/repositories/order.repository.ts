@@ -26,18 +26,30 @@ import type { OrderFilters } from '../dto/order.schema.js';
  * `paymentStatusParams(userId, status)`.
  */
 /**
- * Locks the non-deleted CHARGE rows of one of a user's orders, in id order,
- * before the order row itself: `PaymentService.apply()` locks a payment and
- * then writes its order, so taking the same order avoids a deadlock.
- * Parameters: user id, the order's id or order number.
+ * Locks the non-deleted CHARGE rows of one order (of one user's orders when
+ * `byUser`), in id order, before the order row itself: `PaymentService.apply()`
+ * locks a payment and then writes its order, so taking the same order avoids
+ * a deadlock. Parameters: the user id when `byUser`, then the order's id or
+ * order number.
  */
-const lockChargesSql = (column: 'id' | 'order_number'): string =>
+const lockChargesSql = (
+  column: 'id' | 'order_number',
+  byUser: boolean,
+): string =>
   `select p.id from payments p
 join orders o on o.id = p.order_id
-where o.user_id = ? and o.${column} = ? and o.deleted_at is null
+where ${byUser ? 'o.user_id = ? and ' : ''}o.${column} = ? and o.deleted_at is null
   and p.type = 'CHARGE' and p.deleted_at is null
 order by p.id
 for update of p`;
+
+/**
+ * Locks one non-deleted order row by id or order number, whoever owns it.
+ * Plain SQL, so no soft-delete filter on the customer or the shipping method
+ * (which the ORM would apply through a join) can hide the order.
+ */
+const lockOrderSql = (column: 'id' | 'order_number'): string =>
+  `select o.id from orders o where o.${column} = ? and o.deleted_at is null for update`;
 
 export type EnqueueCheckoutExpire = (
   payload: PaymentCheckoutExpirePayload,
@@ -141,6 +153,29 @@ export class OrderRepository extends BaseRepository<Order> {
   }
 
   /**
+   * Any user's order, locked for an admin status change: its CHARGE rows,
+   * then the order row. It loads with its payments and items as the admin's
+   * `findAnyByIdOrNumber` reads it (soft-delete filter off), so an order of a
+   * soft-deleted customer or shipping method can still change.
+   */
+  async lockForStatusChange(
+    where: { id: string } | { orderNumber: string },
+  ): Promise<Order | null> {
+    const [column, value] =
+      'id' in where
+        ? (['id', where.id] as const)
+        : (['order_number', where.orderNumber] as const);
+    await this.selectIds(lockChargesSql(column, false), [value]);
+    const [id] = await this.selectIds(lockOrderSql(column), [value]);
+    if (!id) return null;
+
+    return this.findOneBy(
+      { id },
+      { relations: ['payments', 'items'], includeDeleted: true },
+    );
+  }
+
+  /**
    * One of the user's orders, locked for a cancel: its CHARGE rows first,
    * then the order row with its live payments. Its items load next with the
    * soft-delete filter off: MikroORM joins each item's variant to apply that
@@ -155,7 +190,7 @@ export class OrderRepository extends BaseRepository<Order> {
       'id' in where
         ? (['id', where.id] as const)
         : (['order_number', where.orderNumber] as const);
-    await this.selectIds(lockChargesSql(column), [userId, value]);
+    await this.selectIds(lockChargesSql(column, true), [userId, value]);
 
     const order = await this.findOneForUpdate(
       { ...where, user: userId },

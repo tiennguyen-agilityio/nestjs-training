@@ -4,12 +4,26 @@ import {
   OrderStatus,
   ShippingStatus,
 } from '@repo/constants';
-import { placeOrderSchema } from '@repo/schemas';
+import {
+  placeOrderSchema,
+  updateOrderShippingStatusSchema,
+  updateOrderStatusSchema,
+} from '@repo/schemas';
 import { paginationQuerySchema } from '../../../common/dto/pagination.schema.js';
 
-export { placeOrderSchema };
+export {
+  placeOrderSchema,
+  updateOrderShippingStatusSchema,
+  updateOrderStatusSchema,
+};
 
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>;
+
+export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+
+export type UpdateOrderShippingStatusInput = z.infer<
+  typeof updateOrderShippingStatusSchema
+>;
 
 // The caller's own orders, or every order for an active admin with `all=true`.
 export const orderQuerySchema = paginationQuerySchema.extend({

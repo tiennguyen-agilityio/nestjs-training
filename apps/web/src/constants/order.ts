@@ -2,7 +2,6 @@ import type { TableColumn } from '@/components/Table'
 import { OrderStatus, PaymentMethod, ShippingStatus } from '@repo/constants'
 
 import type { OptionItem } from '@/types/common'
-import { SHIPPING_STATUS } from '@/types/order'
 
 export const OUT_OF_STOCK_LABEL = 'Out of stock'
 
@@ -41,15 +40,15 @@ export const ORDER_TRANSITIONS: Readonly<
 }
 
 export const SHIPPING_TRANSITIONS: Readonly<
-  Record<SHIPPING_STATUS, readonly SHIPPING_STATUS[]>
+  Record<ShippingStatus, readonly ShippingStatus[]>
 > = {
-  [SHIPPING_STATUS.PENDING]: [SHIPPING_STATUS.SHIPPING],
-  [SHIPPING_STATUS.SHIPPING]: [
-    SHIPPING_STATUS.DELIVERED,
-    SHIPPING_STATUS.RETURNED,
+  [ShippingStatus.PENDING]: [ShippingStatus.SHIPPING],
+  [ShippingStatus.SHIPPING]: [
+    ShippingStatus.DELIVERED,
+    ShippingStatus.RETURNED,
   ],
-  [SHIPPING_STATUS.DELIVERED]: [],
-  [SHIPPING_STATUS.RETURNED]: [],
+  [ShippingStatus.DELIVERED]: [],
+  [ShippingStatus.RETURNED]: [],
 }
 
 export const ORDERS_TABLE_COLUMNS: TableColumn[] = [

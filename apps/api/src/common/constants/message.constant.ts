@@ -58,6 +58,10 @@ export const ERROR_MESSAGES = {
       `Only ${available} left for ${sku}`,
     NOT_CANCELLABLE: (state: string) =>
       `Order cannot be cancelled: it is ${state}`,
+    STATUS_NOT_ALLOWED: (from: string, to: string) =>
+      `Cannot move order from ${from} to ${to}`,
+    SHIPPING_STATUS_NOT_ALLOWED: (from: string, to: string) =>
+      `Cannot move shipping from ${from} to ${to}`,
   },
   PAYMENT: {
     METHOD_NOT_ONLINE: 'This order is paid on delivery, not online',
@@ -183,6 +187,7 @@ export const ERROR_DESCRIPTIONS = {
       'Only a pending order can be cancelled. Contact the shop to cancel a confirmed order.',
     NOT_CANCELLABLE_PAID:
       'The order is already paid. Contact the shop to cancel it.',
+    STATUS_NOT_ALLOWED: 'Not allowed. Pick one of the next statuses.',
   },
   PAYMENT: {
     METHOD_NOT_ONLINE: 'Only CARD and PAYPAL orders are paid online.',

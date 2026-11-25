@@ -1,7 +1,13 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { Mock } from 'vitest';
-import { PaymentMethod, UserRole, UserStatus } from '@repo/constants';
+import {
+  OrderStatus,
+  PaymentMethod,
+  ShippingStatus,
+  UserRole,
+  UserStatus,
+} from '@repo/constants';
 import { OrderController } from './order.controller.js';
 import { OrderService } from '../services/order.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
@@ -11,7 +17,14 @@ import { User } from '../../user/entities/user.entity.js';
 describe('OrderController', () => {
   let controller: OrderController;
   let orderService: Record<
-    'place' | 'findMine' | 'findAll' | 'findMineOne' | 'findAnyOne' | 'cancel',
+    | 'place'
+    | 'findMine'
+    | 'findAll'
+    | 'findMineOne'
+    | 'findAnyOne'
+    | 'cancel'
+    | 'updateStatus'
+    | 'updateShippingStatus',
     Mock
   >;
   const user = { id: 'user-1' } as User;
@@ -30,6 +43,8 @@ describe('OrderController', () => {
       findMineOne: vi.fn().mockResolvedValue(order),
       findAnyOne: vi.fn().mockResolvedValue(order),
       cancel: vi.fn().mockResolvedValue(order),
+      updateStatus: vi.fn().mockResolvedValue(order),
+      updateShippingStatus: vi.fn().mockResolvedValue(order),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrderController],
@@ -134,5 +149,34 @@ describe('OrderController', () => {
       expect(orderService.findAnyOne).toHaveBeenCalledWith('CH-261124-0001');
       expect(orderService.findMineOne).not.toHaveBeenCalled();
     });
+  });
+  it("PATCH /orders/:idOrOrderNumber/status delegates with the admin's id", async () => {
+    await expect(
+      controller.updateStatus(
+        admin,
+        { idOrOrderNumber: 'CH-261124-0001' },
+        { status: OrderStatus.CONFIRMED },
+      ),
+    ).resolves.toBe(order);
+    expect(orderService.updateStatus).toHaveBeenCalledWith(
+      'CH-261124-0001',
+      OrderStatus.CONFIRMED,
+      'admin-1',
+    );
+  });
+
+  it("PATCH /orders/:idOrOrderNumber/shipping-status delegates with the admin's id", async () => {
+    await expect(
+      controller.updateShippingStatus(
+        admin,
+        { idOrOrderNumber: 'CH-261124-0001' },
+        { shippingStatus: ShippingStatus.SHIPPING },
+      ),
+    ).resolves.toBe(order);
+    expect(orderService.updateShippingStatus).toHaveBeenCalledWith(
+      'CH-261124-0001',
+      ShippingStatus.SHIPPING,
+      'admin-1',
+    );
   });
 });
