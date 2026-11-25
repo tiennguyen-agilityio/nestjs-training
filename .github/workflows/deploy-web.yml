@@ -105,7 +105,7 @@ jobs:
       - name: Deploy
         id: deploy
         run: |
-          url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          url=$(vercel deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN")
           if ! [[ "$url" =~ ^https://[^[:space:]]+$ ]]; then
             echo "vercel deploy did not print a deployment URL" >&2; exit 1
           fi
