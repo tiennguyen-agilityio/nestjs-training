@@ -19,6 +19,7 @@ import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
 import { UserAddressService } from '../../user/services/user-address.service.js';
+import { UserService } from '../../user/services/user.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
 import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
@@ -143,6 +144,7 @@ describe('OrderService', () => {
   >;
   let shippingMethodService: Record<'findForOrder', Mock>;
   let userAddressService: Record<'saveFirstAsDefault', Mock>;
+  let userService: Record<'saveFirstPhone', Mock>;
   let fromEntity: Mock;
   const created = { id: 'order-1' } as Order;
   const response = { id: 'order-1' } as ResponseOrderDto;
@@ -197,6 +199,7 @@ describe('OrderService', () => {
       findForOrder: vi.fn().mockResolvedValue(method()),
     };
     userAddressService = { saveFirstAsDefault: vi.fn() };
+    userService = { saveFirstPhone: vi.fn() };
     fromEntity = vi
       .spyOn(ResponseOrderDto, 'fromEntity')
       .mockReturnValue(response);
@@ -209,6 +212,7 @@ describe('OrderService', () => {
         { provide: ProductVariantService, useValue: productVariantService },
         { provide: ShippingMethodService, useValue: shippingMethodService },
         { provide: UserAddressService, useValue: userAddressService },
+        { provide: UserService, useValue: userService },
         { provide: RefundService, useValue: refundService },
       ],
     }).compile();
@@ -532,6 +536,31 @@ describe('OrderService', () => {
     expect(saveOrder).toBeLessThan(
       cartService.clearItems.mock.invocationCallOrder[0],
     );
+  });
+
+  it('place saves the order phone as the user phone', async () => {
+    await service.place(USER_ID, input());
+
+    expect(userService.saveFirstPhone).toHaveBeenCalledTimes(1);
+    expect(userService.saveFirstPhone).toHaveBeenCalledWith(
+      USER_ID,
+      '0901234567',
+    );
+    const saveOrder = userService.saveFirstPhone.mock.invocationCallOrder[0];
+    expect(orderRepository.create.mock.invocationCallOrder[0]).toBeLessThan(
+      saveOrder,
+    );
+    expect(saveOrder).toBeLessThan(
+      cartService.clearItems.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('place saves no phone when the cart is empty', async () => {
+    cartService.lockForCheckout.mockResolvedValueOnce(cartWith());
+
+    await errorOf(service.place(USER_ID, input()));
+
+    expect(userService.saveFirstPhone).not.toHaveBeenCalled();
   });
 
   it('place saves no address when the cart is empty', async () => {

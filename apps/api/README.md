@@ -495,7 +495,7 @@ erDiagram
 
 | Method   | Path         | Auth | Description                                              |
 | :------- | :----------- | :--- | :------------------------------------------------------- |
-| `GET`    | `/users/me`  | 🔒   | Get authenticated user profile                           |
+| `GET`    | `/users/me`  | 🔒   | Get authenticated user profile and saved addresses       |
 | `GET`    | `/users`     | 👑   | List users (search, role and status filters, pagination) |
 | `GET`    | `/users/:id` | 👑   | Get user by ID                                           |
 | `PATCH`  | `/users/:id` | 👑   | Update user                                              |

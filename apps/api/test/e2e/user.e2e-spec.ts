@@ -111,12 +111,6 @@ describe('UserController auth (e2e)', () => {
     });
   });
 
-  it('GET /users/me/addresses without a session returns 401', async () => {
-    await request(app.getHttpServer())
-      .get(`${API_BASE_PATH}/users/me/addresses`)
-      .expect(401);
-  });
-
   describe('Clerk session with no matching local user', () => {
     it('GET /users responds 401', async () => {
       mockSessionFor('clerk-id-that-does-not-exist');
@@ -179,6 +173,7 @@ describe('UserController auth (e2e)', () => {
           status: user.status,
           avatarUrl: user.avatarUrl,
           phoneNumber: null,
+          addresses: [],
           deletedAt: user.deletedAt,
         },
       });
@@ -211,7 +206,7 @@ describe('UserController auth (e2e)', () => {
       ).toBe('0912345678');
     });
 
-    it("GET /users/me/addresses returns the caller's addresses, default first (R3)", async () => {
+    it("GET /users/me returns the caller's addresses, default first", async () => {
       const user = await createTestUser({ role: UserRole.USER });
       const other = await createTestUser({ role: UserRole.USER });
       const addresses = app.get(UserAddressRepository);
@@ -244,10 +239,12 @@ describe('UserController auth (e2e)', () => {
       mockSessionFor(user.clerkId);
 
       const response = await request(app.getHttpServer())
-        .get(`${API_BASE_PATH}/users/me/addresses`)
+        .get(`${API_BASE_PATH}/users/me`)
         .expect(200);
 
-      const { data } = response.body as { data: Record<string, unknown>[] };
+      const data = (
+        response.body as { data: { addresses: Record<string, unknown>[] } }
+      ).data.addresses;
       expect(data.map((row) => row.addressLine)).toEqual([
         '12 Roast Street',
         '5 Side Lane',
@@ -268,6 +265,15 @@ describe('UserController auth (e2e)', () => {
         ].sort(),
       );
       expect(data[0]).toMatchObject({ userId: user.id, ...fields });
+    });
+
+    it('GET /users/me/addresses no longer exists', async () => {
+      const user = await createTestUser({ role: UserRole.USER });
+      mockSessionFor(user.clerkId);
+
+      await request(app.getHttpServer())
+        .get(`${API_BASE_PATH}/users/me/addresses`)
+        .expect(404);
     });
   });
 

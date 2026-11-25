@@ -40,6 +40,17 @@ export const useAuth = () => {
     setLoading(false)
   }, [getToken, setError, setLoading, setUser])
 
+  // Reads the user again in the background: no loading state, and a failed
+  // request keeps the user already shown.
+  const refresh = useCallback(async () => {
+    const result = await fetchUser(() =>
+      getToken({ template: CLERK_SESSION_TEMPLATE }),
+    )
+    if (!result.ok) return
+    setUser(result.user)
+    setError(null)
+  }, [getToken, setError, setUser])
+
   useEffect(() => {
     if (!isLoaded) return
     if (!isSignedIn) {
@@ -55,6 +66,7 @@ export const useAuth = () => {
     isLoading,
     error,
     refetch: load,
+    refresh,
     isSignedIn,
     isAuthLoaded: isLoaded,
   }

@@ -98,6 +98,7 @@ describe('OrderController (e2e)', () => {
   const createUser = (
     role: UserRole = UserRole.USER,
     lastName = 'Shopper',
+    phoneNumber: string | null = null,
   ): Promise<{ id: string; clerkId: string }> =>
     RequestContext.create(orm.em, async () => {
       const clerkId = `clerk-order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -106,6 +107,7 @@ describe('OrderController (e2e)', () => {
         email: `${clerkId}@example.com`,
         firstName: 'Order',
         lastName,
+        phoneNumber,
         role,
       });
       return { id: user.id, clerkId };
@@ -486,10 +488,11 @@ describe('OrderController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .get(`${API_BASE_PATH}/users/me/addresses`)
+      .get(`${API_BASE_PATH}/users/me`)
       .expect(200);
-    const addresses = (response.body as { data: Record<string, unknown>[] })
-      .data;
+    const { addresses } = (
+      response.body as { data: { addresses: Record<string, unknown>[] } }
+    ).data;
     expect(addresses).toHaveLength(1);
     expect(addresses[0]).toMatchObject({
       userId: user.id,
@@ -518,15 +521,49 @@ describe('OrderController (e2e)', () => {
       .expect(201);
 
     const response = await request(app.getHttpServer())
-      .get(`${API_BASE_PATH}/users/me/addresses`)
+      .get(`${API_BASE_PATH}/users/me`)
       .expect(200);
-    const addresses = (response.body as { data: Record<string, unknown>[] })
-      .data;
+    const { addresses } = (
+      response.body as { data: { addresses: Record<string, unknown>[] } }
+    ).data;
     expect(addresses).toHaveLength(1);
     expect(addresses[0]).toMatchObject({
       isDefault: true,
       addressLine: '12 Le Loi',
     });
+  });
+
+  const phoneOf = async (): Promise<unknown> => {
+    const response = await request(app.getHttpServer())
+      .get(`${API_BASE_PATH}/users/me`)
+      .expect(200);
+    return (response.body as { data: { phoneNumber: unknown } }).data
+      .phoneNumber;
+  };
+
+  it('the first order saves its phone on a user with none', async () => {
+    const user = await createUser();
+    const variant = await createProduct(5);
+    const methodId = await createMethod();
+    signIn(user.clerkId);
+    await addToCart(variant.variantId, 1);
+    expect(await phoneOf()).toBeNull();
+
+    await place(methodId).expect(201);
+
+    expect(await phoneOf()).toBe('0901234567');
+  });
+
+  it('an order keeps the phone the user already has', async () => {
+    const user = await createUser(UserRole.USER, 'Phone', '0912345678');
+    const variant = await createProduct(5);
+    const methodId = await createMethod();
+    signIn(user.clerkId);
+    await addToCart(variant.variantId, 1);
+
+    await place(methodId).expect(201);
+
+    expect(await phoneOf()).toBe('0912345678');
   });
 
   it('POST /orders without a session returns 401', async () => {

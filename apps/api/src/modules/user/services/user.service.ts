@@ -219,6 +219,20 @@ export class UserService {
     return user;
   }
 
+  /**
+   * The phone of the user's first order, when the user has none yet. The auth
+   * provider still owns the phone: any `user.updated` that carries a primary
+   * phone replaces it (with null when that phone is not 10 digits). A user
+   * gone since the request started is skipped, so the order still goes through.
+   */
+  async saveFirstPhone(userId: string, phoneNumber: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.phoneNumber) return;
+
+    user.phoneNumber = phoneNumber;
+    await this.userRepository.save(user, userId);
+  }
+
   async remove(id: string, actorId: ActorId): Promise<void> {
     const user = await this.findOne(id);
     await this.authProvider.syncUserStatus(user.clerkId, UserStatus.INACTIVE);
