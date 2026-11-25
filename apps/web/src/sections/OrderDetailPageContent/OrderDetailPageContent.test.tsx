@@ -43,6 +43,10 @@ jest.mock('@/hooks/useOrder', () => ({
   })),
 }))
 jest.mock('sonner', () => ({ toast: { success: jest.fn() } }))
+jest.mock('@/sections/OrderRetryPayment', () => ({
+  __esModule: true,
+  default: () => <button type="button">Retry payment</button>,
+}))
 
 jest.mock('next/image', () => ({
   __esModule: true,
@@ -521,5 +525,72 @@ describe('OrderDetailPageContent', () => {
     render(<OrderDetailPageContent />)
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading order')
+  })
+
+  describe('retry payment', () => {
+    const failedCharge: OrderPayment = {
+      ...charge,
+      method: PaymentMethod.CARD,
+      status: PaymentStatus.FAILED,
+      failureReason: 'Your card was declined.',
+    }
+    const failedOrder: OrderDetail = {
+      ...order,
+      paymentStatus: OrderPaymentStatus.FAILED,
+      payments: [failedCharge],
+    }
+    const lastFailure = () =>
+      within(section('Payment')).queryByText('Last failure', {
+        selector: 'dt',
+      })
+
+    it('OrderDetailPageContent shows Retry payment for the owner of a FAILED order (AC4)', () => {
+      mockUseOrderDetail.mockReturnValue(state({ order: failedOrder }))
+      render(<OrderDetailPageContent />)
+
+      expect(
+        within(section('Payment')).getByRole('button', {
+          name: 'Retry payment',
+        }),
+      ).toBeInTheDocument()
+    })
+
+    it('OrderDetailPageContent shows the last failure reason on both variants', () => {
+      mockUseOrderDetail.mockReturnValue(state({ order: failedOrder }))
+      const { unmount } = render(<OrderDetailPageContent />)
+      expect(lastFailure()?.nextSibling).toHaveTextContent(
+        'Your card was declined.',
+      )
+      unmount()
+
+      render(<OrderDetailPageContent variant="dashboard" />)
+      expect(lastFailure()?.nextSibling).toHaveTextContent(
+        'Your card was declined.',
+      )
+    })
+
+    it('OrderDetailPageContent shows no Retry payment on the dashboard', () => {
+      mockUseOrderDetail.mockReturnValue(state({ order: failedOrder }))
+      render(<OrderDetailPageContent variant="dashboard" />)
+
+      expect(
+        screen.queryByRole('button', { name: 'Retry payment' }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('OrderDetailPageContent shows no Last failure row without a reason', () => {
+      mockUseOrderDetail.mockReturnValue(
+        state({
+          order: {
+            ...order,
+            paymentStatus: OrderPaymentStatus.PAID,
+            payments: [{ ...charge, status: PaymentStatus.PAID }],
+          },
+        }),
+      )
+      render(<OrderDetailPageContent />)
+
+      expect(lastFailure()).not.toBeInTheDocument()
+    })
   })
 })

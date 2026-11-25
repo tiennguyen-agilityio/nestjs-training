@@ -37,6 +37,7 @@ const request: CheckoutRequest = {
   expiresAt: new Date('2026-11-25T09:00:00Z'),
   successUrl: 'http://localhost:3501/order-success',
   cancelUrl: 'http://localhost:3501/order-success',
+  replacesCheckoutId: null,
 };
 
 const order = (status: string, extra: Record<string, unknown> = {}) => ({
@@ -114,6 +115,7 @@ describe('PayPalPaymentGateway', () => {
         id: PAYPAL_ORDER_ID,
         url: APPROVE_URL,
         open: true,
+        endedUnpaid: false,
         expiresAt: request.expiresAt,
       });
       expect(http.request).toHaveBeenCalledWith('POST', '/v2/checkout/orders', {
@@ -131,6 +133,37 @@ describe('PayPalPaymentGateway', () => {
           ],
         },
       });
+    });
+
+    it("createCheckout keeps the first attempt's PayPal-Request-Id", async () => {
+      answer(201, order('CREATED'));
+
+      await gateway.createCheckout({ ...request, replacesCheckoutId: null });
+
+      expect(http.request).toHaveBeenCalledWith(
+        'POST',
+        '/v2/checkout/orders',
+        expect.objectContaining({
+          headers: { 'PayPal-Request-Id': `create-${PAYMENT_ID}` },
+        }),
+      );
+    });
+
+    it('createCheckout keys a retry by the PayPal order it replaces', async () => {
+      answer(201, order('CREATED'));
+
+      await gateway.createCheckout({
+        ...request,
+        replacesCheckoutId: 'PP-OLD',
+      });
+
+      expect(http.request).toHaveBeenCalledWith(
+        'POST',
+        '/v2/checkout/orders',
+        expect.objectContaining({
+          headers: { 'PayPal-Request-Id': `create-${PAYMENT_ID}-after-PP-OLD` },
+        }),
+      );
     });
 
     it('createCheckout falls back to the payer-action link', async () => {
@@ -194,6 +227,7 @@ describe('PayPalPaymentGateway', () => {
         id: PAYPAL_ORDER_ID,
         url: APPROVE_URL,
         open,
+        endedUnpaid: !open,
         expiresAt: expect.any(Date) as Date,
       });
       expect(http.request).toHaveBeenCalledWith(
@@ -201,6 +235,35 @@ describe('PayPalPaymentGateway', () => {
         `/v2/checkout/orders/${PAYPAL_ORDER_ID}`,
       );
     });
+
+    it.each([
+      ['a CREATED order', order('CREATED'), false],
+      ['a VOIDED order with no capture', order('VOIDED'), true],
+      [
+        'a COMPLETED order with a DECLINED capture',
+        capturedOrder('DECLINED'),
+        true,
+      ],
+      [
+        'a COMPLETED order with a COMPLETED capture',
+        capturedOrder('COMPLETED'),
+        false,
+      ],
+      [
+        'a COMPLETED order with a PENDING capture',
+        capturedOrder('PENDING'),
+        false,
+      ],
+    ])(
+      'findCheckout reports ended unpaid only for a closed order without a completed or pending capture: %s',
+      async (_label, body, endedUnpaid) => {
+        answer(200, body);
+
+        await expect(
+          gateway.findCheckout(PAYPAL_ORDER_ID),
+        ).resolves.toMatchObject({ endedUnpaid });
+      },
+    );
 
     it('findCheckout returns null for an order PayPal does not have', async () => {
       answer(404, { name: 'RESOURCE_NOT_FOUND' });

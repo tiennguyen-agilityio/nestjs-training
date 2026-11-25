@@ -29,6 +29,7 @@ describe('StripePaymentGateway', () => {
     expiresAt: EXPIRES_AT,
     successUrl: 'http://localhost:3101/order-success?orderId=o1',
     cancelUrl: 'http://localhost:3101/order-success?orderId=o1',
+    replacesCheckoutId: null,
   };
 
   const session = (overrides: Record<string, unknown> = {}) =>
@@ -116,6 +117,7 @@ describe('StripePaymentGateway', () => {
         id: 'cs_test_1',
         url: 'https://checkout.stripe.com/c/pay/cs_test_1',
         open: true,
+        endedUnpaid: false,
         expiresAt: EXPIRES_AT,
       });
     });
@@ -139,6 +141,33 @@ describe('StripePaymentGateway', () => {
         });
       },
     );
+
+    it("createCheckout keeps the first attempt's idempotency key", async () => {
+      const create = vi
+        .spyOn(stripe.checkout.sessions, 'create')
+        .mockResolvedValue(session() as never);
+
+      await gateway.createCheckout({ ...request, replacesCheckoutId: null });
+
+      expect(create).toHaveBeenCalledWith(expect.anything(), {
+        idempotencyKey: `checkout-${PAYMENT_ID}-${EXPIRES_SECONDS}`,
+      });
+    });
+
+    it('createCheckout keys a retry by the session it replaces', async () => {
+      const create = vi
+        .spyOn(stripe.checkout.sessions, 'create')
+        .mockResolvedValue(session() as never);
+
+      await gateway.createCheckout({
+        ...request,
+        replacesCheckoutId: 'cs_old',
+      });
+
+      expect(create).toHaveBeenCalledWith(expect.anything(), {
+        idempotencyKey: `checkout-${PAYMENT_ID}-after-cs_old`,
+      });
+    });
 
     it('createCheckout maps an invalid request to InvalidRequestException', async () => {
       vi.spyOn(stripe.checkout.sessions, 'create').mockRejectedValue(
@@ -171,11 +200,24 @@ describe('StripePaymentGateway', () => {
       await expect(gateway.findCheckout('cs_test_1')).resolves.toMatchObject({
         id: 'cs_test_1',
         open: true,
+        endedUnpaid: false,
       });
       await expect(gateway.findCheckout('cs_test_1')).resolves.toMatchObject({
         open: false,
+        endedUnpaid: true,
       });
       expect(retrieve).toHaveBeenCalledWith('cs_test_1');
+    });
+
+    it('findCheckout maps a complete session as not ended unpaid', async () => {
+      vi.spyOn(stripe.checkout.sessions, 'retrieve').mockResolvedValue(
+        session({ status: 'complete' }) as never,
+      );
+
+      await expect(gateway.findCheckout('cs_test_1')).resolves.toMatchObject({
+        open: false,
+        endedUnpaid: false,
+      });
     });
 
     it('findCheckout returns null for a session Stripe does not have', async () => {

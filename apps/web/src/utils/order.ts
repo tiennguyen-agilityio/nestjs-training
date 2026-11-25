@@ -487,7 +487,8 @@ export interface OrderSuccessPaymentView {
   errorMessage: string | null
 }
 
-const chargeMethodOf = (order: OrderDetail): PaymentMethod | null => {
+/** The method of the order's newest CHARGE, or `null` without one. */
+export const chargeMethodOf = (order: OrderDetail): PaymentMethod | null => {
   const charges = order.payments
     .filter((payment) => payment.type === PaymentType.CHARGE)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -537,6 +538,24 @@ export function getOrderSuccessPaymentView(input: {
     errorMessage:
       isUnfinished && paymentError ? paymentErrorMessage(paymentError) : null,
   }
+}
+
+const RETRYABLE_METHODS = new Set<PaymentMethod | null>([
+  PaymentMethod.CARD,
+  PaymentMethod.PAYPAL,
+])
+
+/** Order details offers "Retry payment": a FAILED online charge on a PENDING order before its deadline. */
+export function canRetryPayment(
+  order: OrderDetail,
+  now: Date = new Date(),
+): boolean {
+  return (
+    order.paymentStatus === OrderPaymentStatus.FAILED &&
+    order.status === OrderStatus.PENDING &&
+    RETRYABLE_METHODS.has(chargeMethodOf(order)) &&
+    (!order.expiresAt || new Date(order.expiresAt) > now)
+  )
 }
 
 /** The cancel dialog's message: the API's `errCode`, never its `message`, picks it. */
