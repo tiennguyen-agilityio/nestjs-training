@@ -84,6 +84,21 @@ export class EnvironmentVariables {
   @IsUrl({ require_tld: false })
   WEB_APP_URL!: string;
 
+  @IsString()
+  @IsNotEmpty()
+  PAYPAL_CLIENT_ID!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  PAYPAL_CLIENT_SECRET!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  PAYPAL_WEBHOOK_ID!: string;
+
+  @IsUrl({ require_tld: false })
+  PAYPAL_API_URL!: string;
+
   // Empty or 0 means unset: ClerkAuthProvider falls back to DEFAULT_CLERK_SYNC_TIMEOUT_MS.
   @IsOptional()
   @Transform(toNumber)

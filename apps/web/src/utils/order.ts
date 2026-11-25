@@ -5,6 +5,7 @@ import { Banknote, Package, Truck } from 'lucide-react'
 import type { StatCardItem } from '@/components/StatsCards'
 import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
 import type { ApiErrorResponse, ErrorDetail, ResponseMeta } from '@/types/api'
+import type { CartItem, CartTotals } from '@/types/cart'
 import {
   PAYMENT_METHOD,
   type CheckoutCardFormValues,
@@ -462,11 +463,12 @@ const PAYMENT_ERROR_MESSAGES: Readonly<Record<string, string>> = {
 
 export function paymentErrorMessage(
   errCode: string | null | undefined,
+  fallback: string = API_FALLBACK_ERRORS.PAYMENT_START,
 ): string {
   return (
     (errCode && Object.hasOwn(PAYMENT_ERROR_MESSAGES, errCode)
       ? PAYMENT_ERROR_MESSAGES[errCode]
-      : undefined) ?? API_FALLBACK_ERRORS.PAYMENT_START
+      : undefined) ?? fallback
   )
 }
 
@@ -543,3 +545,30 @@ export const getCancelOrderErrorMessage = (error: unknown): string =>
   error.errors.some(({ errCode }) => errCode === 'statusNotAllowed')
     ? ERROR_MESSAGES.ORDER_NOT_CANCELLABLE
     : getErrorMessage(error)
+
+/** The placed order's lines in the shape Checkout's summary shows (the cart is empty by then). */
+export function placedOrderToCartItems(order: PlacedOrder): CartItem[] {
+  return order.items.map((item) => ({
+    id: item.id,
+    variantId: item.productVariantId,
+    // The order line keeps no product id; the summary only needs it to remove a line.
+    productId: '',
+    name: item.productName,
+    meta: item.variantName,
+    imageUrl: item.productImage,
+    unitPrice: item.unitPrice - item.discountAmount,
+    listPrice: item.unitPrice,
+    quantity: item.quantity,
+    lineTotal: item.lineTotal,
+  }))
+}
+
+/** The placed order's totals in the shape Checkout's summary shows. */
+export function placedOrderTotals(order: PlacedOrder): CartTotals {
+  return {
+    subtotal: order.subTotal,
+    shipping: order.shippingFee,
+    tax: order.tax,
+    total: order.totalAmount,
+  }
+}

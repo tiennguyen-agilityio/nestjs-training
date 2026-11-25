@@ -25,10 +25,10 @@ import {
   PAYMENT_ERR_CODES,
   paymentErrorMessage,
 } from '@/utils/order'
-import type { OrderSummary } from '@/types/order'
+import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 import { ShippingStatus } from '@repo/constants'
 import { ServiceError } from '@/utils/query'
-import type { OrderDetail } from '@/types/order'
+import { placedOrderToCartItems, placedOrderTotals } from '@/utils/order'
 
 const values = (
   overrides: Partial<CheckoutFormValues> = {},
@@ -330,6 +330,12 @@ describe('paymentErrorMessage', () => {
     )
   })
 
+  it('an unknown code gives the given fallback', () => {
+    expect(
+      paymentErrorMessage('nope', API_FALLBACK_ERRORS.PAYMENT_CAPTURE),
+    ).toBe(API_FALLBACK_ERRORS.PAYMENT_CAPTURE)
+  })
+
   it('an unknown code gives the generic message', () => {
     for (const code of ['<b>hi</b>', '', null, undefined]) {
       expect(paymentErrorMessage(code)).toBe(API_FALLBACK_ERRORS.PAYMENT_START)
@@ -485,5 +491,53 @@ describe('getCancelOrderErrorMessage', () => {
     expect(getCancelOrderErrorMessage('boom')).toBe(
       ERROR_MESSAGES.NETWORK_ERROR,
     )
+  })
+})
+
+describe('placed order summary', () => {
+  const placed = {
+    subTotal: 418,
+    shippingFee: 12,
+    tax: 41.8,
+    totalAmount: 471.8,
+    items: [
+      {
+        id: 'item-1',
+        productVariantId: 'variant-1',
+        productName: 'Las Hermanas',
+        productImage: 'https://img.example/las.png',
+        variantName: '200g',
+        unitPrice: 240,
+        discountAmount: 12,
+        quantity: 1,
+        lineTotal: 228,
+      },
+    ],
+  } as unknown as PlacedOrder
+
+  it('placedOrderToCartItems maps lines (name, meta = variant, image, unitPrice, quantity)', () => {
+    expect(placedOrderToCartItems(placed)).toEqual([
+      {
+        id: 'item-1',
+        variantId: 'variant-1',
+        productId: '',
+        name: 'Las Hermanas',
+        meta: '200g',
+        imageUrl: 'https://img.example/las.png',
+        unitPrice: 228,
+        listPrice: 240,
+        quantity: 1,
+        lineTotal: 228,
+      },
+    ])
+  })
+
+  it('placedOrderTotals maps subTotal, shippingFee, tax, totalAmount', () => {
+    expect(placedOrderTotals(placed)).toEqual({
+      subtotal: 418,
+      shipping: 12,
+      tax: 41.8,
+      total: 471.8,
+    })
   })
 })

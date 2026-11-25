@@ -5,6 +5,9 @@ export const ERROR_MESSAGES = {
   PRODUCT_VARIANT_NOT_FOUND: 'Product variant not found.',
   ORDER_NOT_CANCELLABLE:
     'This order can no longer be cancelled. Contact the shop for help.',
+  PAYPAL_UNAVAILABLE: 'PayPal is not available right now.',
+  PAYPAL_NOT_RETRYABLE: "This order can't be paid again here.",
+  PAYMENT_FAILED: 'The payment failed.',
   IDENTIFIER_REQUIRED: 'Enter your email address',
   IDENTIFIER_EMAIL_INVALID: 'Enter a valid email address',
   PASSWORD_REQUIRED: 'Enter your password',
@@ -107,6 +110,7 @@ export const API_FALLBACK_ERRORS = {
   ORDERS_LOAD: 'Could not load orders',
   ORDER_LOAD: 'Could not load order',
   PAYMENT_START: 'Could not start the payment. Try again.',
+  PAYMENT_CAPTURE: 'Could not complete the PayPal payment',
   SHIPPING_METHODS_LOAD: 'Could not load shipping methods',
   SHIPPING_METHOD_LOAD: 'Could not load shipping method',
   SHIPPING_METHOD_CREATE: 'Could not create shipping method',
@@ -129,6 +133,7 @@ export const SUCCESS_MESSAGES = {
   ORDER_CANCELLED: 'Order cancelled',
   STOCK_RESTOCKED: 'Stock restocked',
   STOCK_ADJUSTED: 'Stock adjusted',
+  PAYMENT_SUCCESSFUL: 'Payment successful',
   ORDER_TOTAL: (total: string) => `Order total: ${total}`,
   SIGNED_OUT: 'Signed out successfully',
   CATEGORY_CREATED: 'Category created',
@@ -182,6 +187,7 @@ export const NOTICE_MESSAGES = {
     count === 0
       ? 'Stock levels are fine.'
       : `${count} ${count === 1 ? 'item is' : 'items are'} running low on stock.`,
+  PAYPAL_CANCELLED: 'You cancelled the PayPal payment. Nothing was charged.',
 }
 
 export const DIALOG_MESSAGES = {

@@ -281,19 +281,36 @@ export class OrderService {
         description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE,
       });
     }
-    const paid = order.payments
+    const charges = order.payments
       .getItems()
-      .some(
-        (payment) =>
-          (payment.type as PaymentType) === PaymentType.CHARGE &&
-          (payment.status as PaymentStatus) === PaymentStatus.PAID,
+      .filter(
+        (payment) => (payment.type as PaymentType) === PaymentType.CHARGE,
       );
-    if (paid) {
+    if (
+      charges.some(
+        (payment) => (payment.status as PaymentStatus) === PaymentStatus.PAID,
+      )
+    ) {
       throw new InvalidStateException({
         errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
         field: 'paymentStatus',
         message: ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('paid'),
         description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_PAID,
+      });
+    }
+    // A pending charge with a transaction id is money the gateway holds for review.
+    if (
+      charges.some(
+        (payment) =>
+          (payment.status as PaymentStatus) === PaymentStatus.PENDING &&
+          payment.transactionId,
+      )
+    ) {
+      throw new InvalidStateException({
+        errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
+        field: 'paymentStatus',
+        message: ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('under payment review'),
+        description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_PAYMENT_HELD,
       });
     }
   }

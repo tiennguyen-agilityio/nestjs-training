@@ -21,6 +21,8 @@ export const HEALTH_ROUTES = ['health/live', 'health/ready'].flatMap((path) => [
   { path, method: RequestMethod.HEAD },
 ]);
 
-export const WEBHOOK_ROUTES = ['webhooks/clerk', 'webhooks/stripe'].map(
-  (path) => ({ path, method: RequestMethod.POST }),
-);
+export const WEBHOOK_ROUTES = [
+  'webhooks/clerk',
+  'webhooks/stripe',
+  'webhooks/paypal',
+].map((path) => ({ path, method: RequestMethod.POST }));

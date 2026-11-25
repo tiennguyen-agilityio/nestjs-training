@@ -22,6 +22,10 @@ export class PaymentRepository extends BaseRepository<Payment> {
     return charges[0] ?? null;
   }
 
+  findByCheckoutSessionId(checkoutSessionId: string): Promise<Payment | null> {
+    return this.findOneBy({ checkoutSessionId }, { relations: ['order'] });
+  }
+
   lockById(id: string): Promise<Payment | null> {
     return this.findOneForUpdate({ id });
   }
