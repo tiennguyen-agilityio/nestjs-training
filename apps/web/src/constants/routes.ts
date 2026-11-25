@@ -64,6 +64,7 @@ export const API_ROUTES = {
   CATEGORIES: `${API_BASE_URL}/api/v1/categories`,
   PRODUCTS: `${API_BASE_URL}/api/v1/products`,
   ORDERS: `${API_BASE_URL}/api/v1/orders`,
+  PAYMENTS: `${API_BASE_URL}/api/v1/payments`,
   SHIPPING_METHODS: `${API_BASE_URL}/api/v1/shipping-methods`,
   CART: `${API_BASE_URL}/api/v1/cart`,
   INVENTORY: `${API_BASE_URL}/api/v1/inventory`,

@@ -12,6 +12,8 @@ import { API_ROUTES } from '@/constants/routes'
 import {
   cancelOrder,
   createOrder,
+  createRefund,
+  retryRefund,
   fetchMyOrders,
   fetchOrderDetail,
   fetchOrders,
@@ -436,5 +438,83 @@ describe('order status updates (admin)', () => {
     if (result.ok) return
     expect(result.error).toBe('Cannot move order from COMPLETED to PENDING')
     expect(result.errorResponse?.errors?.[0]?.errCode).toBe('statusNotAllowed')
+  })
+})
+
+describe('refund services', () => {
+  const realFetch = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = realFetch
+  })
+
+  it('createRefund POSTs /orders/:id/refunds with the Idempotency-Key', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ data: { id: 'refund-1' } }, 201))
+    globalThis.fetch = fetchMock
+
+    const result = await createRefund('o-1', 12.5, {
+      getToken,
+      idempotencyKey: 'key-1',
+    })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `${API_ROUTES.ORDERS}/o-1/refunds`,
+    )
+    expect(requestInit(fetchMock).method).toBe('POST')
+    expect(requestInit(fetchMock).body).toBe('{"amount":12.5}')
+    expect(requestInit(fetchMock).credentials).toBe('include')
+    const headers = requestInit(fetchMock).headers as Headers
+    expect(headers.get(IDEMPOTENCY.HEADER)).toBe('key-1')
+    expect(headers.get('Authorization')).toBe('Bearer tok')
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('retryRefund POSTs /payments/:id/retry', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ data: { id: 'refund-2' } }, 201))
+    globalThis.fetch = fetchMock
+
+    const result = await retryRefund('refund-1', {
+      getToken,
+      idempotencyKey: 'key-2',
+    })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `${API_ROUTES.PAYMENTS}/refund-1/retry`,
+    )
+    expect(requestInit(fetchMock).method).toBe('POST')
+    const headers = requestInit(fetchMock).headers as Headers
+    expect(headers.get(IDEMPOTENCY.HEADER)).toBe('key-2')
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('createRefund returns the API error on a 409', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue(
+      fetchResponse(
+        {
+          statusCode: 409,
+          message: 'Conflict',
+          errors: [
+            {
+              errCode: 'refundExceedsPaid',
+              field: 'amount',
+              message: 'Refunds cannot exceed the amount paid',
+              description: 'At most 12.50 can still be refunded.',
+            },
+          ],
+        },
+        409,
+      ),
+    )
+
+    const result = await createRefund('o-1', 30, {
+      getToken,
+      idempotencyKey: 'key-3',
+    })
+
+    expect(result.ok).toBe(false)
   })
 })

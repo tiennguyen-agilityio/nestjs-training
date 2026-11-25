@@ -21,6 +21,9 @@ export const ERROR_MESSAGES = {
   UNEXPECTED_PROFILE_RESPONSE: 'Unexpected profile response',
   NETWORK_ERROR: 'Network error',
   FIELD_REQUIRED: 'This field is required',
+  REFUND_AMOUNT_MIN: 'Enter an amount above 0.',
+  REFUND_AMOUNT_MAX: (max: string) => `At most ${max} can be refunded.`,
+  REFUND_AMOUNT_DECIMALS: 'Use at most 2 decimals.',
   SHIPPING_METHOD_ID_MISSING: 'Missing shipping method id.',
   IMAGE_UPLOAD_NOT_CONFIGURED: 'Image upload is not configured',
   PRODUCT_AVATAR_REQUIRED: 'Main hero image is required',
@@ -106,6 +109,8 @@ export const API_FALLBACK_ERRORS = {
   ORDER_DELETE: 'Could not delete order',
   ORDER_STATUS_UPDATE: 'Could not update order status',
   ORDER_SHIPPING_STATUS_UPDATE: 'Could not update shipping status',
+  REFUND_CREATE: 'Could not refund the payment',
+  REFUND_RETRY: 'Could not retry the refund',
   ORDERS_LOAD: 'Could not load orders',
   ORDER_LOAD: 'Could not load order',
   PAYMENT_START: 'Could not start the payment. Try again.',
@@ -145,6 +150,8 @@ export const SUCCESS_MESSAGES = {
   ORDER_DELETED: 'Order removed',
   ORDER_STATUS_UPDATED: 'Order status updated',
   ORDER_SHIPPING_STATUS_UPDATED: 'Shipping status updated',
+  REFUND_STARTED: 'Refund sent to the payment provider',
+  REFUND_RETRIED: 'Refund sent again',
   USER_ROLE_UPDATED: 'User role updated',
   USER_DELETED: 'User removed',
   PROFILE_UPDATED: 'Profile updated',
@@ -224,7 +231,14 @@ export const DIALOG_MESSAGES = {
       KEEP: 'Keep order',
       DESCRIPTION: (orderNumber: string) =>
         `Order ${orderNumber} will be cancelled and its items go back into stock. This cannot be undone.`,
-      NOT_REFUNDED: 'The payment is not refunded.',
+      WILL_BE_REFUNDED: 'The payment will be refunded.',
+    },
+    REFUND: {
+      TITLE: 'Refund this order?',
+      ACTION: 'Send refund',
+      KEEP: 'Keep payment',
+      DESCRIPTION: (orderNumber: string) =>
+        `The amount goes back to the customer of order ${orderNumber} through the payment provider.`,
     },
     RETURN: {
       TITLE: 'Mark this order as returned?',

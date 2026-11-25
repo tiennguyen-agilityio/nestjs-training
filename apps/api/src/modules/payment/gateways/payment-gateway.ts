@@ -51,10 +51,34 @@ export interface ApprovedCheckout {
   checkoutSessionId: string;
 }
 
+export interface RefundRequest {
+  refundId: string;
+  chargeTransactionId: string;
+  amountCents: number;
+  currency: 'usd';
+}
+
+export type RefundOutcome =
+  | { kind: 'succeeded'; refundTransactionId: string; refundedAt: Date }
+  | { kind: 'pending'; refundTransactionId: string }
+  | { kind: 'failed'; refundTransactionId: string | null; reason: string };
+
+export interface RefundEvent {
+  kind: 'refund';
+  refundTransactionId: string;
+  chargeTransactionId: string;
+  refundId: string | null;
+  amountCents: number;
+  currency: string;
+  status: 'succeeded' | 'pending' | 'failed';
+  reason: string | null;
+  at: Date;
+}
+
 export interface VerifiedWebhook {
   id: string;
   type: string;
-  event: GatewayEvent | ApprovedCheckout | null;
+  event: GatewayEvent | ApprovedCheckout | RefundEvent | null;
 }
 
 /** What capturing an approved checkout gave. */
@@ -79,4 +103,7 @@ export abstract class PaymentGateway {
 
   /** Captures an approved checkout; `null` when the gateway has no capture step. */
   abstract capture(checkoutId: string): Promise<CaptureOutcome | null>;
+
+  /** A refusal resolves `failed`; an outage rejects so the caller retries. */
+  abstract refund(request: RefundRequest): Promise<RefundOutcome>;
 }

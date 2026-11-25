@@ -2,11 +2,7 @@
 
 import { useId, useState } from 'react'
 import { toast } from 'sonner'
-import {
-  OrderPaymentStatus,
-  OrderStatus,
-  ShippingStatus,
-} from '@repo/constants'
+import { OrderStatus, ShippingStatus } from '@repo/constants'
 
 import type { OrderDetail } from '@/types/order'
 import { DIALOG_MESSAGES, SUCCESS_MESSAGES } from '@/constants/messages'
@@ -17,6 +13,7 @@ import {
 import {
   getOrderStatusPresentation,
   getShippingStatusPresentation,
+  refundableOf,
 } from '@/utils/order'
 import { getErrorMessage } from '@/utils/form'
 import { cn } from '@/utils/styles'
@@ -69,6 +66,7 @@ export default function OrderStatusPanel({
   const shippingSteps = Object.values(ShippingStatus).filter(
     (status) => status !== order.shippingStatus,
   )
+  const willRefund = refundableOf(order) > 0
   const isClosed =
     (order.status === OrderStatus.COMPLETED ||
       order.status === OrderStatus.CANCELLED) &&
@@ -223,10 +221,10 @@ export default function OrderStatusPanel({
                 current?.orderNumber ?? order.orderNumber,
               )}
             </span>
-            {order.paymentStatus === OrderPaymentStatus.PAID && (
+            {willRefund && (
               <>
                 {' '}
-                <span>{DIALOG_MESSAGES.ORDER.CANCEL.NOT_REFUNDED}</span>
+                <span>{DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED}</span>
               </>
             )}
           </>
@@ -257,10 +255,10 @@ export default function OrderStatusPanel({
                 current?.orderNumber ?? order.orderNumber,
               )}
             </span>
-            {order.paymentStatus === OrderPaymentStatus.PAID && (
+            {willRefund && (
               <>
                 {' '}
-                <span>{DIALOG_MESSAGES.ORDER.CANCEL.NOT_REFUNDED}</span>
+                <span>{DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED}</span>
               </>
             )}
           </>

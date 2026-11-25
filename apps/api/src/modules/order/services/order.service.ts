@@ -12,13 +12,18 @@ import {
   OrderRepository,
   type CreateOrderData,
   type EnqueueCheckoutExpire,
+  type EnqueueRefund,
 } from '../repositories/order.repository.js';
 import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
 import { UserAddressService } from '../../user/services/user-address.service.js';
 import { UserService } from '../../user/services/user.service.js';
-import { ResponseOrderDto } from '../dto/response-order.dto.js';
+import {
+  ResponseOrderDto,
+  ResponsePaymentDto,
+} from '../dto/response-order.dto.js';
+import { RefundService } from './refund.service.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
 import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
 import type { OrderQueryInput, PlaceOrderInput } from '../dto/order.schema.js';
@@ -26,6 +31,7 @@ import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import { mapPaginatedResult } from '../../../common/utils/pagination.util.js';
 import type { CartItem } from '../../cart/entities/cart-item.entity.js';
 import type { Order } from '../entities/order.entity.js';
+import type { Payment } from '../entities/payment.entity.js';
 import type { ProductVariant } from '../../product-variant/entities/product-variant.entity.js';
 import { isPurchasable } from '../../product-variant/utils/purchasable.util.js';
 import { availableQuantityOf } from '../../product-variant/utils/stock.util.js';
@@ -96,6 +102,7 @@ export class OrderService {
     private readonly shippingMethodService: ShippingMethodService,
     private readonly userAddressService: UserAddressService,
     private readonly userService: UserService,
+    private readonly refundService: RefundService,
   ) {}
 
   /** The caller's own orders only, whatever their role (`findAll` lists every order). */
@@ -165,14 +172,19 @@ export class OrderService {
    */
   cancel(userId: string, idOrOrderNumber: string): Promise<ResponseOrderDto> {
     return this.orderRepository.transactionalWithOutbox(
-      async (enqueueCheckoutExpire) => {
+      async (enqueueCheckoutExpire, enqueueRefund) => {
         const order = await this.orderRepository.lockMineForCancel(
           userId,
           whereOf(idOrOrderNumber),
         );
         if (!order) throw this.orderNotFound();
         this.assertCancellable(order);
-        await this.cancelLocked(order, userId, enqueueCheckoutExpire);
+        await this.cancelLocked(
+          order,
+          userId,
+          enqueueCheckoutExpire,
+          enqueueRefund,
+        );
 
         return ResponseOrderDto.fromEntity(order);
       },
@@ -190,14 +202,19 @@ export class OrderService {
     actorId: ActorId,
   ): Promise<ResponseOrderDto> {
     return this.orderRepository.transactionalWithOutbox(
-      async (enqueueCheckoutExpire) => {
+      async (enqueueCheckoutExpire, enqueueRefund) => {
         const order = await this.lockForStatusChange(idOrOrderNumber);
         const from = order.status as OrderStatus;
         const block = orderMoveBlockOf(statusFactsOf(order), status);
         if (block) throw this.orderMoveRefused(block, from, status);
 
         if (status === OrderStatus.CANCELLED) {
-          await this.cancelLocked(order, actorId, enqueueCheckoutExpire);
+          await this.cancelLocked(
+            order,
+            actorId,
+            enqueueCheckoutExpire,
+            enqueueRefund,
+          );
         } else {
           order.status = status;
           await this.orderRepository.save(order, actorId);
@@ -215,7 +232,7 @@ export class OrderService {
     actorId: ActorId,
   ): Promise<ResponseOrderDto> {
     return this.orderRepository.transactionalWithOutbox(
-      async (enqueueCheckoutExpire) => {
+      async (enqueueCheckoutExpire, enqueueRefund) => {
         const order = await this.lockForStatusChange(idOrOrderNumber);
         const from = order.shippingStatus as ShippingStatus;
         const block = shippingMoveBlockOf(statusFactsOf(order), shippingStatus);
@@ -223,7 +240,12 @@ export class OrderService {
         order.shippingStatus = shippingStatus;
 
         if (shippingStatus === ShippingStatus.RETURNED) {
-          await this.cancelLocked(order, actorId, enqueueCheckoutExpire);
+          await this.cancelLocked(
+            order,
+            actorId,
+            enqueueCheckoutExpire,
+            enqueueRefund,
+          );
         } else if (shippingStatus === ShippingStatus.DELIVERED) {
           await this.deliverLocked(order, actorId);
         } else {
@@ -231,6 +253,46 @@ export class OrderService {
         }
 
         return ResponseOrderDto.fromEntity(order);
+      },
+    );
+  }
+
+  /** An admin refunds part or all of an order's PAID online charge. */
+  refund(
+    idOrOrderNumber: string,
+    amount: number,
+    actorId: ActorId,
+  ): Promise<ResponsePaymentDto> {
+    return this.orderRepository.transactionalWithOutbox(
+      async (_enqueueCheckoutExpire, enqueueRefund) => {
+        const order = await this.lockForStatusChange(idOrOrderNumber);
+        const refund = await this.refundService.startLocked(
+          order,
+          amount,
+          actorId,
+          enqueueRefund,
+        );
+        return ResponsePaymentDto.fromEntity(refund as Payment);
+      },
+    );
+  }
+
+  /** An admin sends a FAILED refund again, as a new PENDING refund. */
+  retryRefund(
+    paymentId: string,
+    actorId: ActorId,
+  ): Promise<ResponsePaymentDto> {
+    return this.orderRepository.transactionalWithOutbox(
+      async (_enqueueCheckoutExpire, enqueueRefund) => {
+        const order = await this.orderRepository.lockForPayment(paymentId);
+        if (!order) throw this.paymentNotFound();
+        const refund = await this.refundService.retryLocked(
+          order,
+          paymentId,
+          actorId,
+          enqueueRefund,
+        );
+        return ResponsePaymentDto.fromEntity(refund);
       },
     );
   }
@@ -388,6 +450,7 @@ export class OrderService {
     order: Order,
     actorId: ActorId,
     enqueueCheckoutExpire: EnqueueCheckoutExpire,
+    enqueueRefund: EnqueueRefund,
   ): Promise<void> {
     const items = [...order.items.getItems()].sort((a, b) =>
       a.productVariant.id.localeCompare(b.productVariant.id),
@@ -429,6 +492,7 @@ export class OrderService {
         });
       }
     }
+    await this.refundService.startLocked(order, 'rest', actorId, enqueueRefund);
   }
 
   private async deliverLocked(order: Order, actorId: ActorId): Promise<void> {
@@ -525,6 +589,15 @@ export class OrderService {
       ],
     };
     return this.statusNotAllowed('shippingStatus', ...refusals[block]);
+  }
+
+  private paymentNotFound(): ItemNotFoundException {
+    return new ItemNotFoundException({
+      errCode: ERROR_CODES.PAYMENT.NOT_FOUND,
+      field: 'id',
+      message: ERROR_MESSAGES.PAYMENT.NOT_FOUND,
+      description: ERROR_DESCRIPTIONS.PAYMENT.NOT_FOUND,
+    });
   }
 
   private orderNotFound(): ItemNotFoundException {

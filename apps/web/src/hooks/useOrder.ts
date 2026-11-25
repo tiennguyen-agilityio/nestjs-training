@@ -15,6 +15,8 @@ import { CLERK_SESSION_TEMPLATE, PAGE_SIZE } from '@/constants/common'
 import { ORDER_PAYMENT_POLL } from '@/constants/order'
 import { sendUntilSettled, useIdempotencyKey } from '@/hooks/useIdempotencyKey'
 import {
+  createRefund,
+  retryRefund,
   cancelOrder,
   createOrder,
   deleteOrder,
@@ -163,6 +165,52 @@ export function useUpdateOrderShippingStatus() {
         { getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }) },
       )
       if (!result.ok) throwIfServiceFailed(result)
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })
+    },
+  })
+}
+
+/**
+ * An admin's refund of part of an order's paid online charge. A retry of the
+ * same amount reuses the `Idempotency-Key`; success or failure, the orders are
+ * refetched, and a failure throws a `ServiceError` carrying the API's `errors[]`.
+ */
+export function useCreateRefund() {
+  const queryClient = useQueryClient()
+  const { getToken } = useAuth()
+  const idempotency = useIdempotencyKey()
+
+  return useMutation({
+    mutationFn: async (input: { orderId: string; amount: number }) => {
+      const result = await createRefund(input.orderId, input.amount, {
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+        idempotencyKey: idempotency.keyFor(input),
+      })
+      if (!result.ok) throwIfServiceFailed(result)
+      idempotency.clear()
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })
+    },
+  })
+}
+
+/** An admin's retry of a FAILED refund; refetches and throws as `useCreateRefund`. */
+export function useRetryRefund() {
+  const queryClient = useQueryClient()
+  const { getToken } = useAuth()
+  const idempotency = useIdempotencyKey()
+
+  return useMutation({
+    mutationFn: async (input: { paymentId: string }) => {
+      const result = await retryRefund(input.paymentId, {
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+        idempotencyKey: idempotency.keyFor(input),
+      })
+      if (!result.ok) throwIfServiceFailed(result)
+      idempotency.clear()
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })

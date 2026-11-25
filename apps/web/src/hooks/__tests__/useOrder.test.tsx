@@ -18,6 +18,7 @@ import {
   ordersQueryKeys,
   useCancelOrder,
   useCreateOrder,
+  useCreateRefund,
   useMyOrders,
   useOrderDetail,
   useOrders,
@@ -27,6 +28,7 @@ import {
 import {
   cancelOrder,
   createOrder,
+  createRefund,
   fetchMyOrders,
   fetchOrderDetail,
   fetchOrders,
@@ -41,6 +43,8 @@ jest.mock('@clerk/nextjs', () => ({ useAuth: jest.fn() }))
 jest.mock('@/services/order', () => ({
   cancelOrder: jest.fn(),
   createOrder: jest.fn(),
+  createRefund: jest.fn(),
+  retryRefund: jest.fn(),
   deleteOrder: jest.fn(),
   fetchOrders: jest.fn(),
   updateOrderShippingStatus: jest.fn(),
@@ -912,5 +916,35 @@ describe('useUpdateOrderStatus and useUpdateOrderShippingStatus', () => {
         queryKey: ordersQueryKeys.root,
       }),
     )
+  })
+})
+
+describe('useCreateRefund', () => {
+  it('useCreateRefund invalidates the orders queries', async () => {
+    jest.mocked(useAuth).mockReturnValue({
+      getToken: jest.fn().mockResolvedValue('tok'),
+    } as unknown as ReturnType<typeof useAuth>)
+    jest.mocked(createRefund).mockResolvedValue({ ok: true })
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidate = jest.spyOn(client, 'invalidateQueries')
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    const { result } = renderHook(() => useCreateRefund(), { wrapper })
+
+    await act(() => result.current.mutateAsync({ orderId: 'o-1', amount: 5 }))
+
+    expect(jest.mocked(createRefund)).toHaveBeenCalledWith('o-1', 5, {
+      getToken: expect.any(Function),
+      idempotencyKey: expect.any(String),
+    })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ordersQueryKeys.root,
+    })
   })
 })

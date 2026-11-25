@@ -11,9 +11,11 @@ import { PaymentService } from './payment.service.js';
 import type { PaymentRepository } from '../repositories/payment.repository.js';
 import type { OrderRepository } from '../../order/repositories/order.repository.js';
 import type { PaymentGateways } from '../gateways/payment-gateways.js';
+import type { RefundService } from '../../order/services/refund.service.js';
 import type {
   CheckoutSession,
   GatewayEvent,
+  RefundEvent,
 } from '../gateways/payment-gateway.js';
 import type { Payment } from '../../order/entities/payment.entity.js';
 import type { Order } from '../../order/entities/order.entity.js';
@@ -25,6 +27,7 @@ import {
   ValidationException,
 } from '../../../common/exceptions/base.exception.js';
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
+import { ERROR_MESSAGES } from '../../../common/constants/message.constant.js';
 
 const USER_ID = 'user-1';
 const ORDER_ID = '22222222-2222-4222-8222-222222222222';
@@ -38,18 +41,32 @@ describe('PaymentService', () => {
     | 'findNewestChargeOf'
     | 'findByCheckoutSessionId'
     | 'lockById'
+    | 'findRefundWithCharge'
+    | 'findByTransactionId'
+    | 'withOwnContext'
     | 'save'
     | 'transactional',
     Mock
   >;
-  let orderRepository: Record<'reload' | 'findById', Mock>;
+  let orderRepository: Record<
+    | 'reload'
+    | 'findById'
+    | 'transactionalWithOutbox'
+    | 'lockForPayment'
+    | 'lockForStatusChange'
+    | 'addRefund',
+    Mock
+  >;
+  let refundService: Record<'startLocked', Mock>;
+  let enqueueRefund: Mock;
   let gateways: Record<'for', Mock>;
   let gateway: Record<
     | 'createCheckout'
     | 'findCheckout'
     | 'expireCheckout'
     | 'parseWebhook'
-    | 'capture',
+    | 'capture'
+    | 'refund',
     Mock
   >;
   let order: Order;
@@ -113,16 +130,32 @@ describe('PaymentService', () => {
       findNewestChargeOf: vi.fn(),
       findByCheckoutSessionId: vi.fn(),
       lockById: vi.fn(),
+      findRefundWithCharge: vi.fn(),
+      findByTransactionId: vi.fn(),
+      withOwnContext: vi.fn((work: () => Promise<unknown>) => work()),
       save: vi.fn().mockResolvedValue(undefined),
       transactional: vi.fn((work: () => Promise<unknown>) => work()),
     };
-    orderRepository = { reload: vi.fn(), findById: vi.fn() };
+    enqueueRefund = vi.fn();
+    orderRepository = {
+      reload: vi.fn(),
+      findById: vi.fn(),
+      transactionalWithOutbox: vi.fn(
+        (work: (expire: Mock, refund: Mock) => Promise<unknown>) =>
+          work(vi.fn(), enqueueRefund),
+      ),
+      lockForPayment: vi.fn(),
+      lockForStatusChange: vi.fn(),
+      addRefund: vi.fn(),
+    };
+    refundService = { startLocked: vi.fn().mockResolvedValue(null) };
     gateway = {
       createCheckout: vi.fn().mockResolvedValue(session()),
       findCheckout: vi.fn(),
       expireCheckout: vi.fn().mockResolvedValue(undefined),
       parseWebhook: vi.fn(),
       capture: vi.fn(),
+      refund: vi.fn(),
     };
     gateways = { for: vi.fn().mockReturnValue(gateway) };
     const config = {
@@ -132,6 +165,7 @@ describe('PaymentService', () => {
       paymentRepository as unknown as PaymentRepository,
       orderRepository as unknown as OrderRepository,
       gateways as unknown as PaymentGateways,
+      refundService as unknown as RefundService,
       config,
     );
   });
@@ -503,7 +537,30 @@ describe('PaymentService', () => {
       expect(order.status).toBe(OrderStatus.CONFIRMED);
       expect(order.expiresAt).toBeNull();
       expect(paymentRepository.save).toHaveBeenCalledWith(payment, null);
-      expect(paymentRepository.transactional).toHaveBeenCalledTimes(1);
+      expect(orderRepository.transactionalWithOutbox).toHaveBeenCalledTimes(1);
+      expect(refundService.startLocked).not.toHaveBeenCalled();
+    });
+
+    it('apply refunds the whole charge when the order is already CANCELLED', async () => {
+      order = buildOrder({ status: OrderStatus.CANCELLED });
+      payment = buildPayment();
+      lockReturns(payment);
+      const locked = { id: ORDER_ID } as Order;
+      orderRepository.lockForStatusChange.mockResolvedValue(locked);
+
+      await expect(service.apply(succeeded)).resolves.toBe(true);
+
+      expect(payment.status).toBe(PaymentStatus.PAID);
+      expect(order.status).toBe(OrderStatus.CANCELLED);
+      expect(orderRepository.lockForStatusChange).toHaveBeenCalledWith({
+        id: ORDER_ID,
+      });
+      expect(refundService.startLocked).toHaveBeenCalledWith(
+        locked,
+        'rest',
+        null,
+        enqueueRefund,
+      );
     });
 
     it('apply succeeded marks a FAILED payment PAID and clears the reason', async () => {
@@ -845,10 +902,10 @@ describe('PaymentService', () => {
           paidAt: PAID_AT,
         });
       });
-      paymentRepository.transactional.mockImplementation(
-        (work: () => Promise<unknown>) => {
+      orderRepository.transactionalWithOutbox.mockImplementation(
+        (work: (expire: Mock, refund: Mock) => Promise<unknown>) => {
           calls.push('transaction');
-          return work();
+          return work(vi.fn(), enqueueRefund);
         },
       );
 
@@ -1157,6 +1214,357 @@ describe('PaymentService', () => {
       ).resolves.toBe(verified);
       expect(gateways.for).toHaveBeenCalledWith(PaymentMethod.CARD);
       expect(gateway.parseWebhook).toHaveBeenCalledWith(rawBody, headers);
+    });
+  });
+
+  describe('processRefund', () => {
+    const REFUND_ID = '33333333-3333-4333-8333-333333333333';
+    const refundRow = (overrides: Partial<Payment> = {}) =>
+      buildPayment({
+        id: REFUND_ID,
+        type: PaymentType.REFUND,
+        amount: '12.50',
+        ...overrides,
+      });
+    const paidCharge = () =>
+      buildPayment({ status: PaymentStatus.PAID, transactionId: 'pi_1' });
+
+    const withRefund = (refund: Payment) => {
+      paymentRepository.findRefundWithCharge.mockResolvedValue({
+        refund,
+        charge: paidCharge(),
+      });
+      paymentRepository.lockById.mockResolvedValue(refund);
+    };
+
+    it('processRefund saves a succeeded Stripe refund as PAID', async () => {
+      const refund = refundRow();
+      withRefund(refund);
+      gateway.refund.mockResolvedValue({
+        kind: 'succeeded',
+        refundTransactionId: 're_1',
+        refundedAt: NOW,
+      });
+
+      await service.processRefund({ paymentId: REFUND_ID });
+
+      expect(gateways.for).toHaveBeenCalledWith(PaymentMethod.CARD);
+      expect(gateway.refund).toHaveBeenCalledWith({
+        refundId: REFUND_ID,
+        chargeTransactionId: 'pi_1',
+        amountCents: 1250,
+        currency: 'usd',
+      });
+      expect(refund).toMatchObject({
+        status: PaymentStatus.PAID,
+        transactionId: 're_1',
+        completedAt: NOW,
+      });
+      expect(paymentRepository.save).toHaveBeenCalledWith(refund, null);
+    });
+
+    it('processRefund and failRefund run in a persistence context of their own', async () => {
+      const contexts: string[] = [];
+      paymentRepository.withOwnContext.mockImplementation(
+        async (work: () => Promise<unknown>) => {
+          contexts.push('open');
+          const result = await work();
+          contexts.push('closed');
+          return result;
+        },
+      );
+      paymentRepository.findRefundWithCharge.mockImplementation(() => {
+        contexts.push('read');
+        return Promise.resolve(null);
+      });
+      paymentRepository.lockById.mockImplementation(() => {
+        contexts.push('lock');
+        return Promise.resolve(null);
+      });
+
+      await service.processRefund({ paymentId: REFUND_ID });
+      await service.failRefund(REFUND_ID, 'Payment gateway unreachable');
+
+      expect(contexts).toEqual([
+        'open',
+        'read',
+        'closed',
+        'open',
+        'lock',
+        'closed',
+      ]);
+    });
+
+    it('processRefund keeps a pending refund PENDING with its refund id', async () => {
+      const refund = refundRow();
+      withRefund(refund);
+      gateway.refund.mockResolvedValue({
+        kind: 'pending',
+        refundTransactionId: 're_2',
+      });
+
+      await service.processRefund({ paymentId: REFUND_ID });
+
+      expect(refund).toMatchObject({
+        status: PaymentStatus.PENDING,
+        transactionId: 're_2',
+        completedAt: null,
+      });
+      expect(paymentRepository.save).toHaveBeenCalledWith(refund, null);
+    });
+
+    it('processRefund saves a refused refund as FAILED with the reason', async () => {
+      const refund = refundRow();
+      withRefund(refund);
+      gateway.refund.mockResolvedValue({
+        kind: 'failed',
+        refundTransactionId: null,
+        reason: 'Charge has already been refunded.',
+      });
+
+      await service.processRefund({ paymentId: REFUND_ID });
+
+      expect(refund).toMatchObject({
+        status: PaymentStatus.FAILED,
+        failureReason: 'Charge has already been refunded.',
+        transactionId: null,
+      });
+    });
+
+    it('processRefund skips a row that is no longer PENDING', async () => {
+      for (const refund of [
+        refundRow({ status: PaymentStatus.PAID, transactionId: 're_1' }),
+        refundRow({ transactionId: 're_1' }),
+      ]) {
+        withRefund(refund);
+        await service.processRefund({ paymentId: REFUND_ID });
+      }
+      paymentRepository.findRefundWithCharge.mockResolvedValue(null);
+      await service.processRefund({ paymentId: REFUND_ID });
+
+      expect(gateway.refund).not.toHaveBeenCalled();
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('processRefund marks a refund it cannot send FAILED with the reason', async () => {
+      const refund = refundRow();
+      withRefund(refund);
+      gateways.for.mockReturnValueOnce(null);
+
+      await service.processRefund({ paymentId: REFUND_ID });
+
+      expect(gateway.refund).not.toHaveBeenCalled();
+      expect(refund).toMatchObject({
+        status: PaymentStatus.FAILED,
+        failureReason: ERROR_MESSAGES.PAYMENT.REFUND_UNSENDABLE('CARD'),
+      });
+      expect(paymentRepository.save).toHaveBeenCalledWith(refund, null);
+
+      const orphan = refundRow();
+      paymentRepository.findRefundWithCharge.mockResolvedValue({
+        refund: orphan,
+        charge: null,
+      });
+      paymentRepository.lockById.mockResolvedValue(orphan);
+      await service.processRefund({ paymentId: REFUND_ID });
+      expect(orphan.status).toBe(PaymentStatus.FAILED);
+    });
+
+    it('processRefund lets a gateway error reject', async () => {
+      withRefund(refundRow());
+      const error = new DependencyUnavailableException({
+        errCode: ERROR_CODES.PAYMENT.GATEWAY_UNAVAILABLE,
+        field: '',
+        message: 'down',
+        description: 'down',
+      });
+      gateway.refund.mockRejectedValue(error);
+
+      await expect(
+        service.processRefund({ paymentId: REFUND_ID }),
+      ).rejects.toBe(error);
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('failRefund marks a PENDING refund without a refund id FAILED and leaves others', async () => {
+      const pending = refundRow();
+      paymentRepository.lockById.mockResolvedValueOnce(pending);
+      await service.failRefund(REFUND_ID, 'Payment gateway unreachable');
+      expect(pending).toMatchObject({
+        status: PaymentStatus.FAILED,
+        failureReason: 'Payment gateway unreachable',
+      });
+      expect(paymentRepository.save).toHaveBeenCalledTimes(1);
+
+      for (const other of [
+        refundRow({ transactionId: 're_1' }),
+        refundRow({ status: PaymentStatus.PAID, transactionId: 're_1' }),
+        buildPayment(),
+      ]) {
+        paymentRepository.lockById.mockResolvedValueOnce(other);
+        await service.failRefund(REFUND_ID, 'Payment gateway unreachable');
+      }
+      expect(paymentRepository.save).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('applyRefund', () => {
+    const REFUND_ID = '33333333-3333-4333-8333-333333333333';
+    const charge = () => ({
+      ...buildPayment({ status: PaymentStatus.PAID, transactionId: 'pi_1' }),
+      currency: 'USD',
+    });
+    const refundRow = (overrides: Partial<Payment> = {}) => ({
+      ...buildPayment({
+        id: REFUND_ID,
+        type: PaymentType.REFUND,
+        amount: '12.50',
+        ...overrides,
+      }),
+      currency: 'USD',
+    });
+    const event = (overrides: Partial<RefundEvent> = {}): RefundEvent => ({
+      kind: 'refund',
+      refundTransactionId: 're_1',
+      chargeTransactionId: 'pi_1',
+      refundId: null,
+      amountCents: 1250,
+      currency: 'usd',
+      status: 'succeeded',
+      reason: null,
+      at: NOW,
+      ...overrides,
+    });
+    const withOrder = (...payments: Payment[]) => {
+      const paid = charge();
+      paymentRepository.findByTransactionId.mockResolvedValue(paid);
+      orderRepository.lockForPayment.mockResolvedValue({
+        id: ORDER_ID,
+        payments: { getItems: () => [paid, ...payments] },
+      });
+      return paid;
+    };
+
+    it('applyRefund moves PENDING to PAID', async () => {
+      const refund = refundRow({ transactionId: 're_1' });
+      const paid = withOrder(refund);
+
+      await expect(service.handle(event())).resolves.toBe(true);
+
+      expect(paymentRepository.findByTransactionId).toHaveBeenCalledWith(
+        'pi_1',
+      );
+      expect(orderRepository.lockForPayment).toHaveBeenCalledWith(paid.id);
+      expect(refund).toMatchObject({
+        status: PaymentStatus.PAID,
+        completedAt: NOW,
+      });
+      expect(paymentRepository.save).toHaveBeenCalledWith(refund, null);
+    });
+
+    it('applyRefund matches a shop row by its row id', async () => {
+      const refund = refundRow();
+      withOrder(refund);
+
+      await service.handle(event({ refundId: REFUND_ID, status: 'pending' }));
+
+      expect(refund).toMatchObject({
+        status: PaymentStatus.PENDING,
+        transactionId: 're_1',
+      });
+      expect(orderRepository.addRefund).not.toHaveBeenCalled();
+    });
+
+    it('applyRefund moves PAID to FAILED and FAILED to PAID', async () => {
+      const paidRefund = refundRow({
+        status: PaymentStatus.PAID,
+        transactionId: 're_1',
+      });
+      withOrder(paidRefund);
+      await service.handle(
+        event({ status: 'failed', reason: 'lost_or_stolen_card' }),
+      );
+      expect(paidRefund).toMatchObject({
+        status: PaymentStatus.FAILED,
+        failureReason: 'lost_or_stolen_card',
+      });
+
+      const failedRefund = refundRow({
+        status: PaymentStatus.FAILED,
+        transactionId: 're_1',
+        failureReason: 'Payment gateway unreachable',
+      });
+      withOrder(failedRefund);
+      await service.handle(event());
+      expect(failedRefund).toMatchObject({
+        status: PaymentStatus.PAID,
+        failureReason: null,
+      });
+
+      const settled = refundRow({
+        status: PaymentStatus.PAID,
+        transactionId: 're_1',
+      });
+      withOrder(settled);
+      await expect(service.handle(event({ status: 'pending' }))).resolves.toBe(
+        false,
+      );
+      expect(settled.status).toBe(PaymentStatus.PAID);
+    });
+
+    it('applyRefund ignores an amount that does not match', async () => {
+      const refund = refundRow({ transactionId: 're_1' });
+      withOrder(refund);
+
+      await expect(service.handle(event({ amountCents: 999 }))).resolves.toBe(
+        false,
+      );
+
+      expect(refund.status).toBe(PaymentStatus.PENDING);
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('applyRefund records a dashboard refund', async () => {
+      withOrder();
+      const created = refundRow({ id: 'refund-dashboard' });
+      orderRepository.addRefund.mockResolvedValue(created);
+
+      await expect(
+        service.handle(
+          event({ refundTransactionId: 're_dash', amountCents: 500 }),
+        ),
+      ).resolves.toBe(true);
+
+      expect(orderRepository.addRefund).toHaveBeenCalledWith(
+        expect.objectContaining({ id: ORDER_ID }),
+        { method: PaymentMethod.CARD, amount: '5.00', currency: 'USD' },
+        null,
+      );
+      expect(created).toMatchObject({
+        status: PaymentStatus.PAID,
+        transactionId: 're_dash',
+        completedAt: NOW,
+      });
+    });
+
+    it('applyRefund ignores a dashboard refund beyond the charge', async () => {
+      withOrder(refundRow({ status: PaymentStatus.PAID, amount: '20.00' }));
+
+      await expect(
+        service.handle(event({ refundTransactionId: 're_dash' })),
+      ).resolves.toBe(false);
+
+      expect(orderRepository.addRefund).not.toHaveBeenCalled();
+    });
+
+    it('applyRefund ignores an event for a row id the shop does not have', async () => {
+      withOrder();
+
+      await expect(
+        service.handle(event({ refundId: REFUND_ID })),
+      ).resolves.toBe(false);
+
+      expect(orderRepository.addRefund).not.toHaveBeenCalled();
     });
   });
 });

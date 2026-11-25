@@ -2,6 +2,7 @@
 export const OUTBOX_TOPICS = {
   USER_ROLE_SYNC: 'user.role-sync',
   PAYMENT_CHECKOUT_EXPIRE: 'payment.checkout-expire',
+  PAYMENT_REFUND: 'payment.refund',
 } as const;
 
 /**
@@ -11,4 +12,5 @@ export const OUTBOX_TOPICS = {
 export const OUTBOX_CONSUMERS = {
   USER_ROLE_SYNC: 'user-role-sync',
   PAYMENT_CHECKOUT_EXPIRE: 'payment-checkout-expire',
+  PAYMENT_REFUND: 'payment-refund',
 } as const;

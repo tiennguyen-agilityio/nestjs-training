@@ -7,6 +7,7 @@ import {
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
+  PaymentType,
   VALIDATION_RULES,
 } from '@repo/constants';
 import { PaymentRepository } from '../repositories/payment.repository.js';
@@ -15,10 +16,10 @@ import { PaymentGateways } from '../gateways/payment-gateways.js';
 import type {
   CheckoutRequest,
   CheckoutSession,
-  ApprovedCheckout,
   CaptureOutcome,
   GatewayEvent,
   PaymentGateway,
+  RefundEvent,
   VerifiedWebhook,
 } from '../gateways/payment-gateway.js';
 import { ResponsePaymentCheckoutDto } from '../dto/response-payment-checkout.dto.js';
@@ -26,8 +27,12 @@ import { ResponsePaymentCaptureDto } from '../dto/response-payment-capture.dto.j
 import { paymentStatusOf } from '../../order/utils/payment-status.util.js';
 import type { ActorId } from '../../../common/utils/audit.util.js';
 import type { Payment } from '../../order/entities/payment.entity.js';
+import { RefundService } from '../../order/services/refund.service.js';
 import type { Order } from '../../order/entities/order.entity.js';
-import type { PaymentCheckoutExpirePayload } from '../../../common/interfaces/outbox-payload.interface.js';
+import type {
+  PaymentCheckoutExpirePayload,
+  PaymentRefundPayload,
+} from '../../../common/interfaces/outbox-payload.interface.js';
 import {
   InvalidRequestException,
   InvalidStateException,
@@ -52,6 +57,10 @@ const centsOf = (amount: string): number => Math.round(Number(amount) * 100);
 const toWholeSecond = (ms: number): Date =>
   new Date(Math.floor(ms / 1000) * 1000);
 
+const isUnsent = (refund: Payment): boolean =>
+  (refund.status as PaymentStatus) === PaymentStatus.PENDING &&
+  !refund.transactionId;
+
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
@@ -61,6 +70,7 @@ export class PaymentService {
     private readonly paymentRepository: PaymentRepository,
     private readonly orderRepository: OrderRepository,
     private readonly gateways: PaymentGateways,
+    private readonly refundService: RefundService,
     config: ConfigService,
   ) {
     this.webAppUrl = config
@@ -119,78 +129,197 @@ export class PaymentService {
       this.logger.warn(`Ignored a ${event.kind} event for an unknown payment`);
       return Promise.resolve(false);
     }
-    return this.paymentRepository.transactional(async () => {
-      const payment = await this.paymentRepository.lockById(event.paymentId);
-      if (!payment) {
-        this.logger.warn(
-          `Ignored a ${event.kind} event for unknown payment ${event.paymentId}`,
-        );
-        return false;
-      }
-      if ((payment.status as PaymentStatus) === PaymentStatus.PAID) {
-        return false;
-      }
-      if (
-        event.checkoutSessionId &&
-        event.checkoutSessionId !== payment.checkoutSessionId
-      ) {
-        this.logger.warn(
-          `Ignored a ${event.kind} event from session ${event.checkoutSessionId}, not the one of payment ${payment.id}`,
-        );
-        return false;
-      }
-
-      if (event.kind === 'pending') {
-        if (
-          (payment.status as PaymentStatus) === PaymentStatus.PENDING &&
-          payment.transactionId === event.transactionId
-        ) {
-          return false;
-        }
-        const order = await this.orderRepository.findById(payment.order.id);
-        if (!order || (order.status as OrderStatus) !== OrderStatus.PENDING) {
+    return this.orderRepository.transactionalWithOutbox(
+      async (_enqueueCheckoutExpire, enqueueRefund) => {
+        const payment = await this.paymentRepository.lockById(event.paymentId);
+        if (!payment) {
           this.logger.warn(
-            `Payment ${payment.id} is held as ${event.transactionId} but its order is ${order?.status ?? 'missing'}`,
+            `Ignored a ${event.kind} event for unknown payment ${event.paymentId}`,
           );
           return false;
         }
-        payment.status = PaymentStatus.PENDING;
-        payment.failureReason = null;
-        payment.transactionId = event.transactionId;
-        order.expiresAt = null;
-        await this.paymentRepository.save(payment, actorId);
-        return true;
-      }
-
-      if (event.kind === 'failed') {
-        if (
-          (payment.status as PaymentStatus) === PaymentStatus.FAILED &&
-          payment.failureReason === event.reason
-        ) {
+        if ((payment.status as PaymentStatus) === PaymentStatus.PAID) {
           return false;
         }
-        payment.status = PaymentStatus.FAILED;
-        payment.failureReason = event.reason;
-        await this.paymentRepository.save(payment, actorId);
-        return true;
-      }
+        if (
+          event.checkoutSessionId &&
+          event.checkoutSessionId !== payment.checkoutSessionId
+        ) {
+          this.logger.warn(
+            `Ignored a ${event.kind} event from session ${event.checkoutSessionId}, not the one of payment ${payment.id}`,
+          );
+          return false;
+        }
 
-      payment.status = PaymentStatus.PAID;
-      payment.transactionId = event.transactionId;
-      payment.completedAt = event.paidAt;
-      payment.failureReason = null;
-      const order = await this.orderRepository.findById(payment.order.id);
-      if (order && (order.status as OrderStatus) === OrderStatus.PENDING) {
-        order.status = OrderStatus.CONFIRMED;
-        order.expiresAt = null;
-      } else {
+        if (event.kind === 'pending') {
+          if (
+            (payment.status as PaymentStatus) === PaymentStatus.PENDING &&
+            payment.transactionId === event.transactionId
+          ) {
+            return false;
+          }
+          const order = await this.orderRepository.findById(payment.order.id);
+          if (!order || (order.status as OrderStatus) !== OrderStatus.PENDING) {
+            this.logger.warn(
+              `Payment ${payment.id} is held as ${event.transactionId} but its order is ${order?.status ?? 'missing'}`,
+            );
+            return false;
+          }
+          payment.status = PaymentStatus.PENDING;
+          payment.failureReason = null;
+          payment.transactionId = event.transactionId;
+          order.expiresAt = null;
+          await this.paymentRepository.save(payment, actorId);
+          return true;
+        }
+
+        if (event.kind === 'failed') {
+          if (
+            (payment.status as PaymentStatus) === PaymentStatus.FAILED &&
+            payment.failureReason === event.reason
+          ) {
+            return false;
+          }
+          payment.status = PaymentStatus.FAILED;
+          payment.failureReason = event.reason;
+          await this.paymentRepository.save(payment, actorId);
+          return true;
+        }
+
+        payment.status = PaymentStatus.PAID;
+        payment.transactionId = event.transactionId;
+        payment.completedAt = event.paidAt;
+        payment.failureReason = null;
+        const order = await this.orderRepository.findById(payment.order.id);
+        if (order && (order.status as OrderStatus) === OrderStatus.PENDING) {
+          order.status = OrderStatus.CONFIRMED;
+          order.expiresAt = null;
+        } else {
+          this.logger.warn(
+            `Payment ${payment.id} was paid but its order is ${order?.status ?? 'missing'}`,
+          );
+        }
+        await this.paymentRepository.save(payment, actorId);
+        if (order && (order.status as OrderStatus) === OrderStatus.CANCELLED) {
+          const locked = await this.orderRepository.lockForStatusChange({
+            id: order.id,
+          });
+          if (locked) {
+            await this.refundService.startLocked(
+              locked,
+              'rest',
+              null,
+              enqueueRefund,
+            );
+          }
+        }
+        return true;
+      },
+    );
+  }
+
+  /**
+   * A provider refund event, in one transaction with the charge's order
+   * locked: settles the shop's refund row, or records a dashboard refund.
+   */
+  private applyRefund(event: RefundEvent): Promise<boolean> {
+    return this.orderRepository.transactionalWithOutbox(async () => {
+      const charge = await this.paymentRepository.findByTransactionId(
+        event.chargeTransactionId,
+      );
+      if (!charge || (charge.type as PaymentType) !== PaymentType.CHARGE) {
         this.logger.warn(
-          `Payment ${payment.id} was paid but its order is ${order?.status ?? 'missing'}`,
+          `Ignored refund ${event.refundTransactionId} for unknown charge ${event.chargeTransactionId}`,
         );
+        return false;
       }
-      await this.paymentRepository.save(payment, actorId);
+      const order = await this.orderRepository.lockForPayment(charge.id);
+      if (!order) return false;
+      const refunds = order.payments
+        .getItems()
+        .filter(
+          (payment) => (payment.type as PaymentType) === PaymentType.REFUND,
+        );
+      const row = refunds.find(
+        (refund) =>
+          refund.transactionId === event.refundTransactionId ||
+          (event.refundId !== null && refund.id === event.refundId),
+      );
+      if (row) {
+        if (
+          Math.round(Number(row.amount) * 100) !== event.amountCents ||
+          row.currency.toLowerCase() !== event.currency.toLowerCase()
+        ) {
+          this.logger.warn(
+            `Ignored refund ${event.refundTransactionId}: amount or currency differs from payment ${row.id}`,
+          );
+          return false;
+        }
+        return this.settleRefund(row, event);
+      }
+      if (event.refundId !== null) {
+        this.logger.warn(
+          `Ignored refund ${event.refundTransactionId} for missing payment ${event.refundId}`,
+        );
+        return false;
+      }
+      const used = refunds
+        .filter((refund) =>
+          [PaymentStatus.PENDING, PaymentStatus.PAID].includes(
+            refund.status as PaymentStatus,
+          ),
+        )
+        .reduce(
+          (total, refund) => total + Math.round(Number(refund.amount) * 100),
+          0,
+        );
+      if (
+        (charge.status as PaymentStatus) !== PaymentStatus.PAID ||
+        used + event.amountCents > Math.round(Number(charge.amount) * 100)
+      ) {
+        this.logger.warn(
+          `Ignored refund ${event.refundTransactionId}: it exceeds what charge ${charge.id} can still refund`,
+        );
+        return false;
+      }
+      const created = await this.orderRepository.addRefund(
+        order,
+        {
+          method: charge.method,
+          amount: (event.amountCents / 100).toFixed(2),
+          currency: charge.currency,
+        },
+        null,
+      );
+      await this.settleRefund(created, event);
       return true;
     });
+  }
+
+  private async settleRefund(
+    refund: Payment,
+    event: RefundEvent,
+  ): Promise<boolean> {
+    const status = refund.status as PaymentStatus;
+    if (event.status === 'pending') {
+      if (status !== PaymentStatus.PENDING || refund.transactionId) {
+        return false;
+      }
+      refund.transactionId = event.refundTransactionId;
+    } else if (event.status === 'succeeded') {
+      if (status === PaymentStatus.PAID) return false;
+      refund.status = PaymentStatus.PAID;
+      refund.transactionId = event.refundTransactionId;
+      refund.completedAt = event.at;
+      refund.failureReason = null;
+    } else {
+      if (status === PaymentStatus.FAILED) return false;
+      refund.status = PaymentStatus.FAILED;
+      refund.transactionId = event.refundTransactionId;
+      refund.failureReason = event.reason;
+    }
+    await this.paymentRepository.save(refund, null);
+    return true;
   }
 
   /**
@@ -210,6 +339,72 @@ export class PaymentService {
       return;
     }
     await gateway.expireCheckout(checkoutSessionId);
+  }
+
+  /**
+   * The outbox's `payment.refund`: sends a PENDING refund to the provider and
+   * saves the answer. A rejection is a failed attempt the relay retries.
+   */
+  processRefund({ paymentId }: PaymentRefundPayload): Promise<void> {
+    return this.paymentRepository.withOwnContext(async () => {
+      const found =
+        await this.paymentRepository.findRefundWithCharge(paymentId);
+      if (!found || !isUnsent(found.refund)) return;
+      const { refund, charge } = found;
+      const gateway = this.gateways.for(refund.method);
+      if (!gateway || !charge?.transactionId) {
+        this.logger.warn(
+          `Refund ${refund.id} not sent: no ${refund.method} gateway or charge reference`,
+        );
+        await this.failUnsent(
+          refund.id,
+          ERROR_MESSAGES.PAYMENT.REFUND_UNSENDABLE(refund.method),
+        );
+        return;
+      }
+      const outcome = await gateway.refund({
+        refundId: refund.id,
+        chargeTransactionId: charge.transactionId,
+        amountCents: Math.round(Number(refund.amount) * 100),
+        currency: 'usd',
+      });
+      await this.paymentRepository.transactional(async () => {
+        const locked = await this.paymentRepository.lockById(refund.id);
+        if (!locked || !isUnsent(locked)) return;
+        locked.transactionId = outcome.refundTransactionId;
+        if (outcome.kind === 'succeeded') {
+          locked.status = PaymentStatus.PAID;
+          locked.completedAt = outcome.refundedAt;
+        } else if (outcome.kind === 'failed') {
+          locked.status = PaymentStatus.FAILED;
+          locked.failureReason = outcome.reason;
+        }
+        await this.paymentRepository.save(locked, null);
+      });
+    });
+  }
+
+  /** A refund the outbox gave up on: FAILED, unless the provider answered meanwhile. */
+  failRefund(paymentId: string, reason: string): Promise<void> {
+    return this.paymentRepository.withOwnContext(() =>
+      this.failUnsent(paymentId, reason),
+    );
+  }
+
+  private failUnsent(paymentId: string, reason: string): Promise<void> {
+    return this.paymentRepository.transactional(async () => {
+      const refund = await this.paymentRepository.lockById(paymentId);
+      if (
+        !refund ||
+        (refund.type as PaymentType) !== PaymentType.REFUND ||
+        !isUnsent(refund)
+      ) {
+        return;
+      }
+      refund.status = PaymentStatus.FAILED;
+      refund.failureReason = reason;
+      await this.paymentRepository.save(refund, null);
+    });
   }
 
   /** Captures the shopper's approved PayPal order after the popup closes. */
@@ -251,7 +446,8 @@ export class PaymentService {
   }
 
   /** Routes a verified webhook event: approved checkouts are captured first. */
-  handle(event: GatewayEvent | ApprovedCheckout | null): Promise<boolean> {
+  handle(event: VerifiedWebhook['event']): Promise<boolean> {
+    if (event?.kind === 'refund') return this.applyRefund(event);
     if (event?.kind === 'approved') {
       return this.captureApproved(event.checkoutSessionId);
     }

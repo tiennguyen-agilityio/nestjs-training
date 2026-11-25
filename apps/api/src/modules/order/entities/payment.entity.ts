@@ -77,4 +77,7 @@ export class Payment extends AuditableEntity {
 
   @Property({ type: 'text', fieldName: 'failure_reason', nullable: true })
   failureReason: string | null = null;
+
+  @Property({ type: Date, fieldName: 'retried_at', nullable: true })
+  retriedAt: Date | null = null;
 }
