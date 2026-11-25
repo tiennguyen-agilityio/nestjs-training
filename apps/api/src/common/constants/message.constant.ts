@@ -71,6 +71,7 @@ export const ERROR_MESSAGES = {
     GATEWAY_UNAVAILABLE: 'The payment provider cannot be reached',
     GATEWAY_REJECTED: 'The payment provider refused this payment',
     INVALID_SIGNATURE: 'Webhook signature is invalid',
+    CAPTURE_UNSUPPORTED: 'This payment method has no capture step',
   },
   SHIPPING_METHOD: {
     NOT_FOUND: 'Shipping method not found',
@@ -85,6 +86,7 @@ export const ERROR_MESSAGES = {
     DUPLICATE_IDS: 'Each variant may appear only once in updateVariants',
     STOCK_BELOW_RESERVED: (reserved: number) =>
       `Stock cannot be below the ${reserved} units held for orders`,
+    STOCK_ABOVE_MAX: (max: number) => `Stock cannot be above ${max} units`,
   },
   PRODUCT: {
     NOT_FOUND: 'Product not found',
@@ -161,6 +163,7 @@ export const ERROR_DESCRIPTIONS = {
       'The same variant id is listed more than once. Send each variant once.',
     STOCK_BELOW_RESERVED:
       'Placed orders hold part of this stock. Set the stock to at least the held amount.',
+    STOCK_ABOVE_MAX: 'Stock has an upper limit. Lower the quantity.',
   },
   PRODUCT_IMAGE: {
     NOT_FOUND: 'The image might have been deleted, or the id is incorrect.',
@@ -187,6 +190,8 @@ export const ERROR_DESCRIPTIONS = {
       'Only a pending order can be cancelled. Contact the shop to cancel a confirmed order.',
     NOT_CANCELLABLE_PAID:
       'The order is already paid. Contact the shop to cancel it.',
+    NOT_CANCELLABLE_PAYMENT_HELD:
+      'The payment is being reviewed. Contact the shop to cancel the order.',
     STATUS_NOT_ALLOWED: 'Not allowed. Pick one of the next statuses.',
   },
   PAYMENT: {
@@ -196,8 +201,10 @@ export const ERROR_DESCRIPTIONS = {
       'The order is already paid, no longer pending, or its payment session has closed.',
     ORDER_EXPIRED: 'Place a new order.',
     GATEWAY_UNAVAILABLE: 'Try again in a moment.',
-    GATEWAY_REJECTED: 'Check the order total: Stripe charges at least $0.50.',
-    INVALID_SIGNATURE: 'The request was not signed with the endpoint secret.',
+    GATEWAY_REJECTED:
+      'The payment provider refused the request: start the payment again, or check the order total and currency (Stripe charges at least $0.50).',
+    INVALID_SIGNATURE: 'The request was not signed by the payment provider.',
+    CAPTURE_UNSUPPORTED: 'Only PAYPAL payments are captured by the shop.',
   },
   SHIPPING_METHOD: {
     NOT_FOUND:

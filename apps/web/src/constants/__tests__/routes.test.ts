@@ -3,11 +3,19 @@ import {
   API_ROUTES,
   ROUTES,
   dashboardEditPath,
+  dashboardInventoryHistoryPath,
   dashboardOrderPath,
+  orderSuccessPath,
   profileOrderPath,
 } from '@/constants/routes'
 
 describe('routes', () => {
+  it('orderSuccessPath adds payment=pending when confirming', () => {
+    expect(orderSuccessPath('o-1', undefined, { confirming: true })).toBe(
+      `${ROUTES.ORDER_SUCCESS}?orderId=o-1&payment=pending`,
+    )
+  })
+
   it('profileOrderPath builds the order details route and encodes the order number', () => {
     expect(profileOrderPath('CH-261117-0001')).toBe(
       `${ROUTES.USER_PROFILE}/orders/CH-261117-0001`,
@@ -23,6 +31,15 @@ describe('routes', () => {
     )
     expect(dashboardOrderPath('a b/c')).toBe(
       `${ROUTES.DASHBOARD_ORDERS}/a%20b%2Fc`,
+    )
+  })
+
+  it('dashboardInventoryHistoryPath encodes the id', () => {
+    expect(dashboardInventoryHistoryPath('v-1')).toBe(
+      `${ROUTES.DASHBOARD_INVENTORY}/v-1`,
+    )
+    expect(dashboardInventoryHistoryPath('a b')).toBe(
+      `${ROUTES.DASHBOARD_INVENTORY}/a%20b`,
     )
   })
 

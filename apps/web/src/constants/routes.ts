@@ -11,6 +11,7 @@ export const ROUTES = {
   DASHBOARD_USERS: '/dashboard/users',
   DASHBOARD_USERS_ADD: '/dashboard/users/add',
   DASHBOARD_ORDERS: '/dashboard/orders',
+  DASHBOARD_INVENTORY: '/dashboard/inventory',
   DASHBOARD_SHIPPING_METHODS: '/dashboard/shipping-methods',
   DASHBOARD_SHIPPING_METHODS_ADD: '/dashboard/shipping-methods/add',
   SIGN_IN: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL ?? '/sign-in',
@@ -23,9 +24,11 @@ export const ROUTES = {
 export function orderSuccessPath(
   orderId: string,
   paymentError?: string,
+  { confirming = false }: { confirming?: boolean } = {},
 ): string {
   const params = new URLSearchParams({ orderId })
   if (paymentError !== undefined) params.set('paymentError', paymentError)
+  if (confirming) params.set('payment', 'pending')
   return `${ROUTES.ORDER_SUCCESS}?${params.toString()}`
 }
 
@@ -37,6 +40,11 @@ export function profileOrderPath(orderNumber: string): string {
 /** The admin's order details page. */
 export function dashboardOrderPath(orderNumber: string): string {
   return `${ROUTES.DASHBOARD_ORDERS}/${encodeURIComponent(orderNumber)}`
+}
+
+/** A variant's stock history on the dashboard. */
+export function dashboardInventoryHistoryPath(variantId: string): string {
+  return `${ROUTES.DASHBOARD_INVENTORY}/${encodeURIComponent(variantId)}`
 }
 
 export function dashboardEditPath(base: string, id: string): string {
@@ -52,10 +60,13 @@ export const API_BASE_URL =
 
 export const API_ROUTES = {
   ME: `${API_BASE_URL}/api/v1/users/me`,
+  MY_ADDRESSES: `${API_BASE_URL}/api/v1/users/me/addresses`,
   USERS: `${API_BASE_URL}/api/v1/users`,
   CATEGORIES: `${API_BASE_URL}/api/v1/categories`,
   PRODUCTS: `${API_BASE_URL}/api/v1/products`,
   ORDERS: `${API_BASE_URL}/api/v1/orders`,
   SHIPPING_METHODS: `${API_BASE_URL}/api/v1/shipping-methods`,
   CART: `${API_BASE_URL}/api/v1/cart`,
+  INVENTORY: `${API_BASE_URL}/api/v1/inventory`,
+  PRODUCT_VARIANTS: `${API_BASE_URL}/api/v1/product-variants`,
 }

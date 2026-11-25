@@ -61,9 +61,9 @@ describe('StripePaymentGateway', () => {
     data: { object },
   });
 
-  const parse = (body: Record<string, unknown>) => {
+  const parse = async (body: Record<string, unknown>) => {
     const { body: raw, headers } = signed(body);
-    return gateway.parseWebhook(raw, headers).event;
+    return (await gateway.parseWebhook(raw, headers)).event;
   };
 
   beforeEach(() => {
@@ -271,7 +271,7 @@ describe('StripePaymentGateway', () => {
   });
 
   describe('parseWebhook', () => {
-    it('parseWebhook throws UnauthenticatedException for a bad signature', () => {
+    it('parseWebhook throws UnauthenticatedException for a bad signature', async () => {
       const payload = JSON.stringify(event('customer.created', {}));
       const headers = {
         'stripe-signature': stripe.webhooks.generateTestHeaderString({
@@ -280,25 +280,25 @@ describe('StripePaymentGateway', () => {
         }),
       };
 
-      expect(() => gateway.parseWebhook(Buffer.from(payload), headers)).toThrow(
-        UnauthenticatedException,
-      );
+      await expect(
+        gateway.parseWebhook(Buffer.from(payload), headers),
+      ).rejects.toThrow(UnauthenticatedException);
     });
 
-    it('parseWebhook throws UnauthenticatedException without a raw body or a Stripe-Signature header', () => {
+    it('parseWebhook throws UnauthenticatedException without a raw body or a Stripe-Signature header', async () => {
       const { body, headers } = signed(event('customer.created', {}));
 
-      expect(() => gateway.parseWebhook(undefined, headers)).toThrow(
+      await expect(gateway.parseWebhook(undefined, headers)).rejects.toThrow(
         UnauthenticatedException,
       );
-      expect(() => gateway.parseWebhook(body, {})).toThrow(
+      await expect(gateway.parseWebhook(body, {})).rejects.toThrow(
         UnauthenticatedException,
       );
     });
 
-    it('parseWebhook maps a paid checkout.session.completed to succeeded', () => {
+    it('parseWebhook maps a paid checkout.session.completed to succeeded', async () => {
       expect(
-        parse(
+        await parse(
           event('checkout.session.completed', {
             id: 'cs_test_1',
             object: 'checkout.session',
@@ -316,9 +316,9 @@ describe('StripePaymentGateway', () => {
       });
     });
 
-    it('parseWebhook ignores an unpaid checkout.session.completed', () => {
+    it('parseWebhook ignores an unpaid checkout.session.completed', async () => {
       expect(
-        parse(
+        await parse(
           event('checkout.session.completed', {
             object: 'checkout.session',
             payment_status: 'unpaid',
@@ -329,9 +329,9 @@ describe('StripePaymentGateway', () => {
       ).toBeNull();
     });
 
-    it('parseWebhook maps checkout.session.expired to failed', () => {
+    it('parseWebhook maps checkout.session.expired to failed', async () => {
       expect(
-        parse(
+        await parse(
           event('checkout.session.expired', {
             id: 'cs_test_1',
             object: 'checkout.session',
@@ -346,9 +346,9 @@ describe('StripePaymentGateway', () => {
       });
     });
 
-    it('parseWebhook maps payment_intent.payment_failed to failed with the decline message', () => {
+    it('parseWebhook maps payment_intent.payment_failed to failed with the decline message', async () => {
       expect(
-        parse(
+        await parse(
           event('payment_intent.payment_failed', {
             object: 'payment_intent',
             metadata: { paymentId: PAYMENT_ID },
@@ -361,7 +361,7 @@ describe('StripePaymentGateway', () => {
         reason: 'Your card was declined.',
       });
       expect(
-        parse(
+        await parse(
           event('payment_intent.payment_failed', {
             object: 'payment_intent',
             metadata: { paymentId: PAYMENT_ID },
@@ -375,9 +375,9 @@ describe('StripePaymentGateway', () => {
       });
     });
 
-    it('parseWebhook returns null when the payment id is missing', () => {
+    it('parseWebhook returns null when the payment id is missing', async () => {
       expect(
-        parse(
+        await parse(
           event('checkout.session.completed', {
             object: 'checkout.session',
             payment_status: 'paid',
@@ -387,7 +387,7 @@ describe('StripePaymentGateway', () => {
         ),
       ).toBeNull();
       expect(
-        parse(
+        await parse(
           event('payment_intent.payment_failed', {
             object: 'payment_intent',
             metadata: {},
@@ -397,7 +397,7 @@ describe('StripePaymentGateway', () => {
       ).toBeNull();
     });
 
-    it('parseWebhook returns the event id and type with the translated event', () => {
+    it('parseWebhook returns the event id and type with the translated event', async () => {
       const { body, headers } = signed(
         event('checkout.session.expired', {
           id: 'cs_test_1',
@@ -406,7 +406,7 @@ describe('StripePaymentGateway', () => {
         }),
       );
 
-      expect(gateway.parseWebhook(body, headers)).toEqual({
+      await expect(gateway.parseWebhook(body, headers)).resolves.toEqual({
         id: 'evt_1',
         type: 'checkout.session.expired',
         event: {
@@ -418,10 +418,16 @@ describe('StripePaymentGateway', () => {
       });
     });
 
-    it('parseWebhook ignores other event types', () => {
+    it('parseWebhook ignores other event types', async () => {
       expect(
-        parse(event('customer.created', { object: 'customer' })),
+        await parse(event('customer.created', { object: 'customer' })),
       ).toBeNull();
+    });
+  });
+
+  describe('capture', () => {
+    it('capture resolves null: a Stripe payment has no capture step', async () => {
+      await expect(gateway.capture('cs_test_1')).resolves.toBeNull();
     });
   });
 });

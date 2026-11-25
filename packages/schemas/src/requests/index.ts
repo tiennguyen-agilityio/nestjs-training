@@ -6,3 +6,4 @@ export * from './product.js';
 export * from './user.js';
 export * from './shipping-method.js';
 export * from './order.js';
+export * from './inventory.js';

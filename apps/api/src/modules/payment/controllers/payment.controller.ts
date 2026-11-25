@@ -9,6 +9,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PaymentService } from '../services/payment.service.js';
 import { ResponsePaymentCheckoutDto } from '../dto/response-payment-checkout.dto.js';
+import { ResponsePaymentCaptureDto } from '../dto/response-payment-capture.dto.js';
 import { AuthGuard } from '../../../common/guards/auth.guard.js';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator.js';
 import {
@@ -38,7 +39,7 @@ export class PaymentController {
   @ApiOperation({
     summary: 'Start the online payment of one of my orders',
     description:
-      'Opens a Stripe Checkout Session for a CARD order and returns its URL; calling it again while that session is open returns the same URL.',
+      'Opens a Stripe Checkout Session for a CARD order, or a PayPal order for a PAYPAL order, and returns its id and URL; calling it again while that checkout is open returns the same one.',
   })
   @ApiDataResponse(HttpStatus.OK, ResponsePaymentCheckoutDto)
   @ApiErrorResponse(
@@ -77,5 +78,83 @@ export class PaymentController {
     @Param({ schema: idParamSchema }) { id }: IdParam,
   ): Promise<ResponsePaymentCheckoutDto> {
     return this.paymentService.start(user.id, id);
+  }
+
+  @Post(':id/payments/capture')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Capture the PayPal payment of one of my orders',
+    description:
+      'Captures the PayPal order the shopper approved in the popup and records the result: PAID confirms the order, FAILED keeps it pending (retryable tells whether PayPal lets the shopper approve again), PENDING waits for the webhook.',
+  })
+  @ApiDataResponse(HttpStatus.OK, ResponsePaymentCaptureDto)
+  @ApiErrorResponse(
+    HttpStatus.UNAUTHORIZED,
+    ERROR_MESSAGES.AUTH.UNAUTHENTICATED,
+  )
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    ERROR_MESSAGES.PAYMENT.METHOD_NOT_ONLINE,
+    {
+      errCode: ERROR_CODES.PAYMENT.METHOD_NOT_ONLINE,
+      field: 'paymentMethod',
+      description: ERROR_DESCRIPTIONS.PAYMENT.METHOD_NOT_ONLINE,
+    },
+  )
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    ERROR_MESSAGES.PAYMENT.CAPTURE_UNSUPPORTED,
+    {
+      errCode: ERROR_CODES.PAYMENT.CAPTURE_UNSUPPORTED,
+      field: 'paymentMethod',
+      description: ERROR_DESCRIPTIONS.PAYMENT.CAPTURE_UNSUPPORTED,
+    },
+  )
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    ERROR_MESSAGES.PAYMENT.METHOD_UNAVAILABLE,
+    {
+      errCode: ERROR_CODES.PAYMENT.METHOD_UNAVAILABLE,
+      field: 'paymentMethod',
+      description: ERROR_DESCRIPTIONS.PAYMENT.METHOD_UNAVAILABLE,
+    },
+  )
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    ERROR_MESSAGES.PAYMENT.GATEWAY_REJECTED,
+    {
+      errCode: ERROR_CODES.PAYMENT.GATEWAY_REJECTED,
+      field: 'payment',
+      description: ERROR_DESCRIPTIONS.PAYMENT.GATEWAY_REJECTED,
+    },
+  )
+  @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.ORDER.NOT_FOUND, {
+    errCode: ERROR_CODES.ORDER.NOT_FOUND,
+    field: 'id',
+    description: ERROR_DESCRIPTIONS.ORDER.NOT_FOUND,
+  })
+  @ApiErrorResponse(HttpStatus.CONFLICT, ERROR_MESSAGES.PAYMENT.NOT_PAYABLE, {
+    errCode: ERROR_CODES.PAYMENT.NOT_PAYABLE,
+    field: 'id',
+    description: ERROR_DESCRIPTIONS.PAYMENT.NOT_PAYABLE,
+  })
+  @ApiErrorResponse(HttpStatus.CONFLICT, ERROR_MESSAGES.PAYMENT.ORDER_EXPIRED, {
+    errCode: ERROR_CODES.PAYMENT.ORDER_EXPIRED,
+    field: 'id',
+    description: ERROR_DESCRIPTIONS.PAYMENT.ORDER_EXPIRED,
+  })
+  @ApiErrorResponse(
+    HttpStatus.SERVICE_UNAVAILABLE,
+    ERROR_MESSAGES.PAYMENT.GATEWAY_UNAVAILABLE,
+    {
+      errCode: ERROR_CODES.PAYMENT.GATEWAY_UNAVAILABLE,
+      description: ERROR_DESCRIPTIONS.PAYMENT.GATEWAY_UNAVAILABLE,
+    },
+  )
+  capture(
+    @AuthUser() user: User,
+    @Param({ schema: idParamSchema }) { id }: IdParam,
+  ): Promise<ResponsePaymentCaptureDto> {
+    return this.paymentService.capture(user.id, id);
   }
 }

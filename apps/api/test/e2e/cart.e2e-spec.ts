@@ -141,7 +141,7 @@ describe('CartController (e2e)', () => {
   const updateVariant = (
     productId: string,
     variantId: string,
-    changes: { price?: string; stockQuantity?: number },
+    changes: { price?: string },
   ): Promise<unknown> =>
     RequestContext.create(orm.em, () =>
       productService.update(productId, {
@@ -326,9 +326,12 @@ describe('CartController (e2e)', () => {
       await add(inactive.variantId, 1).expect(201);
       await add(removed.variantId, 1).expect(201);
 
-      await updateVariant(short.productId, short.variantId, {
-        stockQuantity: 2,
-      });
+      await orm.em
+        .getConnection()
+        .execute(
+          'update product_variants set stock_quantity = 2 where id = ?',
+          [short.variantId],
+        );
       await RequestContext.create(orm.em, () =>
         productService.update(inactive.productId, {
           status: ProductStatus.INACTIVE,

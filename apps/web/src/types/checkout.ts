@@ -27,3 +27,8 @@ export interface CheckoutFormValues
   extends AddressSnapshot, CheckoutCardFormValues {
   paymentMethod: PaymentMethod
 }
+
+export interface PayPalNotice {
+  tone: 'info' | 'error'
+  message: string
+}

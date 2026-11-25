@@ -465,6 +465,70 @@ describe('OrderController (e2e)', () => {
     expect(await countRows('orders', user.id)).toBe(1);
   });
 
+  it('POST /orders saves the first order address as the default (R2)', async () => {
+    const user = await createUser();
+    const variant = await createProduct(5);
+    const methodId = await createMethod();
+    signIn(user.clerkId);
+    await addToCart(variant.variantId, 1);
+
+    await request(app.getHttpServer())
+      .post(ORDERS)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        ...body(methodId),
+        addressLine: ' 12 Roast Street ',
+        ward: ' Ben Nghe ',
+        district: ' District 1 ',
+        city: ' Ho Chi Minh ',
+        postalCode: ' 700000 ',
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .get(`${API_BASE_PATH}/users/me/addresses`)
+      .expect(200);
+    const addresses = (response.body as { data: Record<string, unknown>[] })
+      .data;
+    expect(addresses).toHaveLength(1);
+    expect(addresses[0]).toMatchObject({
+      userId: user.id,
+      isDefault: true,
+      addressLine: '12 Roast Street',
+      ward: 'Ben Nghe',
+      district: 'District 1',
+      city: 'Ho Chi Minh',
+      postalCode: '700000',
+    });
+  });
+
+  it('a second order with another address keeps the saved default (R2)', async () => {
+    const user = await createUser();
+    const variant = await createProduct(5);
+    const methodId = await createMethod();
+    signIn(user.clerkId);
+    await addToCart(variant.variantId, 1);
+    await place(methodId).expect(201);
+    await addToCart(variant.variantId, 1);
+
+    await request(app.getHttpServer())
+      .post(ORDERS)
+      .set('Idempotency-Key', randomUUID())
+      .send({ ...body(methodId), addressLine: '99 Other Road' })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .get(`${API_BASE_PATH}/users/me/addresses`)
+      .expect(200);
+    const addresses = (response.body as { data: Record<string, unknown>[] })
+      .data;
+    expect(addresses).toHaveLength(1);
+    expect(addresses[0]).toMatchObject({
+      isDefault: true,
+      addressLine: '12 Le Loi',
+    });
+  });
+
   it('POST /orders without a session returns 401', async () => {
     const methodId = await createMethod();
 

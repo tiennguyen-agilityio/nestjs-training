@@ -2,21 +2,32 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { IncomingHttpHeaders } from 'node:http';
 import { z } from 'zod';
-import { OrderStatus, PaymentMethod, PaymentStatus } from '@repo/constants';
+import {
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from '@repo/constants';
 import { PaymentRepository } from '../repositories/payment.repository.js';
 import { OrderRepository } from '../../order/repositories/order.repository.js';
 import { PaymentGateways } from '../gateways/payment-gateways.js';
 import type {
   CheckoutSession,
+  ApprovedCheckout,
+  CaptureOutcome,
   GatewayEvent,
   PaymentGateway,
   VerifiedWebhook,
 } from '../gateways/payment-gateway.js';
 import { ResponsePaymentCheckoutDto } from '../dto/response-payment-checkout.dto.js';
+import { ResponsePaymentCaptureDto } from '../dto/response-payment-capture.dto.js';
+import { paymentStatusOf } from '../../order/utils/payment-status.util.js';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import type { Payment } from '../../order/entities/payment.entity.js';
 import type { Order } from '../../order/entities/order.entity.js';
 import type { PaymentCheckoutExpirePayload } from '../../../common/interfaces/outbox-payload.interface.js';
 import {
+  InvalidRequestException,
   InvalidStateException,
   ItemNotFoundException,
   ValidationException,
@@ -62,21 +73,7 @@ export class PaymentService {
         userId,
       );
       if (!charge) throw this.orderNotFound();
-      if (charge.method === PaymentMethod.COD) {
-        throw this.invalid(
-          ERROR_CODES.PAYMENT.METHOD_NOT_ONLINE,
-          ERROR_MESSAGES.PAYMENT.METHOD_NOT_ONLINE,
-          ERROR_DESCRIPTIONS.PAYMENT.METHOD_NOT_ONLINE,
-        );
-      }
-      const gateway = this.gateways.for(charge.method);
-      if (!gateway) {
-        throw this.invalid(
-          ERROR_CODES.PAYMENT.METHOD_UNAVAILABLE,
-          ERROR_MESSAGES.PAYMENT.METHOD_UNAVAILABLE,
-          ERROR_DESCRIPTIONS.PAYMENT.METHOD_UNAVAILABLE,
-        );
-      }
+      const gateway = this.gatewayOf(charge);
 
       const payment = await this.paymentRepository.lockById(charge.id);
       const order = await this.orderRepository.reload(charge.order);
@@ -87,16 +84,9 @@ export class PaymentService {
       ) {
         throw this.notPayable();
       }
-      if (order.expiresAt && order.expiresAt.getTime() <= Date.now()) {
-        throw new InvalidStateException({
-          errCode: ERROR_CODES.PAYMENT.ORDER_EXPIRED,
-          field: 'id',
-          message: ERROR_MESSAGES.PAYMENT.ORDER_EXPIRED,
-          description: ERROR_DESCRIPTIONS.PAYMENT.ORDER_EXPIRED,
-        });
-      }
+      if (this.isExpired(order)) throw this.orderExpired();
       if (payment.checkoutSessionId) {
-        return this.reuse(gateway, payment);
+        return this.reuse(gateway, payment, order);
       }
 
       const session = await gateway.createCheckout({
@@ -121,7 +111,7 @@ export class PaymentService {
     method: PaymentMethod,
     rawBody: Buffer | undefined,
     headers: IncomingHttpHeaders,
-  ): VerifiedWebhook {
+  ): Promise<VerifiedWebhook> {
     const gateway = this.gateways.for(method);
     if (!gateway) {
       throw new Error(`No payment gateway is registered for ${method}`);
@@ -129,7 +119,7 @@ export class PaymentService {
     return gateway.parseWebhook(rawBody, headers);
   }
 
-  apply(event: GatewayEvent | null): Promise<boolean> {
+  apply(event: GatewayEvent | null, actorId: ActorId = null): Promise<boolean> {
     if (!event) return Promise.resolve(false);
     if (!paymentIdSchema.safeParse(event.paymentId).success) {
       this.logger.warn(`Ignored a ${event.kind} event for an unknown payment`);
@@ -156,6 +146,28 @@ export class PaymentService {
         return false;
       }
 
+      if (event.kind === 'pending') {
+        if (
+          (payment.status as PaymentStatus) === PaymentStatus.PENDING &&
+          payment.transactionId === event.transactionId
+        ) {
+          return false;
+        }
+        const order = await this.orderRepository.findById(payment.order.id);
+        if (!order || (order.status as OrderStatus) !== OrderStatus.PENDING) {
+          this.logger.warn(
+            `Payment ${payment.id} is held as ${event.transactionId} but its order is ${order?.status ?? 'missing'}`,
+          );
+          return false;
+        }
+        payment.status = PaymentStatus.PENDING;
+        payment.failureReason = null;
+        payment.transactionId = event.transactionId;
+        order.expiresAt = null;
+        await this.paymentRepository.save(payment, actorId);
+        return true;
+      }
+
       if (event.kind === 'failed') {
         if (
           (payment.status as PaymentStatus) === PaymentStatus.FAILED &&
@@ -165,7 +177,7 @@ export class PaymentService {
         }
         payment.status = PaymentStatus.FAILED;
         payment.failureReason = event.reason;
-        await this.paymentRepository.save(payment, null);
+        await this.paymentRepository.save(payment, actorId);
         return true;
       }
 
@@ -182,7 +194,7 @@ export class PaymentService {
           `Payment ${payment.id} was paid but its order is ${order?.status ?? 'missing'}`,
         );
       }
-      await this.paymentRepository.save(payment, null);
+      await this.paymentRepository.save(payment, actorId);
       return true;
     });
   }
@@ -206,15 +218,169 @@ export class PaymentService {
     await gateway.expireCheckout(checkoutSessionId);
   }
 
+  /** Captures the shopper's approved PayPal order after the popup closes. */
+  async capture(
+    userId: string,
+    orderId: string,
+  ): Promise<ResponsePaymentCaptureDto> {
+    const charge = await this.paymentRepository.findNewestChargeOf(
+      orderId,
+      userId,
+    );
+    if (!charge) throw this.orderNotFound();
+    const gateway = this.gatewayOf(charge);
+    if ((charge.status as PaymentStatus) === PaymentStatus.PAID) {
+      return this.captured(charge, false);
+    }
+    const order = charge.order;
+    if ((order.status as OrderStatus) !== OrderStatus.PENDING) {
+      throw this.notPayable();
+    }
+    if (this.isExpired(order)) throw this.orderExpired();
+    if (!charge.checkoutSessionId) throw this.notPayable();
+
+    // PayPal is called outside any transaction; its answer is applied in one.
+    const outcome = await gateway.capture(charge.checkoutSessionId);
+    if (!outcome) {
+      throw this.invalid(
+        ERROR_CODES.PAYMENT.CAPTURE_UNSUPPORTED,
+        ERROR_MESSAGES.PAYMENT.CAPTURE_UNSUPPORTED,
+        ERROR_DESCRIPTIONS.PAYMENT.CAPTURE_UNSUPPORTED,
+      );
+    }
+    if (outcome.kind === 'not_approved') throw this.notPayable();
+    await this.apply(this.eventOf(charge, outcome), userId);
+    return this.captured(
+      charge,
+      outcome.kind === 'failed' && outcome.retryable,
+    );
+  }
+
+  /** Routes a verified webhook event: approved checkouts are captured first. */
+  handle(event: GatewayEvent | ApprovedCheckout | null): Promise<boolean> {
+    if (event?.kind === 'approved') {
+      return this.captureApproved(event.checkoutSessionId);
+    }
+    return this.apply(event);
+  }
+
+  /** A checkout the payer approved but nobody captured (the browser never came back). */
+  private async captureApproved(checkoutSessionId: string): Promise<boolean> {
+    const payment =
+      await this.paymentRepository.findByCheckoutSessionId(checkoutSessionId);
+    if (!payment) {
+      this.logger.warn(
+        `Ignored an approved checkout ${checkoutSessionId} with no payment`,
+      );
+      return false;
+    }
+    const order = payment.order;
+    if (
+      (payment.status as PaymentStatus) === PaymentStatus.PAID ||
+      (order.status as OrderStatus) !== OrderStatus.PENDING ||
+      this.isExpired(order)
+    ) {
+      return false;
+    }
+    const gateway = this.gateways.for(payment.method);
+    let outcome: CaptureOutcome | null = null;
+    try {
+      outcome = gateway ? await gateway.capture(checkoutSessionId) : null;
+    } catch (error) {
+      // A refusal is final: the event is recorded IGNORED. If another capture
+      // did land, PayPal's PAYMENT.CAPTURE.COMPLETED records it. An outage
+      // (503) propagates, so PayPal sends this event again.
+      if (error instanceof InvalidRequestException) {
+        this.logger.warn(`PayPal refused to capture ${checkoutSessionId}`);
+        return false;
+      }
+      throw error;
+    }
+    if (!outcome || outcome.kind === 'not_approved') return false;
+    return this.apply(this.eventOf(payment, outcome), null);
+  }
+
+  private eventOf(
+    payment: Payment,
+    outcome: Exclude<CaptureOutcome, { kind: 'not_approved' }>,
+  ): GatewayEvent {
+    const base = {
+      paymentId: payment.id,
+      checkoutSessionId: payment.checkoutSessionId ?? undefined,
+    };
+    switch (outcome.kind) {
+      case 'succeeded':
+        return {
+          kind: 'succeeded',
+          ...base,
+          transactionId: outcome.transactionId,
+          paidAt: outcome.paidAt,
+        };
+      case 'failed':
+        return { kind: 'failed', ...base, reason: outcome.reason };
+      case 'pending':
+        return {
+          kind: 'pending',
+          ...base,
+          transactionId: outcome.transactionId,
+        };
+    }
+  }
+
+  private captured(
+    payment: Payment,
+    retryable: boolean,
+  ): ResponsePaymentCaptureDto {
+    const status: OrderPaymentStatus = paymentStatusOf([payment]);
+    return ResponsePaymentCaptureDto.fromEntity(payment, status, retryable);
+  }
+
+  private gatewayOf(charge: Payment): PaymentGateway {
+    if (charge.method === PaymentMethod.COD) {
+      throw this.invalid(
+        ERROR_CODES.PAYMENT.METHOD_NOT_ONLINE,
+        ERROR_MESSAGES.PAYMENT.METHOD_NOT_ONLINE,
+        ERROR_DESCRIPTIONS.PAYMENT.METHOD_NOT_ONLINE,
+      );
+    }
+    const gateway = this.gateways.for(charge.method);
+    if (!gateway) {
+      throw this.invalid(
+        ERROR_CODES.PAYMENT.METHOD_UNAVAILABLE,
+        ERROR_MESSAGES.PAYMENT.METHOD_UNAVAILABLE,
+        ERROR_DESCRIPTIONS.PAYMENT.METHOD_UNAVAILABLE,
+      );
+    }
+    return gateway;
+  }
+
+  private isExpired(order: Order): boolean {
+    return Boolean(order.expiresAt && order.expiresAt.getTime() <= Date.now());
+  }
+
+  private orderExpired(): InvalidStateException {
+    return new InvalidStateException({
+      errCode: ERROR_CODES.PAYMENT.ORDER_EXPIRED,
+      field: 'id',
+      message: ERROR_MESSAGES.PAYMENT.ORDER_EXPIRED,
+      description: ERROR_DESCRIPTIONS.PAYMENT.ORDER_EXPIRED,
+    });
+  }
+
   private async reuse(
     gateway: PaymentGateway,
     payment: Payment,
+    order: Order,
   ): Promise<ResponsePaymentCheckoutDto> {
     const session: CheckoutSession | null = await gateway.findCheckout(
       payment.checkoutSessionId as string,
     );
     if (!session?.open) throw this.notPayable();
-    return ResponsePaymentCheckoutDto.fromEntity(payment, session);
+    // The order's expiry is the checkout's: a PayPal order carries none.
+    return ResponsePaymentCheckoutDto.fromEntity(payment, {
+      ...session,
+      expiresAt: order.expiresAt ?? session.expiresAt,
+    });
   }
 
   private sessionExpiryOf(order: Order): Date {

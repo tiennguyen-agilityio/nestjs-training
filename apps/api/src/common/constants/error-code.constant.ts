@@ -37,6 +37,7 @@ export const ERROR_CODES = {
     MAX_PERCENT_DISCOUNT_VALUE: 'maxPercentDiscountValue',
     DUPLICATE_IDS: 'duplicateProductVariantIds',
     STOCK_BELOW_RESERVED: 'stockBelowReserved',
+    STOCK_ABOVE_MAX: 'stockAboveMax',
   },
   PRODUCT_IMAGE: {
     NOT_FOUND: 'productImageNotFound',
@@ -63,6 +64,7 @@ export const ERROR_CODES = {
     GATEWAY_UNAVAILABLE: 'paymentGatewayUnavailable',
     GATEWAY_REJECTED: 'paymentGatewayRejected',
     INVALID_SIGNATURE: 'invalidWebhookSignature',
+    CAPTURE_UNSUPPORTED: 'paymentCaptureUnsupported',
   },
   SHIPPING_METHOD: {
     NOT_FOUND: 'shippingMethodNotFound',

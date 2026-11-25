@@ -45,3 +45,9 @@ export enum InventoryMovementType {
   RESTOCK = 'RESTOCK',
   ADJUSTMENT = 'ADJUSTMENT',
 }
+
+export enum StockLevel {
+  OUT = 'OUT',
+  LOW = 'LOW',
+  OK = 'OK',
+}

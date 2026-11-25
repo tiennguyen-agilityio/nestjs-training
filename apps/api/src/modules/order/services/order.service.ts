@@ -16,6 +16,7 @@ import {
 import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
+import { UserAddressService } from '../../user/services/user-address.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
 import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
@@ -74,6 +75,7 @@ export class OrderService {
     private readonly cartService: CartService,
     private readonly productVariantService: ProductVariantService,
     private readonly shippingMethodService: ShippingMethodService,
+    private readonly userAddressService: UserAddressService,
   ) {}
 
   /** The caller's own orders only, whatever their role (`findAll` lists every order). */
@@ -279,6 +281,14 @@ export class OrderService {
         },
         userId,
       );
+      const { addressLine, ward, district, city, postalCode } = recipient;
+      await this.userAddressService.saveFirstAsDefault(userId, {
+        addressLine,
+        ward,
+        district,
+        city,
+        postalCode,
+      });
       await this.cartService.clearItems(cart.id);
 
       return ResponseOrderDto.fromEntity(order);
@@ -296,19 +306,36 @@ export class OrderService {
         description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE,
       });
     }
-    const paid = order.payments
+    const charges = order.payments
       .getItems()
-      .some(
-        (payment) =>
-          (payment.type as PaymentType) === PaymentType.CHARGE &&
-          (payment.status as PaymentStatus) === PaymentStatus.PAID,
+      .filter(
+        (payment) => (payment.type as PaymentType) === PaymentType.CHARGE,
       );
-    if (paid) {
+    if (
+      charges.some(
+        (payment) => (payment.status as PaymentStatus) === PaymentStatus.PAID,
+      )
+    ) {
       throw new InvalidStateException({
         errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
         field: 'paymentStatus',
         message: ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('paid'),
         description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_PAID,
+      });
+    }
+    // A pending charge with a transaction id is money the gateway holds for review.
+    if (
+      charges.some(
+        (payment) =>
+          (payment.status as PaymentStatus) === PaymentStatus.PENDING &&
+          payment.transactionId,
+      )
+    ) {
+      throw new InvalidStateException({
+        errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
+        field: 'paymentStatus',
+        message: ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('under payment review'),
+        description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_PAYMENT_HELD,
       });
     }
   }

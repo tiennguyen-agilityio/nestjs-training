@@ -12,7 +12,7 @@ describe('VALIDATION_RULES', () => {
         MAX_SORT_ORDER: 5,
       },
       VARIANT: { MIN_COUNT: 1 },
-      STOCK_QUANTITY: { MIN: 0 },
+      STOCK_QUANTITY: { MIN: 0, MAX: 1000000 },
       CART_QUANTITY: { MIN: 1 },
       CART_MERGE: { MAX_ITEMS: 50 },
       PRICE: { MIN: 1, MAX: 99999999.99 },
@@ -36,12 +36,16 @@ describe('VALIDATION_RULES', () => {
         NOTE_MAX_LENGTH: 1000,
         NUMBER_MAX_LENGTH: 20,
       },
+      INVENTORY: {
+        LOW_STOCK_THRESHOLD: 5,
+        REASON: { MIN: 2, MAX: 255 },
+      },
     });
   });
 
   it('SIZE and STOCK_QUANTITY bounds', () => {
     expect(VALIDATION_RULES).toMatchObject({
-      STOCK_QUANTITY: { MIN: 0 },
+      STOCK_QUANTITY: { MIN: 0, MAX: 1000000 },
       SIZE: { MIN: 1, MAX: 99999999.99 },
     });
     expect(VALIDATION_RULES).not.toHaveProperty('WEIGHT');

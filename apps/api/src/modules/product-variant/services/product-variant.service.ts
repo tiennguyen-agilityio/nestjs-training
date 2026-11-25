@@ -76,6 +76,40 @@ export class ProductVariantService {
     return this.productVariantRepository.lockByIds(ids);
   }
 
+  findInventoryPage(
+    ...args: Parameters<ProductVariantRepository['findInventoryPage']>
+  ): ReturnType<ProductVariantRepository['findInventoryPage']> {
+    return this.productVariantRepository.findInventoryPage(...args);
+  }
+
+  findMovements(
+    ...args: Parameters<ProductVariantRepository['findMovements']>
+  ): ReturnType<ProductVariantRepository['findMovements']> {
+    return this.productVariantRepository.findMovements(...args);
+  }
+
+  changeStock(
+    ...args: Parameters<ProductVariantRepository['changeStock']>
+  ): ReturnType<ProductVariantRepository['changeStock']> {
+    return this.productVariantRepository.changeStock(...args);
+  }
+
+  /** A variant whose product is not deleted either, with the product and its images; else 404. */
+  async findActive(id: string): Promise<ProductVariant> {
+    const variant =
+      await this.productVariantRepository.findActiveWithProduct(id);
+    if (!variant) {
+      throw new ItemNotFoundException({
+        errCode: ERROR_CODES.PRODUCT_VARIANT.NOT_FOUND,
+        field: 'id',
+        message: ERROR_MESSAGES.PRODUCT_VARIANT.NOT_FOUND,
+        description: ERROR_DESCRIPTIONS.PRODUCT_VARIANT.NOT_FOUND,
+      });
+    }
+
+    return variant;
+  }
+
   async findOne(id: string): Promise<ProductVariant> {
     const variant = await this.productVariantRepository.findById(id);
     if (!variant) {

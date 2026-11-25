@@ -323,7 +323,10 @@ const OrderSuccessPageContent = () => {
     return (
       <OrderSuccessFromApi
         orderId={orderId}
-        hasSessionId={Boolean(searchParams.get('session_id'))}
+        hasSessionId={
+          Boolean(searchParams.get('session_id')) ||
+          searchParams.get('payment') === 'pending'
+        }
         paymentError={searchParams.get('paymentError')}
       />
     )

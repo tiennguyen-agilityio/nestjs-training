@@ -1290,7 +1290,7 @@ describe('ProductController (e2e)', () => {
         .send({
           updateVariants: [
             { id: variantId, price: 10 },
-            { id: variantId, stockQuantity: 1 },
+            { id: variantId, price: 20 },
           ],
         })
         .expect(400);
@@ -1589,34 +1589,19 @@ describe('ProductController (e2e)', () => {
         expect(variant).toMatchObject({ size: 500, name: '500g' });
       });
 
-      it('PATCH /products/:id below reserved returns 400', async () => {
+      it('PATCH /products/:id ignores stockQuantity', async () => {
         const { productId, variantId } = await createPricedProduct();
-        await orm.em
-          .getConnection()
-          .execute(
-            'update product_variants set stock_quantity = 5, reserved_quantity = 2 where id = ?',
-            [variantId],
-          );
-
-        const response = await patch(productId, {
-          updateVariants: [{ id: variantId, stockQuantity: 1 }],
-        });
-
-        expect(response.status).toBe(400);
-        expect(
-          (response.body as { errors: { errCode: string; field: string }[] })
-            .errors[0],
-        ).toMatchObject({
-          errCode: 'stockBelowReserved',
-          field: 'updateVariants.0.stockQuantity',
-        });
-        expect((await getVariants(productId))[0]).toMatchObject({
-          stockQuantity: 5,
-        });
-      });
-
-      it('PATCH /products/:id with only stockQuantity keeps price and discount', async () => {
-        const { productId, variantId } = await createPricedProduct();
+        const [before] = await getVariants(productId);
+        const countMovements = async (): Promise<number> =>
+          (
+            (await orm.em
+              .getConnection()
+              .execute(
+                'select count(*)::int as n from inventory_movements where product_variant_id = ?',
+                [variantId],
+              )) as { n: number }[]
+          )[0].n;
+        const movementsBefore = await countMovements();
 
         await patch(productId, {
           updateVariants: [{ id: variantId, stockQuantity: 50 }],
@@ -1626,8 +1611,9 @@ describe('ProductController (e2e)', () => {
           price: 100,
           discountType: DiscountType.PERCENT,
           discountValue: 10,
-          stockQuantity: 50,
+          stockQuantity: before.stockQuantity,
         });
+        expect(await countMovements()).toBe(movementsBefore);
       });
 
       it('PATCH /products/:id responds 400 maxFixedDiscountValue for FIXED 150 on a price of 120', async () => {

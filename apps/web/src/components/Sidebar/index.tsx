@@ -15,15 +15,20 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { NOTICE_MESSAGES } from '@/constants/messages'
 import { DASHBOARD_DISABLED_HINT, DASHBOARD_MENU } from '@/constants/nav'
 import { ROUTES } from '@/constants/routes'
+import { useLowStockCount } from '@/hooks/useInventory'
 import { cn } from '@/utils/styles'
 
-import { Button } from '../ui/button'
+import { buttonVariants } from '../ui/button'
 
 const Sidebar = () => {
   const pathname = usePathname()
   const { isMobile, setOpenMobile } = useSidebar()
+  // Hidden while loading or on error (an INACTIVE admin's 403).
+  const { count, isLoading, isError } = useLowStockCount()
+  const showCount = !isLoading && !isError && count !== null
 
   const handleMenuItemClick = () => {
     if (isMobile) {
@@ -123,16 +128,21 @@ const Sidebar = () => {
           <p className="font-semibold text-sidebar-foreground">
             Inventory Alert
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            3 items are running low on stock.
-          </p>
-          <Button
-            disabled
-            variant="default"
-            className="mt-3 h-11 w-full rounded-lg border-0 bg-sidebar-primary text-sm font-medium text-sidebar-primary-foreground shadow-none hover:bg-sidebar-primary/90"
+          {showCount && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {NOTICE_MESSAGES.LOW_STOCK(count)}
+            </p>
+          )}
+          <Link
+            href={`${ROUTES.DASHBOARD_INVENTORY}?lowStock=true`}
+            onClick={handleMenuItemClick}
+            className={cn(
+              buttonVariants({ variant: 'default' }),
+              'mt-3 h-11 w-full rounded-lg border-0 bg-sidebar-primary text-sm font-medium text-sidebar-primary-foreground shadow-none hover:bg-sidebar-primary/90',
+            )}
           >
             Manage Now
-          </Button>
+          </Link>
         </div>
       </SidebarFooter>
     </>

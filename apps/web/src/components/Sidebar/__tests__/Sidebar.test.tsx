@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/sidebar'
 import Sidebar from '@/components/Sidebar'
 import { usePathname } from 'next/navigation'
+import { ROUTES } from '@/constants/routes'
 
 const mockUsePathname = jest.mocked(usePathname)
 const mockUseIsMobile = jest.fn(() => false)
@@ -31,6 +32,19 @@ jest.mock('next/image', () => ({
 
 jest.mock('@/hooks/useIsMobile', () => ({
   useIsMobile: () => mockUseIsMobile(),
+}))
+
+const mockUseLowStockCount = jest.fn<
+  { count: number | null; isLoading: boolean; isError: boolean },
+  []
+>(() => ({
+  count: 3,
+  isLoading: false,
+  isError: false,
+}))
+
+jest.mock('@/hooks/useInventory', () => ({
+  useLowStockCount: () => mockUseLowStockCount(),
 }))
 
 const renderSidebar = () => {
@@ -97,5 +111,35 @@ describe('Dashboard Sidebar', () => {
     expect(
       productsLink.closest('[data-slot="sidebar-menu-button"]'),
     ).toHaveAttribute('data-active')
+  })
+
+  it('Sidebar shows the real low-stock count and links to the low-stock list', () => {
+    mockUsePathname.mockReturnValue('/dashboard')
+    mockUseLowStockCount.mockReturnValue({
+      count: 7,
+      isLoading: false,
+      isError: false,
+    })
+    renderSidebar()
+
+    expect(
+      screen.getByText('7 items are running low on stock.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Manage Now' })).toHaveAttribute(
+      'href',
+      `${ROUTES.DASHBOARD_INVENTORY}?lowStock=true`,
+    )
+  })
+
+  it('Sidebar hides the count while loading or on error', () => {
+    mockUsePathname.mockReturnValue('/dashboard')
+    mockUseLowStockCount.mockReturnValue({
+      count: null,
+      isLoading: true,
+      isError: false,
+    })
+    renderSidebar()
+
+    expect(screen.queryByText(/running low on stock/)).toBeNull()
   })
 })

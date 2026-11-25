@@ -5,8 +5,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { CLERK_SESSION_TEMPLATE } from '@/constants/common'
 import { ordersQueryKeys } from '@/hooks/useOrder'
-import { startPayment } from '@/services/payment'
-import type { PaymentCheckout } from '@/types/order'
+import { capturePayment, startPayment } from '@/services/payment'
+import type { PaymentCapture, PaymentCheckout } from '@/types/order'
 import { throwIfServiceFailed } from '@/utils/query'
 
 export function useStartPayment() {
@@ -20,6 +20,24 @@ export function useStartPayment() {
       })
       if (!result.ok) throwIfServiceFailed(result)
       return result.checkout
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ordersQueryKeys.root })
+    },
+  })
+}
+
+export function useCapturePayment() {
+  const queryClient = useQueryClient()
+  const { getToken } = useAuth()
+
+  return useMutation({
+    mutationFn: async (orderId: string): Promise<PaymentCapture> => {
+      const result = await capturePayment(orderId, {
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+      })
+      if (!result.ok) throwIfServiceFailed(result)
+      return result.capture
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ordersQueryKeys.root })

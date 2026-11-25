@@ -118,6 +118,10 @@ PostgreSQL via MikroORM.
 | `STRIPE_SECRET_KEY`            | Stripe secret key (sandbox)                                                                                                   |
 | `STRIPE_WEBHOOK_SECRET`        | Stripe webhook signing secret                                                                                                 |
 | `WEB_APP_URL`                  | Website URL Stripe Checkout returns the shopper to                                                                            |
+| `PAYPAL_CLIENT_ID`             | PayPal REST app client id (sandbox app until a production environment exists)                                                 |
+| `PAYPAL_CLIENT_SECRET`         | PayPal REST app secret                                                                                                        |
+| `PAYPAL_WEBHOOK_ID`            | Id of the webhook added on that PayPal app; incoming events are verified against it                                           |
+| `PAYPAL_API_URL`               | PayPal REST base URL: `https://api-m.sandbox.paypal.com` everywhere until a production environment exists                     |
 
 ### Running Locally
 
@@ -185,6 +189,14 @@ pnpm run docker:prod:down
   raw body: a paid session sets the payment PAID (`transaction_id` = the PaymentIntent id,
   `completed_at`) and the order CONFIRMED; a declined card or an expired session sets it FAILED
   with the reason. PAID never changes again, so repeated events change nothing.
+- **PayPal** — for a PAYPAL order the same start call creates a PayPal order (Orders v2, intent
+  CAPTURE) and returns its id for the website's PayPal popup. After the shopper approves,
+  `POST /orders/:id/payments/capture` captures it: COMPLETED sets PAID with the capture id and
+  confirms the order, a decline sets FAILED with PayPal's reason (`retryable` tells whether the
+  shopper can approve again with another funding source), a capture held for review stays PENDING.
+  `POST /webhooks/paypal` (verified with PayPal against `PAYPAL_WEBHOOK_ID`) captures an approved
+  order nobody captured (`CHECKOUT.ORDER.APPROVED`) and records `PAYMENT.CAPTURE.COMPLETED` /
+  `PAYMENT.CAPTURE.DENIED`. An order past its `expires_at` is never captured.
 - **Gateway-neutral rules** — `PaymentService` talks to gateways through `PaymentGateway`; PayPal
   adds a gateway, not new rules.
 
@@ -192,6 +204,15 @@ pnpm run docker:prod:down
 > `POST /webhooks/stripe` (Stripe signature). Forward it with the Stripe CLI and use the `whsec_…`
 > it prints as `STRIPE_WEBHOOK_SECRET`:
 > `stripe listen --forward-to localhost:<PORT>/webhooks/stripe --events checkout.session.completed,checkout.session.expired,payment_intent.payment_failed`.
+
+> **PayPal credentials:** in [developer.paypal.com](https://developer.paypal.com) › Apps & Credentials
+> (Sandbox), create an app: its client id and secret are `PAYPAL_CLIENT_ID` and
+> `PAYPAL_CLIENT_SECRET` (the web uses the same client id as `NEXT_PUBLIC_PAYPAL_CLIENT_ID`). On that
+> app add a webhook for `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED` and
+> `PAYMENT.CAPTURE.DENIED`; its id is `PAYPAL_WEBHOOK_ID`. PayPal only calls public HTTPS URLs, so
+> locally expose `/webhooks/paypal` through a tunnel (for example `ngrok http <PORT>`). Sandbox buyer
+> accounts to approve payments with are under Testing Tools › Sandbox Accounts. The Render develop
+> service and the web's Vercel project need these values before this is deployed.
 
 ### Cross-cutting
 
@@ -518,12 +539,13 @@ The signed-in user's own cart; every success returns the whole cart.
 
 ### Orders
 
-| Method | Path                       | Auth | Description                                                                                                                                                                                                                                                                                  |
-| :----- | :------------------------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST` | `/orders`                  | 🔒   | Place an order from my cart (`Idempotency-Key` required): holds the stock (`reserved_quantity` + a `RESERVE` movement), copies names, prices and the method's fee, adds 10% tax, creates a PENDING CHARGE and empties the cart; any 400 saves nothing                                        |
-| `POST` | `/orders/:id/payments`     | 🔒   | Start the online payment of my CARD order: opens a card-only Stripe Checkout Session and returns `{ paymentId, checkoutUrl, expiresAt }`; the same URL while it is open. 404 for another user's order, 400 `paymentMethodNotOnline` for COD, 409 `paymentNotPayable` / `paymentOrderExpired` |
-| `GET`  | `/orders`                  | 🔒   | My orders; an active admin with `all=true` gets every order (anyone else: 403). `search` (every word, accents ignored: order number, recipient, customer name or email), `status`, `shippingStatus`, `paymentStatus`, `sort`, `order`; paginated, newest first                               |
-| `GET`  | `/orders/:idOrOrderNumber` | 🔒   | My order (by id or order number) with its items, payments and customer; an active admin reads any order; otherwise 404                                                                                                                                                                       |
+| Method | Path                           | Auth | Description                                                                                                                                                                                                                                                                                                                                         |
+| :----- | :----------------------------- | :--- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/orders`                      | 🔒   | Place an order from my cart (`Idempotency-Key` required): holds the stock (`reserved_quantity` + a `RESERVE` movement), copies names, prices and the method's fee, adds 10% tax, creates a PENDING CHARGE and empties the cart; any 400 saves nothing                                                                                               |
+| `POST` | `/orders/:id/payments`         | 🔒   | Start the online payment of my CARD or PAYPAL order: opens a card-only Stripe Checkout Session or a PayPal order and returns `{ paymentId, checkoutId, checkoutUrl, expiresAt }`; the same one while it is open. 404 for another user's order, 400 `paymentMethodNotOnline` for COD, 409 `paymentNotPayable` / `paymentOrderExpired`                |
+| `POST` | `/orders/:id/payments/capture` | 🔒   | Capture the PayPal order I approved: `{ paymentId, paymentStatus, failureReason, retryable }` with PAID (order CONFIRMED), FAILED or PENDING (held for review). 404 for another user's order, 400 `paymentMethodNotOnline` / `paymentCaptureUnsupported` (CARD), 409 `paymentNotPayable` / `paymentOrderExpired`, 503 when PayPal cannot be reached |
+| `GET`  | `/orders`                      | 🔒   | My orders; an active admin with `all=true` gets every order (anyone else: 403). `search` (every word, accents ignored: order number, recipient, customer name or email), `status`, `shippingStatus`, `paymentStatus`, `sort`, `order`; paginated, newest first                                                                                      |
+| `GET`  | `/orders/:idOrOrderNumber`     | 🔒   | My order (by id or order number) with its items, payments and customer; an active admin reads any order; otherwise 404                                                                                                                                                                                                                              |
 
 ### Health
 
@@ -540,15 +562,16 @@ rate-limited, and skipped by the Clerk and user-resolution middlewares (GET and 
 ### Webhooks
 
 Not under `/api/v1` and excluded from Swagger. Each verified event is recorded once in
-`webhook_events` (`provider` CLERK, STRIPE or PAYPAL + the provider's event id: `svix-id` or
-`evt_…`), in the same transaction as its processing: a repeated event id answers 200 and is
+`webhook_events` (`provider` CLERK, STRIPE or PAYPAL + the provider's event id: `svix-id`, `evt_…` or
+`WH-…`), in the same transaction as its processing: a repeated event id answers 200 and is
 skipped, an event that changed nothing is recorded `IGNORED`, and a processing error rolls the
 record back so the provider sends the event again. No payload is stored.
 
-| Method | Path               | Auth             | Description                                                                                                                                                                                       |
-| :----- | :----------------- | :--------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST` | `/webhooks/clerk`  | Svix signature   | Sync `user.created` / `user.updated` / `user.deleted` from Clerk                                                                                                                                  |
-| `POST` | `/webhooks/stripe` | Stripe signature | Record a Stripe payment: `checkout.session.completed` → PAID + order CONFIRMED; `payment_intent.payment_failed`, `checkout.session.expired` → FAILED; 401 for a bad signature; never rate-limited |
+| Method | Path               | Auth                 | Description                                                                                                                                                                                                  |
+| :----- | :----------------- | :------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/webhooks/clerk`  | Svix signature       | Sync `user.created` / `user.updated` / `user.deleted` from Clerk                                                                                                                                             |
+| `POST` | `/webhooks/stripe` | Stripe signature     | Record a Stripe payment: `checkout.session.completed` → PAID + order CONFIRMED; `payment_intent.payment_failed`, `checkout.session.expired` → FAILED; 401 for a bad signature; never rate-limited            |
+| `POST` | `/webhooks/paypal` | Verified with PayPal | `CHECKOUT.ORDER.APPROVED` → capture the order if nobody did; `PAYMENT.CAPTURE.COMPLETED` → PAID + order CONFIRMED; `PAYMENT.CAPTURE.DENIED` → FAILED; 401 when PayPal does not verify it; never rate-limited |
 
 ## Database & Migrations
 

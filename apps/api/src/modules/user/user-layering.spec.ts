@@ -5,6 +5,7 @@ describe('User role sync layering', () => {
   it('services, the webhook and the outbox handler import no ORM, Kysely or outbox store', async () => {
     for (const file of [
       './services/user.service.ts',
+      './services/user-address.service.ts',
       '../webhook/services/clerk-webhook.service.ts',
       './handlers/user-role-sync.handler.ts',
     ]) {

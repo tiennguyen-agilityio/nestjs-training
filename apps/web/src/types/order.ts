@@ -68,6 +68,8 @@ export interface PlacedOrderPayment {
 
 export interface PaymentCheckout {
   paymentId: string
+  /** The PayPal order id the popup approves. */
+  checkoutId: string
   checkoutUrl: string
   expiresAt: string
 }
@@ -130,3 +132,12 @@ export interface OrderSummary {
 export type OrderDetail = PlacedOrder & { customer: OrderCustomer }
 export type OrderDetailItem = PlacedOrderItem
 export type OrderPayment = PlacedOrderPayment
+
+/** `POST /orders/:id/payments/capture`: the payment after PayPal's answer. */
+export interface PaymentCapture {
+  paymentId: string
+  paymentStatus: OrderPaymentStatus
+  failureReason: string | null
+  /** FAILED, and the shopper can approve again with another funding source. */
+  retryable: boolean
+}

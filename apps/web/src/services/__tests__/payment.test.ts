@@ -1,9 +1,12 @@
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { API_ROUTES } from '@/constants/routes'
-import { startPayment } from '@/services/payment'
+import { OrderPaymentStatus } from '@repo/constants'
+
+import { capturePayment, startPayment } from '@/services/payment'
 
 const checkout = {
   paymentId: 'p-1',
+  checkoutId: 'cs_1',
   checkoutUrl: 'https://checkout.stripe.com/c/s',
   expiresAt: '2026-11-25T00:00:00.000Z',
 }
@@ -84,6 +87,59 @@ describe('startPayment', () => {
       expect.objectContaining({
         ok: false,
         error: API_FALLBACK_ERRORS.PAYMENT_START,
+      }),
+    )
+    if (!result.ok) expect(result.status).toBeUndefined()
+  })
+})
+
+describe('capturePayment', () => {
+  const originalFetch = globalThis.fetch
+  const capture = {
+    paymentId: 'p-1',
+    paymentStatus: OrderPaymentStatus.PAID,
+    failureReason: null,
+    retryable: false,
+  }
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('capturePayment posts to …/payments/capture with credentials and the token', async () => {
+    const fetchMock = mockResponse(200, {
+      statusCode: 200,
+      message: 'OK',
+      data: capture,
+    })
+    globalThis.fetch = fetchMock as typeof fetch
+
+    const result = await capturePayment('o-1', {
+      getToken: async () => 'tok',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_ROUTES.ORDERS}/o-1/payments/capture`,
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
+    )
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect((init.headers as Headers).get('Authorization')).toBe('Bearer tok')
+    expect(result).toEqual({ ok: true, capture })
+  })
+
+  it('capturePayment returns PAYMENT_CAPTURE on a network failure', async () => {
+    globalThis.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('Failed to fetch')) as typeof fetch
+
+    const result = await capturePayment('o-1', {
+      getToken: async () => 'tok',
+    })
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: API_FALLBACK_ERRORS.PAYMENT_CAPTURE,
       }),
     )
     if (!result.ok) expect(result.status).toBeUndefined()

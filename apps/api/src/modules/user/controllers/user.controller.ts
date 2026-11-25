@@ -14,11 +14,15 @@ import {
 import {
   ApiBearerAuth,
   ApiExcludeEndpoint,
+  ApiExtraModels,
   ApiNoContentResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiTags,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { UserService } from '../services/user.service.js';
+import { UserAddressService } from '../services/user-address.service.js';
 import {
   userQuerySchema,
   type UserQueryInput,
@@ -28,6 +32,7 @@ import {
   type UpdateUserInput,
 } from '../dto/user.schema.js';
 import { ResponseUserDto } from '../dto/response-user.dto.js';
+import { ResponseUserAddressDto } from '../dto/response-user-address.dto.js';
 import { isActiveAdmin } from '../../../common/utils/user.util.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import {
@@ -53,7 +58,10 @@ import { mapPaginatedResult } from '../../../common/utils/pagination.util.js';
 @ApiTags('users')
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly userAddressService: UserAddressService,
+  ) {}
 
   @Post()
   @AdminOnly()
@@ -114,7 +122,34 @@ export class UserController {
   getCurrentUser(@AuthUser() user: User): ResponseUserDto {
     return ResponseUserDto.fromEntity(user, {
       withAudit: isActiveAdmin(user),
+      withPhone: true,
     });
+  }
+
+  @Get('me/addresses')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      "The current user's saved addresses, the default first (any authenticated user)",
+  })
+  @ApiExtraModels(ResponseUserAddressDto)
+  @ApiOkResponse({
+    schema: {
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: getSchemaPath(ResponseUserAddressDto) },
+        },
+      },
+    },
+  })
+  @ApiErrorResponse(
+    HttpStatus.UNAUTHORIZED,
+    ERROR_MESSAGES.AUTH.UNAUTHENTICATED,
+  )
+  getMyAddresses(@AuthUser() user: User): Promise<ResponseUserAddressDto[]> {
+    return this.userAddressService.findMine(user.id);
   }
 
   @Get(':id')
