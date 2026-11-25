@@ -3,6 +3,7 @@ import {
   API_ROUTES,
   ROUTES,
   dashboardEditPath,
+  dashboardInventoryHistoryPath,
   dashboardOrderPath,
   profileOrderPath,
 } from '@/constants/routes'
@@ -23,6 +24,15 @@ describe('routes', () => {
     )
     expect(dashboardOrderPath('a b/c')).toBe(
       `${ROUTES.DASHBOARD_ORDERS}/a%20b%2Fc`,
+    )
+  })
+
+  it('dashboardInventoryHistoryPath encodes the id', () => {
+    expect(dashboardInventoryHistoryPath('v-1')).toBe(
+      `${ROUTES.DASHBOARD_INVENTORY}/v-1`,
+    )
+    expect(dashboardInventoryHistoryPath('a b')).toBe(
+      `${ROUTES.DASHBOARD_INVENTORY}/a%20b`,
     )
   })
 

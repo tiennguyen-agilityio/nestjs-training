@@ -41,6 +41,13 @@ describe('number fields', () => {
     });
   });
 
+  it('stockQuantityField rejects 1000001', () => {
+    expect(stockQuantityField.safeParse(1000000).success).toBe(true);
+    expect(
+      stockQuantityField.safeParse(1000001).error?.issues[0],
+    ).toMatchObject({ code: 'too_big', maximum: 1000000 });
+  });
+
   it('cartQuantityField accepts 1 and rejects 0, 1.5 and "2"', () => {
     expect(cartQuantityField.safeParse(1).success).toBe(true);
     expect(cartQuantityField.safeParse(0).error?.issues[0]).toMatchObject({

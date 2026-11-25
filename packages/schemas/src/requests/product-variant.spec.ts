@@ -104,16 +104,13 @@ describe('createProductVariantSchema', () => {
 describe('updateProductVariantSchema', () => {
   const id = '7d5b1c1e-1d2f-4c6a-9b1e-2f3a4b5c6d7e';
 
-  it('accepts an id with only stockQuantity', () => {
+  it('updateProductVariantSchema strips stockQuantity', () => {
     expect(updateProductVariantSchema.parse({ id, stockQuantity: 50 })).toEqual(
-      {
-        id,
-        stockQuantity: 50,
-      },
+      { id },
     );
   });
 
-  it('update takes size, unit and stockQuantity', () => {
+  it('update takes size and unit', () => {
     expect(
       updateProductVariantSchema.parse({
         id,
@@ -121,7 +118,7 @@ describe('updateProductVariantSchema', () => {
         unit: 'KG',
         stockQuantity: 5,
       }),
-    ).toEqual({ id, size: '500', unit: 'KG', stockQuantity: 5 });
+    ).toEqual({ id, size: '500', unit: 'KG' });
   });
 
   it('rejects a null discountType', () => {

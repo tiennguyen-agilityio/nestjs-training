@@ -81,6 +81,7 @@ export const ERROR_MESSAGES = {
     DUPLICATE_IDS: 'Each variant may appear only once in updateVariants',
     STOCK_BELOW_RESERVED: (reserved: number) =>
       `Stock cannot be below the ${reserved} units held for orders`,
+    STOCK_ABOVE_MAX: (max: number) => `Stock cannot be above ${max} units`,
   },
   PRODUCT: {
     NOT_FOUND: 'Product not found',
@@ -157,6 +158,7 @@ export const ERROR_DESCRIPTIONS = {
       'The same variant id is listed more than once. Send each variant once.',
     STOCK_BELOW_RESERVED:
       'Placed orders hold part of this stock. Set the stock to at least the held amount.',
+    STOCK_ABOVE_MAX: 'Stock has an upper limit. Lower the quantity.',
   },
   PRODUCT_IMAGE: {
     NOT_FOUND: 'The image might have been deleted, or the id is incorrect.',

@@ -1,7 +1,12 @@
+import { Suspense } from 'react'
+
+import InventoryPageContent from '@/sections/InventoryPageContent'
+import Loading from '@/components/Loading'
+
 export default function DashboardInventoryPage() {
   return (
-    <p className="text-muted-foreground">
-      Inventory — placeholder for low-stock management.
-    </p>
+    <Suspense fallback={<Loading size="lg" label="Loading inventory page" />}>
+      <InventoryPageContent />
+    </Suspense>
   )
 }

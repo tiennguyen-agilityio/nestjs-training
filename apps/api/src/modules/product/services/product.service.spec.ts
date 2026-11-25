@@ -945,28 +945,6 @@ describe('ProductService', () => {
         return error as ValidationException;
       };
 
-      it('update rejects stock below reserved', async () => {
-        const { variants } = productWithVariants([
-          buildVariant(idA, { stockQuantity: 5, reservedQuantity: 2 }),
-        ]);
-
-        const error = await rejection(
-          service.update(
-            'product-id-1',
-            { updateVariants: [{ id: idA, stockQuantity: 1 }] },
-            ACTOR,
-          ),
-        );
-
-        expect(error.getErrors()[0]).toMatchObject({
-          errCode: ERROR_CODES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED,
-          field: 'updateVariants.0.stockQuantity',
-          message: 'Stock cannot be below the 2 units held for orders',
-        });
-        expect(variants[0].stockQuantity).toBe(5);
-        expect(productRepository.save).not.toHaveBeenCalled();
-      });
-
       it('update locks the variants it changes', async () => {
         productWithVariants([buildVariant(idA), buildVariant(idB)]);
         const calls: string[] = [];
@@ -982,7 +960,7 @@ describe('ProductService', () => {
 
         await service.update(
           'product-id-1',
-          { updateVariants: [{ id: idB, stockQuantity: 3 }] },
+          { updateVariants: [{ id: idB, price: '3' }] },
           ACTOR,
         );
 
@@ -1023,25 +1001,17 @@ describe('ProductService', () => {
         expect(variants[0]).toMatchObject({
           size: '250.00',
           unit: ProductUnit.KG,
+          stockQuantity: 37,
         });
-
-        await service.update(
-          'product-id-1',
-          {
-            updateVariants: [{ id: idA, stockQuantity: 5 }],
-          },
-          ACTOR,
-        );
-        expect(variants[0].stockQuantity).toBe(5);
       });
 
-      it('keeps price and discount on a quantity-only update', async () => {
+      it('keeps price and discount on a size-only update', async () => {
         const { variants } = productWithVariants([buildVariant(idA)]);
 
         await service.update(
           'product-id-1',
           {
-            updateVariants: [{ id: idA, stockQuantity: 50 }],
+            updateVariants: [{ id: idA, size: '500' }],
           },
           ACTOR,
         );
@@ -1050,7 +1020,6 @@ describe('ProductService', () => {
           price: '100.00',
           discountType: DiscountType.PERCENT,
           discountValue: '10.00',
-          stockQuantity: 50,
         });
         expect(productRepository.save).toHaveBeenCalledTimes(1);
       });
@@ -1202,7 +1171,7 @@ describe('ProductService', () => {
         await service.update(
           'product-id-1',
           {
-            updateVariants: [{ id: idA, stockQuantity: 50 }],
+            updateVariants: [{ id: idA, size: '500' }],
           },
           ACTOR,
         );
@@ -1210,7 +1179,6 @@ describe('ProductService', () => {
         expect(variants[0]).toMatchObject({
           discountType: DiscountType.PERCENT,
           discountValue: '0',
-          stockQuantity: 50,
         });
       });
 

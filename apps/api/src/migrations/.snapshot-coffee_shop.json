@@ -757,6 +757,14 @@
           "keyName": "inventory_movements_pkey",
           "primary": true,
           "unique": true
+        },
+        {
+          "columnNames": ["product_variant_id", "created_at"],
+          "composite": true,
+          "constraint": false,
+          "keyName": "inventory_movements_product_variant_id_created_at_index",
+          "primary": false,
+          "unique": false
         }
       ],
       "checks": [
@@ -769,6 +777,14 @@
       ],
       "triggers": [],
       "foreignKeys": {
+        "inventory_movements_created_by_foreign": {
+          "columnNames": ["created_by"],
+          "constraintName": "inventory_movements_created_by_foreign",
+          "localTableName": "public.inventory_movements",
+          "referencedColumnNames": ["id"],
+          "referencedTableName": "public.users",
+          "deleteRule": "restrict"
+        },
         "inventory_movements_order_id_foreign": {
           "columnNames": ["order_id"],
           "constraintName": "inventory_movements_order_id_foreign",

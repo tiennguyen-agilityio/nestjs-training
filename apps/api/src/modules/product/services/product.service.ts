@@ -224,22 +224,7 @@ export class ProductService {
         discountType:
           patch.discountType ?? variant.discountType ?? DiscountType.PERCENT,
         discountValue: patch.discountValue ?? variant.discountValue ?? '0',
-        stockQuantity: patch.stockQuantity ?? variant.stockQuantity,
       };
-
-      if (next.stockQuantity < variant.reservedQuantity) {
-        throw new ValidationException([
-          {
-            errCode: ERROR_CODES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED,
-            field: `updateVariants.${index}.stockQuantity`,
-            message: ERROR_MESSAGES.PRODUCT_VARIANT.STOCK_BELOW_RESERVED(
-              variant.reservedQuantity,
-            ),
-            description:
-              ERROR_DESCRIPTIONS.PRODUCT_VARIANT.STOCK_BELOW_RESERVED,
-          },
-        ]);
-      }
 
       const violation = findDiscountRuleViolation(next);
       if (violation) {

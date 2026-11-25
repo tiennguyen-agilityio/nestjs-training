@@ -17,6 +17,7 @@ import { ProductModule } from './modules/product/product.module.js';
 import { CartModule } from './modules/cart/cart.module.js';
 import { ShippingMethodModule } from './modules/shipping-method/shipping-method.module.js';
 import { OrderModule } from './modules/order/order.module.js';
+import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { PaymentModule } from './modules/payment/payment.module.js';
 import { IdempotencyStoreModule } from './modules/idempotency/idempotency.module.js';
 import { OutboxStoreModule } from './modules/outbox/outbox.module.js';
@@ -53,6 +54,7 @@ import {
     CartModule,
     ShippingMethodModule,
     OrderModule,
+    InventoryModule,
     PaymentModule,
     HealthModule,
     ...(process.env.NODE_ENV !== 'production'

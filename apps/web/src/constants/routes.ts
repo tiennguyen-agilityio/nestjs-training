@@ -11,6 +11,7 @@ export const ROUTES = {
   DASHBOARD_USERS: '/dashboard/users',
   DASHBOARD_USERS_ADD: '/dashboard/users/add',
   DASHBOARD_ORDERS: '/dashboard/orders',
+  DASHBOARD_INVENTORY: '/dashboard/inventory',
   DASHBOARD_SHIPPING_METHODS: '/dashboard/shipping-methods',
   DASHBOARD_SHIPPING_METHODS_ADD: '/dashboard/shipping-methods/add',
   SIGN_IN: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL ?? '/sign-in',
@@ -39,6 +40,11 @@ export function dashboardOrderPath(orderNumber: string): string {
   return `${ROUTES.DASHBOARD_ORDERS}/${encodeURIComponent(orderNumber)}`
 }
 
+/** A variant's stock history on the dashboard. */
+export function dashboardInventoryHistoryPath(variantId: string): string {
+  return `${ROUTES.DASHBOARD_INVENTORY}/${encodeURIComponent(variantId)}`
+}
+
 export function dashboardEditPath(base: string, id: string): string {
   return `${base}/${encodeURIComponent(id)}/edit`
 }
@@ -58,4 +64,6 @@ export const API_ROUTES = {
   ORDERS: `${API_BASE_URL}/api/v1/orders`,
   SHIPPING_METHODS: `${API_BASE_URL}/api/v1/shipping-methods`,
   CART: `${API_BASE_URL}/api/v1/cart`,
+  INVENTORY: `${API_BASE_URL}/api/v1/inventory`,
+  PRODUCT_VARIANTS: `${API_BASE_URL}/api/v1/product-variants`,
 }

@@ -111,12 +111,11 @@ describe('buildVariantUpdates', () => {
         price: 120,
         discountType: DiscountType.PERCENT,
         discountValue: 10,
-        stockQuantity: 30,
       },
     ])
   })
 
-  it('sends size, unit and stockQuantity', () => {
+  it('buildVariantUpdates leaves out stockQuantity', () => {
     expect(
       buildVariantUpdates(
         product([variant()]),
@@ -130,7 +129,6 @@ describe('buildVariantUpdates', () => {
         price: 100,
         discountType: DiscountType.PERCENT,
         discountValue: 10,
-        stockQuantity: 5,
       },
     ])
   })
@@ -205,12 +203,11 @@ describe('updateProductErrorTarget', () => {
 
   it('maps updateVariants.0.size', () => {
     expect(target('updateVariants.0.size')).toBe('size')
-    expect(target('updateVariants.0.stockQuantity')).toBe('stockQuantity')
   })
 
   it('maps updateVariants.0 fields', () => {
     expect(target('updateVariants.0.discountValue')).toBe('discountValue')
-    expect(target('updateVariants.0.stockQuantity')).toBe('stockQuantity')
+    expect(target('updateVariants.0.stockQuantity')).toBeUndefined()
     expect(target('updateVariants.0.id')).toBeUndefined()
   })
 

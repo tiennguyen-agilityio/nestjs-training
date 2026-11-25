@@ -17,6 +17,7 @@ describe('ProductVariantService', () => {
   let productVariantRepository: {
     findById: Mock;
     findWithProduct: Mock;
+    findActiveWithProduct: Mock;
     findManyWithProduct: Mock;
     reserve: Mock;
     release: Mock;
@@ -51,6 +52,7 @@ describe('ProductVariantService', () => {
     productVariantRepository = {
       findById: vi.fn(),
       findWithProduct: vi.fn(),
+      findActiveWithProduct: vi.fn(),
       findManyWithProduct: vi.fn(),
       reserve: vi.fn(),
       release: vi.fn(),
@@ -180,6 +182,32 @@ describe('ProductVariantService', () => {
         'product-id-1',
       );
       expect(result).toBe(variants);
+    });
+  });
+
+  describe('findActive', () => {
+    it('findActive returns a variant whose product is not deleted', async () => {
+      const variant = buildVariant();
+      productVariantRepository.findActiveWithProduct.mockResolvedValue(variant);
+
+      await expect(service.findActive('variant-id-1')).resolves.toBe(variant);
+      expect(
+        productVariantRepository.findActiveWithProduct,
+      ).toHaveBeenCalledWith('variant-id-1');
+    });
+
+    it('findActive of a deleted variant throws productVariantNotFound', async () => {
+      productVariantRepository.findActiveWithProduct.mockResolvedValue(null);
+
+      const error = await service
+        .findActive('variant-id-1')
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(ItemNotFoundException);
+      expect((error as ItemNotFoundException).getErrors()[0]).toMatchObject({
+        errCode: ERROR_CODES.PRODUCT_VARIANT.NOT_FOUND,
+        field: 'id',
+      });
     });
   });
 

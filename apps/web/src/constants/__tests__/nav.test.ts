@@ -35,6 +35,17 @@ describe('nav constants', () => {
     expect(entry?.disabled).toBeFalsy()
   })
 
+  it('lists an enabled Inventory entry right after Shipping methods', () => {
+    const shippingIndex = DASHBOARD_MENU.findIndex(
+      (item) => item.label === 'Shipping methods',
+    )
+    const entry = DASHBOARD_MENU[shippingIndex + 1]
+
+    expect(entry?.label).toBe('Inventory')
+    expect(entry?.href).toBe(ROUTES.DASHBOARD_INVENTORY)
+    expect(entry?.disabled).toBeFalsy()
+  })
+
   it('only disables brew guides, subscriptions, and contact in header', () => {
     const disabledByLabel = MENU.filter((item) => item.disabled).map(
       (item) => item.label,

@@ -20,6 +20,7 @@ export const VALIDATION_RULES = {
   },
   STOCK_QUANTITY: {
     MIN: 0,
+    MAX: 1_000_000,
   },
   CART_QUANTITY: {
     MIN: 1,
@@ -67,5 +68,10 @@ export const VALIDATION_RULES = {
     POSTAL_CODE_MAX_LENGTH: 20,
     NOTE_MAX_LENGTH: 1000,
     NUMBER_MAX_LENGTH: 20,
+  },
+  INVENTORY: {
+    // Available quantity (stock − reserved) at or below this is LOW.
+    LOW_STOCK_THRESHOLD: 5,
+    REASON: { MIN: 2, MAX: 255 },
   },
 } as const;

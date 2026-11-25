@@ -172,9 +172,6 @@ export function buildVariantUpdates(
       price: values.price,
       discountType: values.discountType,
       discountValue: values.discountValue,
-      ...(values.stockQuantity !== '' && {
-        stockQuantity: values.stockQuantity,
-      }),
     },
   ]
 }
@@ -288,7 +285,6 @@ export function createProductErrorTarget(
 const UPDATE_VARIANT_FORM_FIELDS = [
   'price',
   'discountValue',
-  'stockQuantity',
   'size',
   'unit',
 ] as const
