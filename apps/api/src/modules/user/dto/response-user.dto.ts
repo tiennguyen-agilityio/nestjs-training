@@ -22,6 +22,13 @@ export class ResponseUserDto {
   @ApiPropertyOptional({ nullable: true, type: String })
   avatarUrl: string | null = null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description: 'Only on GET /users/me',
+  })
+  phoneNumber?: string | null;
+
   @ApiPropertyOptional({ nullable: true, type: Date })
   deletedAt: Date | null = null;
 
@@ -36,7 +43,7 @@ export class ResponseUserDto {
 
   static fromEntity(
     user: User,
-    options: ResponseOptions = {},
+    options: ResponseOptions & { withPhone?: boolean } = {},
   ): ResponseUserDto {
     const dto = new ResponseUserDto();
     dto.id = user.id;
@@ -47,6 +54,7 @@ export class ResponseUserDto {
     dto.role = user.role;
     dto.status = user.status;
     dto.avatarUrl = user.avatarUrl;
+    if (options.withPhone) dto.phoneNumber = user.phoneNumber;
     dto.deletedAt = user.deletedAt;
     if (options.withAudit) Object.assign(dto, auditFieldsOf(user));
     return dto;

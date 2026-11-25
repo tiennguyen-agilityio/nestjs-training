@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { UserController } from './user.controller.js';
 import { UserService } from '../services/user.service.js';
+import { UserAddressService } from '../services/user-address.service.js';
 import { User } from '../entities/user.entity.js';
 import { ResponseUserDto } from '../dto/response-user.dto.js';
 import { UserRole, UserStatus } from '@repo/constants';
@@ -24,6 +25,7 @@ describe('UserController', () => {
     updateByAdmin: Mock;
     remove: Mock;
   };
+  let userAddressService: { findMine: Mock };
 
   const user = {
     id: 'user-id-1',
@@ -57,10 +59,14 @@ describe('UserController', () => {
       updateByAdmin: vi.fn(),
       remove: vi.fn(),
     };
+    userAddressService = { findMine: vi.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UserController],
-      providers: [{ provide: UserService, useValue: userService }],
+      providers: [
+        { provide: UserService, useValue: userService },
+        { provide: UserAddressService, useValue: userAddressService },
+      ],
     }).compile();
 
     controller = module.get(UserController);
@@ -139,10 +145,24 @@ describe('UserController', () => {
     it('returns the response DTO built from the authenticated user, without calling UserService', () => {
       const result = controller.getCurrentUser(user);
 
-      expect(result).toEqual(ResponseUserDto.fromEntity(user));
+      expect(result).toEqual(
+        ResponseUserDto.fromEntity(user, { withPhone: true }),
+      );
       expect(JSON.parse(JSON.stringify(result))).not.toHaveProperty(
         'createdBy',
       );
+    });
+
+    it('getCurrentUser returns phoneNumber', () => {
+      expect(
+        controller.getCurrentUser({
+          ...user,
+          phoneNumber: '0912345678',
+        }),
+      ).toMatchObject({ phoneNumber: '0912345678' });
+      expect(controller.getCurrentUser(user)).toMatchObject({
+        phoneNumber: null,
+      });
     });
 
     it('includes the audit ids for an active admin', () => {
@@ -152,6 +172,57 @@ describe('UserController', () => {
         deletedBy: null,
       });
       expect(userService.findOne).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getMyAddresses', () => {
+    it("getMyAddresses returns the caller's addresses", async () => {
+      const addresses = [
+        {
+          id: 'address-1',
+          userId: 'user-id-1',
+          addressLine: '12 Roast Street',
+          ward: 'Ben Nghe',
+          district: 'District 1',
+          city: 'Ho Chi Minh',
+          postalCode: '700000',
+          isDefault: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      userAddressService.findMine.mockResolvedValue(addresses);
+
+      const result = await controller.getMyAddresses(user);
+
+      expect(userAddressService.findMine).toHaveBeenCalledWith('user-id-1');
+      expect(result).toBe(addresses);
+    });
+  });
+
+  describe('admin user responses', () => {
+    it('admin user responses leave phoneNumber out', async () => {
+      const withPhone = { ...user, phoneNumber: '0912345678' } as User;
+      userService.findAll.mockResolvedValue({
+        data: [withPhone],
+        meta: { limit: 10, currentPage: 1, pageCount: 1, totalCount: 1 },
+      });
+      userService.findOne.mockResolvedValue(withPhone);
+      userService.updateByAdmin.mockResolvedValue(withPhone);
+
+      const list = await controller.findAll({ page: 1, limit: 10 }, adminUser);
+      const detail = await controller.findOne({ id: 'user-id-1' });
+      const updated = await controller.update(
+        { id: 'user-id-1' },
+        { firstName: 'Janet' },
+        adminUser,
+      );
+
+      const json = (value: unknown) =>
+        JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+      expect(json(list.data[0])).not.toHaveProperty('phoneNumber');
+      expect(json(detail)).not.toHaveProperty('phoneNumber');
+      expect(json(updated)).not.toHaveProperty('phoneNumber');
     });
   });
 
