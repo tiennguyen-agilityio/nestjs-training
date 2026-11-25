@@ -22,6 +22,7 @@ import {
   formatOrderDateTime,
   getCancelOrderErrorMessage,
   chargeMethodOf,
+  refundableOf,
   getOrderSuccessHeadingKind,
   getOrderSuccessPaymentView,
   getPayByCountdown,
@@ -717,5 +718,51 @@ describe('canRetryPayment', () => {
         NOW,
       ),
     ).toBe(false)
+  })
+})
+
+describe('refundableOf', () => {
+  const refund = (status: PaymentStatus, amount: number) => ({
+    ...charge(PaymentMethod.CARD, status),
+    id: `refund-${status}-${amount}`,
+    type: PaymentType.REFUND,
+    amount,
+  })
+
+  it('refundableOf is the PAID online charge until a refund holds', () => {
+    const paid = charge(PaymentMethod.CARD, PaymentStatus.PAID)
+    expect(
+      refundableOf(
+        orderOf(OrderPaymentStatus.PAID, {
+          payments: [paid, refund(PaymentStatus.FAILED, 10)],
+        }),
+      ),
+    ).toBe(20)
+    for (const held of [PaymentStatus.PENDING, PaymentStatus.PAID]) {
+      expect(
+        refundableOf(
+          orderOf(OrderPaymentStatus.PARTIALLY_REFUNDED, {
+            payments: [paid, refund(held, 5)],
+          }),
+        ),
+      ).toBe(0)
+    }
+  })
+
+  it('refundableOf is 0 for COD', () => {
+    expect(
+      refundableOf(
+        orderOf(OrderPaymentStatus.PAID, {
+          payments: [charge(PaymentMethod.COD, PaymentStatus.PAID)],
+        }),
+      ),
+    ).toBe(0)
+    expect(
+      refundableOf(
+        orderOf(OrderPaymentStatus.PENDING, {
+          payments: [charge(PaymentMethod.CARD, PaymentStatus.PENDING)],
+        }),
+      ),
+    ).toBe(0)
   })
 })

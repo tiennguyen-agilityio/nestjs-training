@@ -17,3 +17,8 @@ export interface PaymentCheckoutExpirePayload {
   method: PaymentMethod;
   checkoutSessionId: string;
 }
+
+/** `payment.refund`: send a PENDING REFUND row to the provider that took the charge. */
+export interface PaymentRefundPayload {
+  paymentId: string;
+}

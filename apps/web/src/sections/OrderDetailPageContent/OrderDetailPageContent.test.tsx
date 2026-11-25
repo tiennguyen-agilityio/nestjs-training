@@ -12,7 +12,11 @@ import {
 } from '@repo/constants'
 
 import OrderDetailPageContent from '@/sections/OrderDetailPageContent'
-import { useCancelOrder, useOrderDetail } from '@/hooks/useOrder'
+import {
+  useCancelOrder,
+  useOrderDetail,
+  useRetryRefund,
+} from '@/hooks/useOrder'
 import {
   API_FALLBACK_ERRORS,
   DIALOG_MESSAGES,
@@ -41,6 +45,8 @@ jest.mock('@/hooks/useOrder', () => ({
     mutate: jest.fn(),
     isPending: false,
   })),
+  useCreateRefund: jest.fn(() => ({ mutate: jest.fn(), isPending: false })),
+  useRetryRefund: jest.fn(),
 }))
 jest.mock('sonner', () => ({ toast: { success: jest.fn() } }))
 jest.mock('@/sections/OrderRetryPayment', () => ({
@@ -591,6 +597,112 @@ describe('OrderDetailPageContent', () => {
       render(<OrderDetailPageContent />)
 
       expect(lastFailure()).not.toBeInTheDocument()
+    })
+  })
+
+  describe('refund lines', () => {
+    const retry = jest.fn()
+    const refundLine = (
+      id: string,
+      status: PaymentStatus,
+      amount: number,
+      failureReason: string | null = null,
+    ): OrderPayment => ({
+      ...charge,
+      id,
+      type: PaymentType.REFUND,
+      method: PaymentMethod.CARD,
+      status,
+      amount,
+      failureReason,
+    })
+    const refundedOrder: OrderDetail = {
+      ...order,
+      status: OrderStatus.CANCELLED,
+      paymentStatus: OrderPaymentStatus.PAID,
+      payments: [
+        {
+          ...charge,
+          method: PaymentMethod.CARD,
+          status: PaymentStatus.PAID,
+          transactionId: 'pi_1',
+        },
+        refundLine('refund-pending', PaymentStatus.PENDING, 5),
+        refundLine(
+          'refund-failed',
+          PaymentStatus.FAILED,
+          3,
+          'lost_or_stolen_card',
+        ),
+      ],
+    }
+
+    beforeEach(() => {
+      mockUseOrderDetail.mockReturnValue(state({ order: refundedOrder }))
+      jest.mocked(useRetryRefund).mockReturnValue({
+        mutate: retry,
+        isPending: false,
+      } as unknown as ReturnType<typeof useRetryRefund>)
+    })
+
+    it('PaymentPanel labels a pending refund and shows a failed one only to the admin', () => {
+      const { unmount } = render(<OrderDetailPageContent />)
+
+      const shopperPayments = section('Payment')
+      expect(
+        within(shopperPayments).getByText('Refund pending'),
+      ).toBeInTheDocument()
+      expect(
+        within(shopperPayments).queryByText(/lost_or_stolen_card/),
+      ).not.toBeInTheDocument()
+      unmount()
+
+      render(<OrderDetailPageContent variant="dashboard" />)
+      const adminPayments = section('Payment')
+      expect(
+        within(adminPayments).getByText(/lost_or_stolen_card/),
+      ).toBeInTheDocument()
+      expect(
+        within(adminPayments).getByText('Refund pending'),
+      ).toBeInTheDocument()
+    })
+
+    it('PaymentPanel retries a failed refund', async () => {
+      const user = userEvent.setup()
+      render(<OrderDetailPageContent variant="dashboard" />)
+
+      await user.click(
+        within(section('Payment')).getByRole('button', {
+          name: 'Retry refund',
+        }),
+      )
+
+      expect(retry).toHaveBeenCalledWith(
+        { paymentId: 'refund-failed' },
+        expect.any(Object),
+      )
+    })
+
+    it('PaymentPanel offers no Retry refund on a refund already retried', () => {
+      mockUseOrderDetail.mockReturnValue(
+        state({
+          order: {
+            ...refundedOrder,
+            payments: refundedOrder.payments.map((payment) =>
+              payment.id === 'refund-failed'
+                ? { ...payment, retriedAt: '2026-11-25T10:00:00.000Z' }
+                : payment,
+            ),
+          },
+        }),
+      )
+      render(<OrderDetailPageContent variant="dashboard" />)
+
+      expect(
+        within(section('Payment')).queryByRole('button', {
+          name: 'Retry refund',
+        }),
+      ).not.toBeInTheDocument()
     })
   })
 })

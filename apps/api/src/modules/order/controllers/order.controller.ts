@@ -15,18 +15,23 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OrderService } from '../services/order.service.js';
 import {
+  createRefundSchema,
   orderParamSchema,
   orderQuerySchema,
   placeOrderSchema,
   updateOrderShippingStatusSchema,
   updateOrderStatusSchema,
+  type CreateRefundInput,
   type OrderParam,
   type OrderQueryInput,
   type PlaceOrderInput,
   type UpdateOrderShippingStatusInput,
   type UpdateOrderStatusInput,
 } from '../dto/order.schema.js';
-import { ResponseOrderDto } from '../dto/response-order.dto.js';
+import {
+  ResponseOrderDto,
+  ResponsePaymentDto,
+} from '../dto/response-order.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
 import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
 import { isActiveAdmin } from '../../../common/utils/user.util.js';
@@ -242,7 +247,7 @@ export class OrderController {
   @ApiOperation({
     summary: "Change any order's status (admin)",
     description:
-      "Allowed: PENDING → CONFIRMED or CANCELLED; CONFIRMED → COMPLETED or CANCELLED. CONFIRMED needs a cash on delivery order or a PAID charge; CANCELLED needs shipping PENDING and no charge held for review; COMPLETED needs shipping DELIVERED. Any other move returns 409 and saves nothing. CANCELLED does the shopper cancel's steps in one transaction: each item's held stock is released (RELEASE), PENDING charges become FAILED and an open checkout session is expired through the outbox; a PAID charge stays PAID (no refund). A UUID looks up by id, anything else by orderNumber.",
+      "Allowed: PENDING → CONFIRMED or CANCELLED; CONFIRMED → COMPLETED or CANCELLED. CONFIRMED needs a cash on delivery order or a PAID charge; CANCELLED needs shipping PENDING and no charge held for review; COMPLETED needs shipping DELIVERED. Any other move returns 409 and saves nothing. CANCELLED does the shopper cancel's steps in one transaction: each item's held stock is released (RELEASE), PENDING charges become FAILED and an open checkout session is expired through the outbox; what is not refunded of a PAID CARD or PAYPAL charge is refunded through the outbox. A UUID looks up by id, anything else by orderNumber.",
   })
   @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
   @ApiStatusChangeErrors(
@@ -281,7 +286,7 @@ export class OrderController {
   @ApiOperation({
     summary: "Change any order's shipping status (admin)",
     description:
-      'Allowed: PENDING → SHIPPING; SHIPPING → DELIVERED or RETURNED, only while the order is CONFIRMED; RETURNED also needs no charge held for review. Any other move returns 409 and saves nothing. DELIVERED records a SALE per item (stock and held stock both drop) and marks a cash on delivery charge PAID. RETURNED runs the cancel steps and makes the order CANCELLED; a PAID charge stays PAID. A UUID looks up by id, anything else by orderNumber.',
+      'Allowed: PENDING → SHIPPING; SHIPPING → DELIVERED or RETURNED, only while the order is CONFIRMED; RETURNED also needs no charge held for review. Any other move returns 409 and saves nothing. DELIVERED records a SALE per item (stock and held stock both drop) and marks a cash on delivery charge PAID. RETURNED runs the cancel steps and makes the order CANCELLED; what is not refunded of a PAID CARD or PAYPAL charge is refunded through the outbox. A UUID looks up by id, anything else by orderNumber.',
   })
   @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
   @ApiStatusChangeErrors(
@@ -309,5 +314,54 @@ export class OrderController {
       shippingStatus,
       user.id,
     );
+  }
+
+  @Post(':idOrOrderNumber/refunds')
+  @AdminOnly()
+  @IdempotentCreate()
+  @ApiOperation({
+    summary: "Refund part or all of an order's paid online charge (admin)",
+    description:
+      'Adds a PENDING REFUND row with the method of the PAID CARD or PAYPAL charge and queues the refund at the provider through the outbox; the provider webhook sets it PAID or FAILED. An order is refunded once: a second refund returns 409 while a PENDING or PAID refund exists, and `amount` may not exceed the PAID charge. A UUID looks up by id, anything else by orderNumber.',
+  })
+  @ApiDataResponse(HttpStatus.CREATED, ResponsePaymentDto)
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    ERROR_MESSAGES.EXCEPTION.VALIDATION_FAILED,
+  )
+  @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.ORDER.NOT_FOUND, {
+    errCode: ERROR_CODES.ORDER.NOT_FOUND,
+    field: 'idOrOrderNumber',
+    description: ERROR_DESCRIPTIONS.ORDER.NOT_FOUND,
+  })
+  @ApiErrorResponse(
+    HttpStatus.CONFLICT,
+    ERROR_MESSAGES.ORDER.REFUND_EXCEEDS_PAID,
+    {
+      errCode: ERROR_CODES.ORDER.REFUND_EXCEEDS_PAID,
+      field: 'amount',
+      description: ERROR_DESCRIPTIONS.ORDER.REFUND_EXCEEDS_PAID('12.50'),
+    },
+  )
+  @ApiErrorResponse(HttpStatus.CONFLICT, ERROR_MESSAGES.ORDER.NOT_REFUNDABLE, {
+    errCode: ERROR_CODES.ORDER.NOT_REFUNDABLE,
+    field: 'amount',
+    description: ERROR_DESCRIPTIONS.ORDER.NOT_REFUNDABLE,
+  })
+  @ApiErrorResponse(
+    HttpStatus.CONFLICT,
+    ERROR_MESSAGES.ORDER.ALREADY_REFUNDED,
+    {
+      errCode: ERROR_CODES.ORDER.ALREADY_REFUNDED,
+      field: 'amount',
+      description: ERROR_DESCRIPTIONS.ORDER.ALREADY_REFUNDED,
+    },
+  )
+  refund(
+    @AuthUser() user: User,
+    @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
+    @Body({ schema: createRefundSchema }) { amount }: CreateRefundInput,
+  ): Promise<ResponsePaymentDto> {
+    return this.orderService.refund(idOrOrderNumber, amount, user.id);
   }
 }

@@ -5,7 +5,13 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowRight } from 'lucide-react'
-import { OrderStatus, PaymentType, ShippingStatus } from '@repo/constants'
+import { toast } from 'sonner'
+import {
+  OrderStatus,
+  PaymentStatus,
+  PaymentType,
+  ShippingStatus,
+} from '@repo/constants'
 
 // Types
 import type { OrderDetail, OrderPayment } from '@/types/order'
@@ -22,10 +28,15 @@ import { PAYMENT_METHOD_LABELS } from '@/constants/order'
 import { ROUTES, dashboardOrderPath } from '@/constants/routes'
 
 // Hooks
-import { useCancelOrder, useOrderDetail } from '@/hooks/useOrder'
+import {
+  useCancelOrder,
+  useOrderDetail,
+  useRetryRefund,
+} from '@/hooks/useOrder'
 
 // Utils
 import { cn } from '@/utils/styles'
+import { getErrorMessage } from '@/utils/form'
 import { formatPrice } from '@/utils/common'
 import {
   formatOrderDateTime,
@@ -42,6 +53,7 @@ import ConfirmActionDialog from '@/components/ConfirmActionDialog'
 import PageHeader from '@/components/PageHeader'
 import OrderRetryPayment from '@/sections/OrderRetryPayment'
 import OrderStatusPanel from '@/sections/OrderStatusPanel'
+import OrderRefundPanel from '@/sections/OrderRefundPanel'
 
 export interface OrderDetailPageContentProps {
   className?: string
@@ -254,11 +266,24 @@ function ProgressPanel({ order }: { order: OrderDetail }) {
 function PaymentPanel({
   order,
   canRetry,
+  isAdmin,
 }: {
   order: OrderDetail
   /** The shopper's page offers "Retry payment"; the admin's does not. */
   canRetry: boolean
+  /** The admin sees failed refunds and can retry them; the shopper does not. */
+  isAdmin: boolean
 }) {
+  const retryRefund = useRetryRefund()
+  const [retryError, setRetryError] = useState<string | null>(null)
+  const payments = order.payments.filter(
+    (payment) =>
+      isAdmin ||
+      !(
+        payment.type === PaymentType.REFUND &&
+        payment.status === PaymentStatus.FAILED
+      ),
+  )
   const charge = newestChargeOf(order.payments)
   const status = getPaymentStatusPresentation(order.paymentStatus)
   const rows: [string, ReactNode][] = [
@@ -295,7 +320,7 @@ function PaymentPanel({
           </div>
         ))}
       </dl>
-      {order.payments.length > 0 && (
+      {payments.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-outline-variant/40">
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-container text-xs uppercase tracking-wider text-on-surface-variant">
@@ -306,8 +331,13 @@ function PaymentPanel({
               </tr>
             </thead>
             <tbody>
-              {order.payments.map((payment) => {
+              {payments.map((payment) => {
                 const isRefund = payment.type === PaymentType.REFUND
+                const canRetryRefund =
+                  isAdmin &&
+                  isRefund &&
+                  payment.status === PaymentStatus.FAILED &&
+                  !payment.retriedAt
                 return (
                   <tr
                     key={payment.id}
@@ -324,8 +354,35 @@ function PaymentPanel({
                       </span>
                     </td>
                     <td className="px-3 py-2">
-                      {payment.status.charAt(0) +
-                        payment.status.slice(1).toLowerCase()}
+                      {isRefund && payment.status === PaymentStatus.PENDING
+                        ? 'Refund pending'
+                        : payment.status.charAt(0) +
+                          payment.status.slice(1).toLowerCase()}
+                      {canRetryRefund && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-1 block"
+                          disabled={retryRefund.isPending}
+                          onClick={() => {
+                            setRetryError(null)
+                            retryRefund.mutate(
+                              { paymentId: payment.id },
+                              {
+                                onSuccess: () =>
+                                  toast.success(
+                                    SUCCESS_MESSAGES.REFUND_RETRIED,
+                                  ),
+                                onError: (error: unknown) =>
+                                  setRetryError(getErrorMessage(error)),
+                              },
+                            )
+                          }}
+                        >
+                          Retry refund
+                        </Button>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {isRefund ? '−' : ''}
@@ -337,6 +394,11 @@ function PaymentPanel({
             </tbody>
           </table>
         </div>
+      )}
+      {retryError && (
+        <p className="text-sm text-destructive" role="alert">
+          {retryError}
+        </p>
       )}
       {canRetry && <OrderRetryPayment order={order} />}
     </Panel>
@@ -545,10 +607,15 @@ export default function OrderDetailPageContent({
                 <ItemsPanel order={order} />
                 <ProgressPanel order={order} />
                 {isDashboard && <OrderStatusPanel order={order} />}
+                {isDashboard && <OrderRefundPanel order={order} />}
               </div>
               <div className="flex min-w-0 flex-col gap-6">
                 {isDashboard && <CustomerPanel order={order} />}
-                <PaymentPanel order={order} canRetry={!isDashboard} />
+                <PaymentPanel
+                  order={order}
+                  canRetry={!isDashboard}
+                  isAdmin={isDashboard}
+                />
                 <ShipToPanel order={order} />
                 {!isDashboard && <CancelPanel order={order} />}
               </div>

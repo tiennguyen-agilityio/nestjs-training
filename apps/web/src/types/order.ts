@@ -62,6 +62,7 @@ export interface PlacedOrderPayment {
   transactionId: string | null
   completedAt: string | null
   failureReason: string | null
+  retriedAt?: string | null
   createdAt: string
   updatedAt: string
 }

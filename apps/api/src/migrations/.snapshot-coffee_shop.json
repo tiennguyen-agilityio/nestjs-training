@@ -798,7 +798,10 @@
           "unique": true
         },
         {
-          "columnNames": ["product_variant_id", "created_at"],
+          "columnNames": [
+            "product_variant_id",
+            "created_at"
+          ],
           "composite": true,
           "constraint": false,
           "keyName": "inventory_movements_product_variant_id_created_at_index",
@@ -817,10 +820,14 @@
       "triggers": [],
       "foreignKeys": {
         "inventory_movements_created_by_foreign": {
-          "columnNames": ["created_by"],
+          "columnNames": [
+            "created_by"
+          ],
           "constraintName": "inventory_movements_created_by_foreign",
           "localTableName": "public.inventory_movements",
-          "referencedColumnNames": ["id"],
+          "referencedColumnNames": [
+            "id"
+          ],
           "referencedTableName": "public.users",
           "deleteRule": "restrict"
         },
@@ -1784,6 +1791,23 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "uuid"
+        },
+        "retried_at": {
+          "name": "retried_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
         },
         "status": {
           "name": "status",

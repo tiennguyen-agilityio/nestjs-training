@@ -7,6 +7,9 @@ import {
   type CheckoutRequest,
   type CheckoutSession,
   type GatewayEvent,
+  type RefundEvent,
+  type RefundOutcome,
+  type RefundRequest,
   type VerifiedWebhook,
 } from './payment-gateway.js';
 import { STRIPE_CLIENT } from './stripe-client.provider.js';
@@ -27,6 +30,14 @@ const FAILED_REASON = 'Payment failed';
 const MISSING_RESOURCE = 'resource_missing';
 
 const toSeconds = (date: Date): number => Math.floor(date.getTime() / 1000);
+
+const REFUND_FAILED_REASON = 'Stripe could not refund the payment';
+
+const refundStatusOf = (status: string | null): RefundEvent['status'] => {
+  if (status === 'succeeded') return 'succeeded';
+  if (status === 'failed' || status === 'canceled') return 'failed';
+  return 'pending';
+};
 
 @Injectable()
 export class StripePaymentGateway extends PaymentGateway {
@@ -101,6 +112,45 @@ export class StripePaymentGateway extends PaymentGateway {
     return Promise.resolve(null);
   }
 
+  async refund(request: RefundRequest): Promise<RefundOutcome> {
+    let refund: Stripe.Refund;
+    try {
+      refund = await this.stripe.refunds.create(
+        {
+          payment_intent: request.chargeTransactionId,
+          amount: request.amountCents,
+          metadata: { paymentId: request.refundId },
+        },
+        { idempotencyKey: `refund-${request.refundId}` },
+      );
+    } catch (error) {
+      if (error instanceof Stripe.errors.StripeInvalidRequestError) {
+        return {
+          kind: 'failed',
+          refundTransactionId: null,
+          reason: error.message,
+        };
+      }
+      throw this.translate(error);
+    }
+    const status = refundStatusOf(refund.status);
+    if (status === 'succeeded') {
+      return {
+        kind: 'succeeded',
+        refundTransactionId: refund.id,
+        refundedAt: new Date(refund.created * 1000),
+      };
+    }
+    if (status === 'pending') {
+      return { kind: 'pending', refundTransactionId: refund.id };
+    }
+    return {
+      kind: 'failed',
+      refundTransactionId: refund.id,
+      reason: refund.failure_reason ?? REFUND_FAILED_REASON,
+    };
+  }
+
   async expireCheckout(sessionId: string): Promise<void> {
     if (!(await this.findCheckout(sessionId))?.open) return;
     try {
@@ -150,7 +200,9 @@ export class StripePaymentGateway extends PaymentGateway {
     };
   }
 
-  private toGatewayEvent(event: Stripe.Event): GatewayEvent | null {
+  private toGatewayEvent(
+    event: Stripe.Event,
+  ): GatewayEvent | RefundEvent | null {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
@@ -191,9 +243,35 @@ export class StripePaymentGateway extends PaymentGateway {
             }
           : null;
       }
+      case 'refund.created':
+      case 'refund.updated':
+      case 'refund.failed':
+        return this.toRefundEvent(event.data.object);
       default:
         return null;
     }
+  }
+
+  private toRefundEvent(refund: Stripe.Refund): RefundEvent | null {
+    const intent = refund.payment_intent;
+    const chargeTransactionId =
+      typeof intent === 'string' ? intent : intent?.id;
+    if (!chargeTransactionId) return null;
+    const status = refundStatusOf(refund.status);
+    return {
+      kind: 'refund',
+      refundTransactionId: refund.id,
+      chargeTransactionId,
+      refundId: refund.metadata?.paymentId ?? null,
+      amountCents: refund.amount,
+      currency: refund.currency,
+      status,
+      reason:
+        status === 'failed'
+          ? (refund.failure_reason ?? REFUND_FAILED_REASON)
+          : null,
+      at: new Date(refund.created * 1000),
+    };
   }
 
   private toSession(session: Stripe.Checkout.Session): CheckoutSession {

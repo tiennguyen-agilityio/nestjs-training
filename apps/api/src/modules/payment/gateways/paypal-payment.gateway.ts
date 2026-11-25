@@ -6,6 +6,9 @@ import {
   type CaptureOutcome,
   type CheckoutRequest,
   type CheckoutSession,
+  type RefundEvent,
+  type RefundOutcome,
+  type RefundRequest,
   type VerifiedWebhook,
 } from './payment-gateway.js';
 import {
@@ -67,17 +70,37 @@ interface PayPalError {
   details?: { issue?: string; description?: string }[];
 }
 
+interface PayPalRefund {
+  id?: string;
+  status?: string;
+  custom_id?: string;
+  create_time?: string;
+  status_details?: { reason?: string };
+  amount?: { value?: string; currency_code?: string };
+  links?: PayPalLink[];
+}
+
 interface PayPalEvent {
   id?: string;
   event_type?: string;
-  resource?: {
-    id?: string;
-    custom_id?: string;
-    create_time?: string;
-    status_details?: { reason?: string };
+  resource?: PayPalRefund & {
     supplementary_data?: { related_ids?: { order_id?: string } };
   };
 }
+
+const REFUND_EVENT_TYPES = new Set([
+  'PAYMENT.CAPTURE.REFUNDED',
+  'PAYMENT.REFUND.PENDING',
+  'PAYMENT.REFUND.FAILED',
+]);
+const REFUND_REFUSED_REASON = 'PayPal refused the refund';
+const CAPTURE_HREF = /\/captures\/([^/?#]+)/;
+
+const refundStatusOf = (status: string | undefined): RefundEvent['status'] => {
+  if (status === 'COMPLETED') return 'succeeded';
+  if (status === 'FAILED' || status === 'CANCELLED') return 'failed';
+  return 'pending';
+};
 
 const toAmount = (cents: number): string => (cents / 100).toFixed(2);
 
@@ -223,6 +246,69 @@ export class PayPalPaymentGateway extends PaymentGateway {
     throw this.rejected();
   }
 
+  async refund(request: RefundRequest): Promise<RefundOutcome> {
+    const response = await this.call<PayPalRefund>(
+      'POST',
+      `/v2/payments/captures/${encodeURIComponent(request.chargeTransactionId)}/refund`,
+      {
+        headers: { 'PayPal-Request-Id': `refund-${request.refundId}` },
+        body: {
+          amount: {
+            value: toAmount(request.amountCents),
+            currency_code: request.currency.toUpperCase(),
+          },
+          custom_id: request.refundId,
+        },
+      },
+    );
+    if (response.status >= CLIENT_ERROR) {
+      return {
+        kind: 'failed',
+        refundTransactionId: null,
+        reason: issueOf(response.body)[0]?.description ?? REFUND_REFUSED_REASON,
+      };
+    }
+    const refund = response.body;
+    const id = refund.id ?? null;
+    const status = refundStatusOf(refund.status);
+    if (status === 'succeeded' && id) {
+      return {
+        kind: 'succeeded',
+        refundTransactionId: id,
+        refundedAt: new Date(refund.create_time ?? Date.now()),
+      };
+    }
+    if (status === 'pending' && id) {
+      return { kind: 'pending', refundTransactionId: id };
+    }
+    return {
+      kind: 'failed',
+      refundTransactionId: id,
+      reason: refund.status_details?.reason ?? REFUND_REFUSED_REASON,
+    };
+  }
+
+  private toRefundEvent(refund: PayPalRefund): RefundEvent | null {
+    const up = refund.links?.find((link) => link.rel === 'up')?.href ?? '';
+    const chargeTransactionId = CAPTURE_HREF.exec(up)?.[1];
+    if (!refund.id || !chargeTransactionId) return null;
+    const status = refundStatusOf(refund.status);
+    return {
+      kind: 'refund',
+      refundTransactionId: refund.id,
+      chargeTransactionId,
+      refundId: refund.custom_id ?? null,
+      amountCents: Math.round(Number(refund.amount?.value ?? 0) * 100),
+      currency: (refund.amount?.currency_code ?? 'USD').toLowerCase(),
+      status,
+      reason:
+        status === 'failed'
+          ? (refund.status_details?.reason ?? REFUND_REFUSED_REASON)
+          : null,
+      at: new Date(refund.create_time ?? Date.now()),
+    };
+  }
+
   private capturesOf(order: PayPalOrder | null): PayPalCapture[] {
     const captures = order?.purchase_units?.[0]?.payments?.captures;
     return Array.isArray(captures) ? captures : [];
@@ -279,6 +365,9 @@ export class PayPalPaymentGateway extends PaymentGateway {
 
   private translate(event: PayPalEvent): VerifiedWebhook['event'] {
     const resource = event.resource ?? {};
+    if (REFUND_EVENT_TYPES.has(event.event_type ?? '')) {
+      return this.toRefundEvent(resource);
+    }
     const checkoutSessionId =
       resource.supplementary_data?.related_ids?.order_id;
     switch (event.event_type) {

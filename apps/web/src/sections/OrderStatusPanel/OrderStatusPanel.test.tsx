@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuth } from '@clerk/nextjs'
@@ -6,6 +12,9 @@ import { toast } from 'sonner'
 import {
   OrderPaymentStatus,
   OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
   ShippingStatus,
 } from '@repo/constants'
 
@@ -31,6 +40,7 @@ const baseOrder = {
   status: OrderStatus.PENDING,
   shippingStatus: ShippingStatus.PENDING,
   paymentStatus: OrderPaymentStatus.UNPAID,
+  payments: [] as OrderDetail['payments'],
   allowedStatuses: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
   allowedShippingStatuses: [] as ShippingStatus[],
 } as OrderDetail
@@ -170,23 +180,6 @@ describe('OrderStatusPanel', () => {
     ).toBe(true)
   })
 
-  it('OrderStatusPanel says the payment is not refunded when a paid order is returned', async () => {
-    const { user } = renderPanel({
-      ...shippingOrder,
-      paymentStatus: OrderPaymentStatus.PAID,
-    })
-
-    await choose(user, 'Shipping → Returned')
-    await user.click(updateButton())
-
-    const dialog = await screen.findByRole('alertdialog')
-    expect(
-      within(dialog).getByText(DIALOG_MESSAGES.ORDER.CANCEL.NOT_REFUNDED, {
-        exact: false,
-      }),
-    ).toBeInTheDocument()
-  })
-
   it('OrderStatusPanel asks before marking the order returned', async () => {
     const { user } = renderPanel(shippingOrder)
 
@@ -320,20 +313,52 @@ describe('OrderStatusPanel', () => {
     )
   })
 
-  it('OrderStatusPanel says the payment is not refunded for a paid order', async () => {
-    const { user } = renderPanel({
-      status: OrderStatus.CONFIRMED,
+  it('OrderStatusPanel says the payment will be refunded for a paid online order', async () => {
+    const paidCard = {
       paymentStatus: OrderPaymentStatus.PAID,
+      payments: [
+        {
+          id: 'pay-1',
+          orderId: 'o-1',
+          type: PaymentType.CHARGE,
+          method: PaymentMethod.CARD,
+          status: PaymentStatus.PAID,
+          amount: 34,
+          currency: 'USD',
+          transactionId: 'pi_1',
+          completedAt: null,
+          failureReason: null,
+          createdAt: '2026-11-25T09:00:00.000Z',
+          updatedAt: '2026-11-25T09:00:00.000Z',
+        },
+      ],
+    }
+    const { user } = renderPanel({
+      ...paidCard,
+      status: OrderStatus.CONFIRMED,
+      allowedStatuses: [OrderStatus.CANCELLED],
     })
 
     await choose(user, 'Order → Cancelled')
     await user.click(updateButton())
-
-    const dialog = await screen.findByRole('alertdialog')
+    const cancelDialog = await screen.findByRole('alertdialog')
     expect(
-      within(dialog).getByText(DIALOG_MESSAGES.ORDER.CANCEL.NOT_REFUNDED, {
-        exact: false,
-      }),
+      within(cancelDialog).getByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
+        { exact: false },
+      ),
+    ).toBeInTheDocument()
+    cleanup()
+
+    const returned = renderPanel({ ...paidCard, ...shippingOrder })
+    await choose(returned.user, 'Shipping → Returned')
+    await returned.user.click(updateButton())
+    const returnDialog = await screen.findByRole('alertdialog')
+    expect(
+      within(returnDialog).getByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
+        { exact: false },
+      ),
     ).toBeInTheDocument()
   })
 
@@ -345,9 +370,12 @@ describe('OrderStatusPanel', () => {
 
     const dialog = await screen.findByRole('alertdialog')
     expect(
-      within(dialog).queryByText(DIALOG_MESSAGES.ORDER.CANCEL.NOT_REFUNDED, {
-        exact: false,
-      }),
+      within(dialog).queryByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
+        {
+          exact: false,
+        },
+      ),
     ).toBeNull()
   })
 })

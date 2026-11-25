@@ -55,8 +55,13 @@ export const ERROR_CODES = {
     ITEM_UNAVAILABLE: 'itemUnavailable',
     OUT_OF_STOCK: 'outOfStock',
     STATUS_NOT_ALLOWED: 'statusNotAllowed',
+    REFUND_EXCEEDS_PAID: 'refundExceedsPaid',
+    NOT_REFUNDABLE: 'notRefundable',
+    REFUND_NOT_RETRYABLE: 'refundNotRetryable',
+    ALREADY_REFUNDED: 'alreadyRefunded',
   },
   PAYMENT: {
+    NOT_FOUND: 'paymentNotFound',
     METHOD_NOT_ONLINE: 'paymentMethodNotOnline',
     METHOD_UNAVAILABLE: 'paymentMethodUnavailable',
     NOT_PAYABLE: 'paymentNotPayable',

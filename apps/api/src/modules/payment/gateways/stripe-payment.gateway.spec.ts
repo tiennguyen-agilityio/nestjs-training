@@ -1,7 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { StripePaymentGateway } from './stripe-payment.gateway.js';
-import type { CheckoutRequest } from './payment-gateway.js';
+import type { CheckoutRequest, RefundRequest } from './payment-gateway.js';
 import {
   DependencyUnavailableException,
   InvalidRequestException,
@@ -464,6 +464,142 @@ describe('StripePaymentGateway', () => {
       expect(
         await parse(event('customer.created', { object: 'customer' })),
       ).toBeNull();
+    });
+  });
+
+  describe('refund', () => {
+    const REFUND_ID = '33333333-3333-4333-8333-333333333333';
+    const refundRequest: RefundRequest = {
+      refundId: REFUND_ID,
+      chargeTransactionId: 'pi_test_1',
+      amountCents: 1250,
+      currency: 'usd',
+    };
+    const stripeRefund = (overrides: Record<string, unknown> = {}) =>
+      ({
+        id: 're_test_1',
+        status: 'succeeded',
+        created: 1764061200,
+        failure_reason: null,
+        ...overrides,
+      }) as unknown as Stripe.Refund;
+
+    it('refund creates a Stripe refund keyed by the row id', async () => {
+      const create = vi
+        .spyOn(stripe.refunds, 'create')
+        .mockResolvedValue(stripeRefund() as never);
+
+      await gateway.refund(refundRequest);
+
+      expect(create).toHaveBeenCalledWith(
+        {
+          payment_intent: 'pi_test_1',
+          amount: 1250,
+          metadata: { paymentId: REFUND_ID },
+        },
+        { idempotencyKey: `refund-${REFUND_ID}` },
+      );
+    });
+
+    it('refund maps succeeded, pending and failed', async () => {
+      vi.spyOn(stripe.refunds, 'create')
+        .mockResolvedValueOnce(stripeRefund() as never)
+        .mockResolvedValueOnce(stripeRefund({ status: 'pending' }) as never)
+        .mockResolvedValueOnce(
+          stripeRefund({
+            status: 'failed',
+            failure_reason: 'expired_or_canceled_card',
+          }) as never,
+        );
+
+      await expect(gateway.refund(refundRequest)).resolves.toEqual({
+        kind: 'succeeded',
+        refundTransactionId: 're_test_1',
+        refundedAt: new Date(1764061200 * 1000),
+      });
+      await expect(gateway.refund(refundRequest)).resolves.toEqual({
+        kind: 'pending',
+        refundTransactionId: 're_test_1',
+      });
+      await expect(gateway.refund(refundRequest)).resolves.toEqual({
+        kind: 'failed',
+        refundTransactionId: 're_test_1',
+        reason: 'expired_or_canceled_card',
+      });
+    });
+
+    it('refund returns failed on a StripeInvalidRequestError', async () => {
+      vi.spyOn(stripe.refunds, 'create').mockRejectedValue(
+        new Stripe.errors.StripeInvalidRequestError({
+          message: 'Charge ch_1 has already been refunded.',
+        }),
+      );
+
+      await expect(gateway.refund(refundRequest)).resolves.toEqual({
+        kind: 'failed',
+        refundTransactionId: null,
+        reason: 'Charge ch_1 has already been refunded.',
+      });
+    });
+
+    it('refund rejects on a connection error', async () => {
+      vi.spyOn(stripe.refunds, 'create').mockRejectedValue(
+        new Stripe.errors.StripeConnectionError({ message: 'socket hang up' }),
+      );
+
+      await expect(gateway.refund(refundRequest)).rejects.toBeInstanceOf(
+        DependencyUnavailableException,
+      );
+    });
+
+    it('parseWebhook maps refund.updated to a refund event', async () => {
+      expect(
+        await parse(
+          event('refund.updated', {
+            id: 're_test_1',
+            object: 'refund',
+            payment_intent: 'pi_test_1',
+            amount: 500,
+            currency: 'usd',
+            status: 'succeeded',
+            metadata: {},
+            created: 1764061200,
+          }),
+        ),
+      ).toEqual({
+        kind: 'refund',
+        refundTransactionId: 're_test_1',
+        chargeTransactionId: 'pi_test_1',
+        refundId: null,
+        amountCents: 500,
+        currency: 'usd',
+        status: 'succeeded',
+        reason: null,
+        at: new Date(1764061200 * 1000),
+      });
+    });
+
+    it('parseWebhook maps refund.failed with its reason', async () => {
+      expect(
+        await parse(
+          event('refund.failed', {
+            id: 're_test_2',
+            object: 'refund',
+            payment_intent: 'pi_test_1',
+            amount: 1250,
+            currency: 'usd',
+            status: 'failed',
+            failure_reason: 'lost_or_stolen_card',
+            metadata: { paymentId: REFUND_ID },
+            created: 1764061200,
+          }),
+        ),
+      ).toMatchObject({
+        kind: 'refund',
+        refundId: REFUND_ID,
+        status: 'failed',
+        reason: 'lost_or_stolen_card',
+      });
     });
   });
 

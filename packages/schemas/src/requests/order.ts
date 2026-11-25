@@ -7,7 +7,7 @@ import {
 } from '@repo/constants';
 import { nameField } from '../fields/text.js';
 
-const { ORDER, PHONE } = VALIDATION_RULES;
+const { ORDER, PHONE, PRICE } = VALIDATION_RULES;
 
 const addressField = z.string().trim().min(1).max(ORDER.ADDRESS_MAX_LENGTH);
 
@@ -41,3 +41,13 @@ export const updateOrderShippingStatusSchema = z.object({
 export type UpdateOrderShippingStatusPayload = z.input<
   typeof updateOrderShippingStatusSchema
 >;
+
+export const createRefundSchema = z.object({
+  amount: z
+    .number()
+    .min(0.01)
+    .max(PRICE.MAX)
+    .refine((value) => Math.round(value * 100) / 100 === value),
+});
+
+export type CreateRefundPayload = z.input<typeof createRefundSchema>;

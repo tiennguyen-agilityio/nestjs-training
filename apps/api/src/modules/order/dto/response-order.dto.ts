@@ -64,6 +64,9 @@ export class ResponsePaymentDto {
   @ApiProperty({ type: String, nullable: true })
   failureReason!: string | null;
 
+  @ApiProperty({ type: Date, nullable: true })
+  retriedAt!: Date | null;
+
   createdAt!: Date;
   updatedAt!: Date;
 
@@ -79,6 +82,7 @@ export class ResponsePaymentDto {
     dto.transactionId = payment.transactionId;
     dto.completedAt = payment.completedAt;
     dto.failureReason = payment.failureReason;
+    dto.retriedAt = payment.retriedAt;
     dto.createdAt = payment.createdAt;
     dto.updatedAt = payment.updatedAt;
     return dto;
