@@ -140,6 +140,9 @@ export const PAYMENT_METHOD_LABELS: Readonly<Record<PaymentMethod, string>> = {
   [PaymentMethod.PAYPAL]: 'PayPal',
 }
 
+/** How often the order-success page re-reads the clock for the pay-by countdown. */
+export const ORDER_SUCCESS_COUNTDOWN_TICK_MS = 15_000
+
 export const ORDER_PAYMENT_POLL = {
   INTERVAL_MS: 3000,
   MAX_TRIES: 10,

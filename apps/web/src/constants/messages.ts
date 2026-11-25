@@ -176,6 +176,20 @@ export const NOTICE_MESSAGES = {
       'We are still confirming your payment. Refresh this page in a moment.',
     NOT_COMPLETED: 'Payment not completed.',
     FAILED: 'Payment failed. Try another card.',
+    COD: 'Pay when your order arrives.',
+    PAY_BY_HINT: (minutes: number) =>
+      `${minutes} min left to pay. After that the order is cancelled and its items go back on sale.`,
+    WINDOW_CLOSED: 'Payment window closed.',
+    RETRY_COMING_SOON:
+      'Coming soon: retrying with this method is not available yet.',
+  },
+  /** The order-success page's sub-line under its heading. */
+  ORDER_SUCCESS: {
+    THANK_YOU:
+      'Thank you for choosing CoffeeHub. Your sensory journey begins now.',
+    CONFIRMING: "We're confirming your payment. This page updates on its own.",
+    ACTION_NEEDED: 'Complete your payment to start roasting your order.',
+    CLOSED: 'This order is no longer open for payment.',
   },
   /** A movement's change: `+10 stock`, `−2 reserved`. */
   STOCK_MOVEMENT: {

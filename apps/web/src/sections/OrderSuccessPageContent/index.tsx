@@ -7,20 +7,33 @@ import {
   ArrowRight,
   Check,
   CircleHelp,
+  Clock,
   Download,
   MapPin,
   Share2,
+  TriangleAlert,
+  type LucideIcon,
 } from 'lucide-react'
 
 import Loading from '@/components/Loading'
 import { Button } from '@/components/ui/button'
+import { NOTICE_MESSAGES } from '@/constants/messages'
+import { ORDER_SUCCESS_COUNTDOWN_TICK_MS } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
+import { useNow } from '@/hooks/useNow'
 import { useOrderDetail } from '@/hooks/useOrder'
 import OrderSuccessPayment from '@/sections/OrderSuccessPayment'
 import { useCartStore } from '@/store/useCartStore'
 import type { OrderDetail, PlacedOrder, PlacedOrderItem } from '@/types/order'
 import { formatPrice } from '@/utils/common'
-import { isPlacedOrder } from '@/utils/order'
+import {
+  getOrderSuccessHeadingKind,
+  getOrderSuccessPaymentView,
+  getPayByCountdown,
+  isPlacedOrder,
+  type OrderSuccessHeadingKind,
+} from '@/utils/order'
+import { cn } from '@/utils/styles'
 import { OrderPaymentStatus } from '@repo/constants'
 
 const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
@@ -30,6 +43,44 @@ const weekdayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'long' })
 const isAwaitingPayment = (order: OrderDetail): boolean =>
   order.paymentStatus === OrderPaymentStatus.PENDING ||
   order.paymentStatus === OrderPaymentStatus.FAILED
+
+const PRIMARY_ICON = 'bg-primary text-primary-foreground'
+
+const HEADINGS: Record<
+  OrderSuccessHeadingKind,
+  { title: string; subtitle: string; Icon: LucideIcon; iconClassName: string }
+> = {
+  confirmed: {
+    title: 'Order Confirmed',
+    subtitle: NOTICE_MESSAGES.ORDER_SUCCESS.THANK_YOU,
+    Icon: Check,
+    iconClassName: PRIMARY_ICON,
+  },
+  confirming: {
+    title: 'Order Placed',
+    subtitle: NOTICE_MESSAGES.ORDER_SUCCESS.CONFIRMING,
+    Icon: Clock,
+    iconClassName: PRIMARY_ICON,
+  },
+  actionNeeded: {
+    title: 'Order Placed',
+    subtitle: NOTICE_MESSAGES.ORDER_SUCCESS.ACTION_NEEDED,
+    Icon: TriangleAlert,
+    iconClassName: 'bg-(--warning) text-primary-foreground',
+  },
+  closed: {
+    title: 'Order Placed',
+    subtitle: NOTICE_MESSAGES.ORDER_SUCCESS.CLOSED,
+    Icon: Clock,
+    iconClassName: 'bg-surface-container-high text-on-surface-variant',
+  },
+  placed: {
+    title: 'Order Placed',
+    subtitle: NOTICE_MESSAGES.ORDER_SUCCESS.THANK_YOU,
+    Icon: Check,
+    iconClassName: PRIMARY_ICON,
+  },
+}
 
 const OrderSummaryUnavailable = () => {
   const router = useRouter()
@@ -55,10 +106,15 @@ const OrderSummaryUnavailable = () => {
 
 interface OrderSuccessSummaryProps {
   order: PlacedOrder
+  headingKind: OrderSuccessHeadingKind
   payment?: ReactNode
 }
 
-const OrderSuccessSummary = ({ order, payment }: OrderSuccessSummaryProps) => {
+const OrderSuccessSummary = ({
+  order,
+  headingKind,
+  payment,
+}: OrderSuccessSummaryProps) => {
   const router = useRouter()
   const { clearItemSnapshots } = useCartStore()
 
@@ -86,26 +142,32 @@ const OrderSuccessSummary = ({ order, payment }: OrderSuccessSummaryProps) => {
   const monthLabel = monthFormatter.format(orderDate)
   const dayLabel = dayFormatter.format(orderDate)
   const weekdayLabel = weekdayFormatter.format(orderDate).toUpperCase()
+  const heading = HEADINGS[headingKind]
+  const HeadingIcon = heading.Icon
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-6 md:py-12">
       <div className="mx-auto max-w-3xl text-center">
-        <div className="mx-auto flex size-18 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md">
-          <div className="flex size-8 items-center justify-center rounded-full border-2 border-primary-foreground">
-            <Check className="size-5" aria-hidden />
+        <div
+          className={cn(
+            'mx-auto flex size-18 items-center justify-center rounded-full shadow-md',
+            heading.iconClassName,
+          )}
+        >
+          <div className="flex size-8 items-center justify-center rounded-full border-2 border-current">
+            <HeadingIcon className="size-5" aria-hidden />
           </div>
         </div>
         <h1 className="mt-6 text-5xl font-semibold text-on-surface md:text-6xl">
-          Order Successful
+          {heading.title}
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-on-surface-variant">
-          Thank you for choosing CoffeeHub. Your sensory journey begins now.
+          {heading.subtitle}
         </p>
         <p className="mx-auto mt-3 inline-flex rounded-full bg-primary/10 px-4 py-1 text-xs font-semibold tracking-[0.12em] text-primary uppercase">
           Order ID: {orderNumber}
         </p>
       </div>
-      {payment}
 
       <div className="mt-10 grid gap-5 lg:grid-cols-[1.35fr_1fr]">
         <section className="rounded-2xl bg-surface-container-low p-7">
@@ -175,6 +237,7 @@ const OrderSuccessSummary = ({ order, payment }: OrderSuccessSummaryProps) => {
         </section>
 
         <div className="space-y-4">
+          {payment}
           <section className="rounded-2xl bg-surface-container-low p-6">
             <h3 className="text-xs font-semibold tracking-[0.16em] text-primary uppercase">
               Delivery Address
@@ -281,6 +344,15 @@ const OrderSuccessFromApi = ({
   } = useOrderDetail(orderId, {
     pollWhile: (current) => hasSessionId && isAwaitingPayment(current),
   })
+  const view = order
+    ? getOrderSuccessPaymentView({
+        order,
+        hasSessionId,
+        paymentError,
+        isPollExhausted: isPollExhausted ?? false,
+      })
+    : null
+  const now = useNow(ORDER_SUCCESS_COUNTDOWN_TICK_MS, view?.showRetry ?? false)
 
   if (isLoading) return <Loading size="lg" label="Loading order" />
 
@@ -297,11 +369,14 @@ const OrderSuccessFromApi = ({
     )
   }
 
-  if (!order) return <OrderSummaryUnavailable />
+  if (!order || !view) return <OrderSummaryUnavailable />
+
+  const isExpired = getPayByCountdown(order.expiresAt, now)?.isExpired ?? false
 
   return (
     <OrderSuccessSummary
       order={order}
+      headingKind={getOrderSuccessHeadingKind(view, isExpired)}
       payment={
         <OrderSuccessPayment
           order={order}
@@ -334,7 +409,17 @@ const OrderSuccessPageContent = () => {
 
   if (!isPlacedOrder(snapshot)) return <OrderSummaryUnavailable />
 
-  return <OrderSuccessSummary order={snapshot} />
+  // The snapshot path has no Payment card, so it never asks for a payment.
+  return (
+    <OrderSuccessSummary
+      order={snapshot}
+      headingKind={
+        snapshot.paymentStatus === OrderPaymentStatus.PAID
+          ? 'confirmed'
+          : 'placed'
+      }
+    />
+  )
 }
 
 export default OrderSuccessPageContent

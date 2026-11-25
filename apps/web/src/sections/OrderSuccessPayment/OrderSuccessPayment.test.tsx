@@ -10,11 +10,14 @@ import {
 } from '@repo/constants'
 
 import { ERROR_MESSAGES, NOTICE_MESSAGES } from '@/constants/messages'
+import { PAYMENT_METHOD_LABELS } from '@/constants/order'
 import { useStartPayment } from '@/hooks/usePayment'
 import OrderSuccessPayment, {
   type OrderSuccessPaymentProps,
 } from '@/sections/OrderSuccessPayment'
 import type { OrderDetail } from '@/types/order'
+import { formatPrice } from '@/utils/common'
+import { getPaymentStatusPresentation } from '@/utils/order'
 import { ServiceError } from '@/utils/query'
 
 jest.mock('next/navigation', () => ({ useRouter: jest.fn() }))
@@ -23,18 +26,28 @@ jest.mock('@/hooks/usePayment', () => ({ useStartPayment: jest.fn() }))
 const replace = jest.fn()
 const mutateAsync = jest.fn()
 
-const orderOf = (paymentStatus: OrderPaymentStatus): OrderDetail =>
+const minutesFromNow = (minutes: number) =>
+  new Date(Date.now() + minutes * 60_000).toISOString()
+
+const orderOf = (
+  paymentStatus: OrderPaymentStatus,
+  method: PaymentMethod = PaymentMethod.CARD,
+  overrides: Partial<OrderDetail> = {},
+): OrderDetail =>
   ({
     id: 'o-1',
     orderNumber: 'NB-000123',
     status: OrderStatus.PENDING,
     paymentStatus,
+    totalAmount: 1775.3,
+    expiresAt: null,
+    ...overrides,
     payments: [
       {
         id: 'pay-1',
         orderId: 'o-1',
         type: PaymentType.CHARGE,
-        method: PaymentMethod.CARD,
+        method,
         status: PaymentStatus.PENDING,
         amount: 20,
         currency: 'usd',
@@ -59,7 +72,8 @@ const renderPayment = (props: Partial<OrderSuccessPaymentProps> = {}) =>
   )
 
 const paymentRegion = () => screen.getByRole('region', { name: 'Payment' })
-const payNowButton = () => screen.queryByRole('button', { name: 'Pay now' })
+const retryButton = () =>
+  screen.queryByRole('button', { name: 'Retry payment' })
 
 const hookState = (isPending = false) =>
   jest.mocked(useStartPayment).mockReturnValue({
@@ -84,7 +98,7 @@ describe('OrderSuccessPayment', () => {
     expect(
       within(paymentRegion()).getByText(NOTICE_MESSAGES.ORDER_PAYMENT.PAID),
     ).toBeInTheDocument()
-    expect(payNowButton()).not.toBeInTheDocument()
+    expect(retryButton()).not.toBeInTheDocument()
   })
 
   it('shows Confirming your payment for a PENDING order back with a session', () => {
@@ -98,19 +112,19 @@ describe('OrderSuccessPayment', () => {
         NOTICE_MESSAGES.ORDER_PAYMENT.CONFIRMING,
       ),
     ).toBeInTheDocument()
-    expect(payNowButton()).not.toBeInTheDocument()
+    expect(retryButton()).not.toBeInTheDocument()
   })
 
-  it('shows the start failure reason next to Pay now', () => {
+  it('shows the start failure reason next to Retry payment', () => {
     renderPayment({ paymentError: 'paymentOrderExpired' })
 
     expect(
       within(paymentRegion()).getByText(ERROR_MESSAGES.PAYMENT_ORDER_EXPIRED),
     ).toBeInTheDocument()
-    expect(payNowButton()).toBeInTheDocument()
+    expect(retryButton()).toBeInTheDocument()
   })
 
-  it('Pay now starts the payment and replaces the location', async () => {
+  it('Retry payment starts the payment and replaces the location', async () => {
     const user = userEvent.setup()
     mutateAsync.mockResolvedValue({
       paymentId: 'p-1',
@@ -119,7 +133,7 @@ describe('OrderSuccessPayment', () => {
     })
     renderPayment()
 
-    await user.click(screen.getByRole('button', { name: 'Pay now' }))
+    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
 
     expect(mutateAsync).toHaveBeenCalledWith('o-1')
     await waitFor(() =>
@@ -127,7 +141,7 @@ describe('OrderSuccessPayment', () => {
     )
   })
 
-  it('the URL error stays hidden while a second Pay now runs', async () => {
+  it('the URL error stays hidden while a second Retry payment runs', async () => {
     const user = userEvent.setup()
     let rejectFirst: (error: unknown) => void = () => undefined
     mutateAsync
@@ -143,7 +157,7 @@ describe('OrderSuccessPayment', () => {
       screen.getByText(ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE),
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Pay now' }))
+    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
     rejectFirst(
       new ServiceError('x', [
         {
@@ -155,26 +169,26 @@ describe('OrderSuccessPayment', () => {
       ]),
     )
     await screen.findByRole('alert')
-    await user.click(screen.getByRole('button', { name: 'Pay now' }))
+    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
 
     expect(
       screen.queryByText(ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE),
     ).not.toBeInTheDocument()
   })
 
-  it('Pay now is disabled while the payment starts', async () => {
+  it('Retry payment is disabled while the payment starts', async () => {
     const user = userEvent.setup()
     hookState(true)
     renderPayment()
 
-    const button = screen.getByRole('button', { name: 'Pay now' })
+    const button = screen.getByRole('button', { name: 'Retry payment' })
     expect(button).toBeDisabled()
     await user.click(button)
 
     expect(mutateAsync).not.toHaveBeenCalled()
   })
 
-  it('a failed Pay now shows the mapped error and keeps the button', async () => {
+  it('a failed Retry payment shows the mapped error and keeps the button', async () => {
     const user = userEvent.setup()
     mutateAsync.mockRejectedValue(
       new ServiceError('x', [
@@ -191,7 +205,7 @@ describe('OrderSuccessPayment', () => {
       screen.getByText(ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE),
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Pay now' }))
+    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       ERROR_MESSAGES.PAYMENT_NOT_PAYABLE,
@@ -199,7 +213,149 @@ describe('OrderSuccessPayment', () => {
     expect(
       screen.queryByText(ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Pay now' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Retry payment' })).toBeEnabled()
     expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('shows method, badge, message and total', () => {
+    renderPayment({ order: orderOf(OrderPaymentStatus.PAID) })
+
+    const card = within(paymentRegion())
+    expect(
+      card.getByText(PAYMENT_METHOD_LABELS[PaymentMethod.CARD]),
+    ).toBeInTheDocument()
+    expect(
+      card.getByText(
+        getPaymentStatusPresentation(OrderPaymentStatus.PAID).label,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      card.getByText(NOTICE_MESSAGES.ORDER_PAYMENT.PAID),
+    ).toBeInTheDocument()
+    expect(card.getByText(formatPrice(1775.3))).toBeInTheDocument()
+    expect(
+      card.queryByRole('combobox', { name: 'Pay with' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the pay-by banner, Pay with and Retry payment for an unpaid card order', () => {
+    renderPayment({
+      order: orderOf(OrderPaymentStatus.UNPAID, PaymentMethod.CARD, {
+        expiresAt: minutesFromNow(17.9),
+      }),
+    })
+
+    const card = within(paymentRegion())
+    expect(card.getByText(/^Pay by /)).toBeInTheDocument()
+    expect(
+      card.getByText(NOTICE_MESSAGES.ORDER_PAYMENT.PAY_BY_HINT(18)),
+    ).toBeInTheDocument()
+    expect(card.getByRole('combobox', { name: 'Pay with' })).toHaveTextContent(
+      PAYMENT_METHOD_LABELS[PaymentMethod.CARD],
+    )
+    expect(retryButton()).toBeEnabled()
+    expect(
+      card.queryByText(NOTICE_MESSAGES.ORDER_PAYMENT.RETRY_COMING_SOON),
+    ).not.toBeInTheDocument()
+  })
+
+  it('disables Retry payment with Coming soon for PayPal', () => {
+    renderPayment({
+      order: orderOf(OrderPaymentStatus.FAILED, PaymentMethod.PAYPAL),
+    })
+
+    expect(
+      screen.getByRole('combobox', { name: 'Pay with' }),
+    ).toHaveTextContent(PAYMENT_METHOD_LABELS[PaymentMethod.PAYPAL])
+    expect(retryButton()).toBeDisabled()
+    expect(
+      screen.getByText(NOTICE_MESSAGES.ORDER_PAYMENT.RETRY_COMING_SOON),
+    ).toBeInTheDocument()
+  })
+
+  it('disables Retry payment with Coming soon when another method is selected', async () => {
+    const user = userEvent.setup()
+    renderPayment()
+
+    await user.click(screen.getByRole('combobox', { name: 'Pay with' }))
+    await user.click(
+      await screen.findByRole('option', {
+        name: PAYMENT_METHOD_LABELS[PaymentMethod.PAYPAL],
+      }),
+    )
+
+    expect(retryButton()).toBeDisabled()
+    expect(
+      screen.getByText(NOTICE_MESSAGES.ORDER_PAYMENT.RETRY_COMING_SOON),
+    ).toBeInTheDocument()
+    expect(mutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('shows Payment window closed past expiresAt', () => {
+    renderPayment({
+      order: orderOf(OrderPaymentStatus.UNPAID, PaymentMethod.CARD, {
+        expiresAt: minutesFromNow(-1),
+      }),
+    })
+
+    expect(
+      within(paymentRegion()).getByText(
+        NOTICE_MESSAGES.ORDER_PAYMENT.WINDOW_CLOSED,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: 'Pay with' }),
+    ).not.toBeInTheDocument()
+    expect(retryButton()).not.toBeInTheDocument()
+  })
+
+  it('shows no banner without expiresAt and keeps Retry payment enabled', () => {
+    renderPayment()
+
+    expect(screen.queryByText(/^Pay by /)).not.toBeInTheDocument()
+    expect(retryButton()).toBeEnabled()
+  })
+
+  it('shows no retry block for a COD order', () => {
+    renderPayment({
+      order: orderOf(OrderPaymentStatus.UNPAID, PaymentMethod.COD),
+    })
+
+    const card = within(paymentRegion())
+    expect(
+      card.getByText(PAYMENT_METHOD_LABELS[PaymentMethod.COD]),
+    ).toBeInTheDocument()
+    expect(
+      card.getByText(NOTICE_MESSAGES.ORDER_PAYMENT.COD),
+    ).toBeInTheDocument()
+    expect(
+      card.queryByText(NOTICE_MESSAGES.ORDER_PAYMENT.NOT_COMPLETED),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: 'Pay with' }),
+    ).not.toBeInTheDocument()
+    expect(retryButton()).not.toBeInTheDocument()
+  })
+
+  it('follows the charge method a later poll brings', () => {
+    const { rerender } = renderPayment({
+      order: orderOf(OrderPaymentStatus.FAILED, PaymentMethod.CARD, {
+        payments: [],
+      }),
+    })
+
+    rerender(
+      <OrderSuccessPayment
+        order={orderOf(OrderPaymentStatus.FAILED)}
+        hasSessionId={false}
+        paymentError={null}
+        isPollExhausted={false}
+      />,
+    )
+
+    expect(
+      screen.getByRole('combobox', { name: 'Pay with' }),
+    ).toHaveTextContent(PAYMENT_METHOD_LABELS[PaymentMethod.CARD])
+    expect(retryButton()).toBeEnabled()
   })
 })

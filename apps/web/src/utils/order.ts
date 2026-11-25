@@ -15,7 +15,6 @@ import {
   ORDER_STATUS,
   SHIPPING_STATUS,
   type OrderSummary,
-  type OrderDetail,
   type PlacedOrder,
 } from '@/types/order'
 
@@ -483,11 +482,18 @@ export type OrderSuccessPaymentKind =
 export interface OrderSuccessPaymentView {
   kind: OrderSuccessPaymentKind
   badgeStatus: OrderPaymentStatus
+  /** Retry works today: a CARD order, through the Stripe redirect. */
   canPayNow: boolean
   errorMessage: string | null
+  chargeMethod: PaymentMethod | null
+  /** The payment is unfinished on a pending online order: show the retry block. */
+  showRetry: boolean
 }
 
-const chargeMethodOf = (order: OrderDetail): PaymentMethod | null => {
+/** The method of the order's latest charge, or null with none. */
+export const getOrderChargeMethod = (
+  order: PlacedOrder,
+): PaymentMethod | null => {
   const charges = order.payments
     .filter((payment) => payment.type === PaymentType.CHARGE)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -515,7 +521,7 @@ const paymentKindOf = (
 }
 
 export function getOrderSuccessPaymentView(input: {
-  order: OrderDetail
+  order: PlacedOrder
   hasSessionId: boolean
   paymentError: string | null
   isPollExhausted: boolean
@@ -524,18 +530,68 @@ export function getOrderSuccessPaymentView(input: {
   const kind = paymentKindOf(order.paymentStatus, hasSessionId, isPollExhausted)
   const isUnfinished = kind === 'notCompleted' || kind === 'failed'
   const isConfirming = kind === 'confirming' || kind === 'stillConfirming'
+  const chargeMethod = getOrderChargeMethod(order)
+  const showRetry =
+    isUnfinished &&
+    order.status === OrderStatus.PENDING &&
+    (chargeMethod === PaymentMethod.CARD ||
+      chargeMethod === PaymentMethod.PAYPAL)
 
   return {
     kind,
     badgeStatus: isConfirming
       ? OrderPaymentStatus.PENDING
       : order.paymentStatus,
-    canPayNow:
-      isUnfinished &&
-      order.status === OrderStatus.PENDING &&
-      chargeMethodOf(order) === PaymentMethod.CARD,
+    canPayNow: showRetry && chargeMethod === PaymentMethod.CARD,
     errorMessage:
       isUnfinished && paymentError ? paymentErrorMessage(paymentError) : null,
+    chargeMethod,
+    showRetry,
+  }
+}
+
+export type OrderSuccessHeadingKind =
+  'confirmed' | 'confirming' | 'actionNeeded' | 'closed' | 'placed'
+
+/**
+ * The order-success heading: what the shopper's payment state means for the
+ * order. An unfinished online payment asks for action only while the retry is
+ * open; past the deadline or once the order left PENDING it is closed.
+ */
+export function getOrderSuccessHeadingKind(
+  view: Pick<OrderSuccessPaymentView, 'kind' | 'chargeMethod' | 'showRetry'>,
+  isExpired = false,
+): OrderSuccessHeadingKind {
+  const { kind, chargeMethod, showRetry } = view
+  if (kind === 'paid') return 'confirmed'
+  if (kind === 'confirming' || kind === 'stillConfirming') return 'confirming'
+  const isOnline =
+    chargeMethod === PaymentMethod.CARD || chargeMethod === PaymentMethod.PAYPAL
+  if (!isOnline || (kind !== 'notCompleted' && kind !== 'failed')) {
+    return 'placed'
+  }
+  return showRetry && !isExpired ? 'actionNeeded' : 'closed'
+}
+
+export interface PayByCountdown {
+  deadlineLabel: string
+  minutesLeft: number
+  isExpired: boolean
+}
+
+/** Time left to pay an order before it expires; null without a valid `expiresAt`. */
+export function getPayByCountdown(
+  expiresAt: string | null,
+  now: number,
+): PayByCountdown | null {
+  if (!expiresAt) return null
+  const deadline = Date.parse(expiresAt)
+  if (Number.isNaN(deadline)) return null
+  const msLeft = deadline - now
+  return {
+    deadlineLabel: formatOrderDateTime(expiresAt),
+    minutesLeft: msLeft > 0 ? Math.max(1, Math.ceil(msLeft / 60_000)) : 0,
+    isExpired: msLeft <= 0,
   }
 }
 
