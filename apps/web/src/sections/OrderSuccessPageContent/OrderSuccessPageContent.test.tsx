@@ -212,7 +212,7 @@ describe('OrderSuccessPageContent', () => {
     expect(screen.getByText('Las Hermanas')).toBeInTheDocument()
     expect(within(paymentRegion()).getByText('Pending')).toBeInTheDocument()
     expect(
-      within(paymentRegion()).getByRole('button', { name: 'Pay now' }),
+      within(paymentRegion()).getByRole('button', { name: 'Retry payment' }),
     ).toBeInTheDocument()
   })
 
@@ -260,7 +260,7 @@ describe('OrderSuccessPageContent', () => {
     expect(pollWhileOf()?.(cardOrder(OrderPaymentStatus.PENDING))).toBe(true)
   })
 
-  it('without session_id an unfinished payment shows Payment not completed and Pay now', () => {
+  it('without session_id an unfinished payment shows Payment not completed and Retry payment', () => {
     withParams('orderId=o-1')
     mockUseOrderDetail.mockReturnValue(
       detailState({ order: cardOrder(OrderPaymentStatus.PENDING) }),
@@ -274,7 +274,7 @@ describe('OrderSuccessPageContent', () => {
       ),
     ).toBeInTheDocument()
     expect(
-      within(paymentRegion()).getByRole('button', { name: 'Pay now' }),
+      within(paymentRegion()).getByRole('button', { name: 'Retry payment' }),
     ).toBeInTheDocument()
     expect(pollWhileOf()?.(cardOrder(OrderPaymentStatus.PENDING))).toBe(false)
   })
@@ -352,5 +352,133 @@ describe('OrderSuccessPageContent', () => {
     expect(screen.getByText(API_FALLBACK_ERRORS.ORDER_LOAD)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(refetch).toHaveBeenCalled()
+  })
+
+  it('shows Order Confirmed for a PAID order', () => {
+    withParams('orderId=o-1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({ order: cardOrder(OrderPaymentStatus.PAID) }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Order Confirmed' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows Order Placed with Complete your payment for an unpaid card order', () => {
+    withParams('orderId=o-1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({ order: cardOrder(OrderPaymentStatus.UNPAID) }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Order Placed' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(NOTICE_MESSAGES.ORDER_SUCCESS.ACTION_NEEDED),
+    ).toBeInTheDocument()
+  })
+
+  it('shows Order Placed for a COD order', () => {
+    withParams('orderId=o-1')
+    const codOrder = cardOrder(OrderPaymentStatus.UNPAID)
+    codOrder.payments = [{ ...codOrder.payments[0], method: PaymentMethod.COD }]
+    mockUseOrderDetail.mockReturnValue(detailState({ order: codOrder }))
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Order Placed' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(NOTICE_MESSAGES.ORDER_SUCCESS.ACTION_NEEDED),
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders the Payment card before Delivery Address', () => {
+    withParams('orderId=o-1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({ order: cardOrder(OrderPaymentStatus.PAID) }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    const address = screen.getByRole('heading', { name: 'Delivery Address' })
+    expect(
+      paymentRegion().compareDocumentPosition(address) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('snapshot keeps the heading without a Payment card', () => {
+    withSnapshot(order)
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Order Placed' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Payment' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('an unpaid card order past expiresAt no longer asks for payment', () => {
+    withParams('orderId=o-1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({
+        order: {
+          ...cardOrder(OrderPaymentStatus.UNPAID),
+          expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        },
+      }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      screen.getByText(NOTICE_MESSAGES.ORDER_SUCCESS.CLOSED),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(NOTICE_MESSAGES.ORDER_SUCCESS.ACTION_NEEDED),
+    ).not.toBeInTheDocument()
+  })
+
+  it('a cancelled unpaid card order no longer asks for payment', () => {
+    withParams('orderId=o-1')
+    mockUseOrderDetail.mockReturnValue(
+      detailState({
+        order: {
+          ...cardOrder(OrderPaymentStatus.UNPAID),
+          status: OrderStatus.CANCELLED,
+        },
+      }),
+    )
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      screen.getByText(NOTICE_MESSAGES.ORDER_SUCCESS.CLOSED),
+    ).toBeInTheDocument()
+  })
+
+  it('a card order snapshot never asks for payment without a Payment card', () => {
+    withSnapshot(cardOrder(OrderPaymentStatus.UNPAID))
+
+    render(<OrderSuccessPageContent />)
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Order Placed' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(NOTICE_MESSAGES.ORDER_SUCCESS.ACTION_NEEDED),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(NOTICE_MESSAGES.ORDER_SUCCESS.THANK_YOU),
+    ).toBeInTheDocument()
   })
 })

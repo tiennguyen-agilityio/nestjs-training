@@ -21,7 +21,10 @@ import {
   formatOrderCustomerName,
   formatOrderDateTime,
   getCancelOrderErrorMessage,
+  chargeMethodOf,
+  getOrderSuccessHeadingKind,
   getOrderSuccessPaymentView,
+  getPayByCountdown,
   getPaymentStatusPresentation,
   PAYMENT_ERR_CODES,
   paymentErrorMessage,
@@ -354,6 +357,8 @@ describe('getOrderSuccessPaymentView', () => {
         badgeStatus: OrderPaymentStatus.PAID,
         canPayNow: false,
         errorMessage: null,
+        chargeMethod: PaymentMethod.CARD,
+        showRetry: false,
       })
     }
   })
@@ -421,6 +426,8 @@ describe('getOrderSuccessPaymentView', () => {
         badgeStatus: status,
         canPayNow: true,
         errorMessage: null,
+        chargeMethod: PaymentMethod.CARD,
+        showRetry: true,
       })
     }
   })
@@ -435,6 +442,8 @@ describe('getOrderSuccessPaymentView', () => {
       badgeStatus: OrderPaymentStatus.UNPAID,
       canPayNow: true,
       errorMessage: ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE,
+      chargeMethod: PaymentMethod.CARD,
+      showRetry: true,
     })
   })
 
@@ -468,6 +477,122 @@ describe('getOrderSuccessPaymentView', () => {
     expect(viewOf(orderOf(OrderPaymentStatus.REFUNDED))).toEqual(
       expect.objectContaining({ kind: 'badgeOnly', canPayNow: false }),
     )
+  })
+})
+
+describe('getOrderSuccessPaymentView showRetry', () => {
+  it('an unpaid PENDING CARD or PAYPAL order offers a retry', () => {
+    for (const method of [PaymentMethod.CARD, PaymentMethod.PAYPAL]) {
+      const order = orderOf(OrderPaymentStatus.UNPAID, {
+        payments: [charge(method, PaymentStatus.PENDING)],
+      })
+      expect(viewOf(order)).toEqual(
+        expect.objectContaining({ showRetry: true, chargeMethod: method }),
+      )
+    }
+  })
+
+  it('a COD order never offers a retry', () => {
+    const order = orderOf(OrderPaymentStatus.UNPAID, {
+      payments: [charge(PaymentMethod.COD, PaymentStatus.PENDING)],
+    })
+    expect(viewOf(order).showRetry).toBe(false)
+  })
+
+  it('a PAID order or one no longer PENDING never offers a retry', () => {
+    expect(viewOf(orderOf(OrderPaymentStatus.PAID)).showRetry).toBe(false)
+    expect(
+      viewOf(
+        orderOf(OrderPaymentStatus.FAILED, { status: OrderStatus.CONFIRMED }),
+      ).showRetry,
+    ).toBe(false)
+  })
+
+  it('chargeMethodOf reads the latest charge', () => {
+    const order = orderOf(OrderPaymentStatus.UNPAID, {
+      payments: [
+        charge(PaymentMethod.CARD, PaymentStatus.FAILED),
+        {
+          ...charge(PaymentMethod.PAYPAL, PaymentStatus.PENDING),
+          id: 'pay-2',
+          createdAt: '2026-11-25T00:00:00.000Z',
+        },
+      ],
+    })
+    expect(chargeMethodOf(order)).toBe(PaymentMethod.PAYPAL)
+    expect(
+      chargeMethodOf(orderOf(OrderPaymentStatus.UNPAID, { payments: [] })),
+    ).toBeNull()
+  })
+})
+
+describe('getOrderSuccessHeadingKind', () => {
+  const headingOf = (order: OrderDetail, isExpired = false) =>
+    getOrderSuccessHeadingKind(viewOf(order), isExpired)
+  const withMethod = (status: OrderPaymentStatus, method: PaymentMethod) =>
+    orderOf(status, { payments: [charge(method, PaymentStatus.PENDING)] })
+
+  it('maps each payment kind', () => {
+    expect(headingOf(orderOf(OrderPaymentStatus.PAID))).toBe('confirmed')
+    expect(
+      getOrderSuccessHeadingKind(
+        viewOf(orderOf(OrderPaymentStatus.PENDING), { hasSessionId: true }),
+      ),
+    ).toBe('confirming')
+    expect(headingOf(orderOf(OrderPaymentStatus.UNPAID))).toBe('actionNeeded')
+    expect(
+      headingOf(withMethod(OrderPaymentStatus.FAILED, PaymentMethod.PAYPAL)),
+    ).toBe('actionNeeded')
+    expect(headingOf(orderOf(OrderPaymentStatus.REFUNDED))).toBe('placed')
+  })
+
+  it('an unpaid COD order, or one with no charge, is placed, not action needed', () => {
+    expect(
+      headingOf(withMethod(OrderPaymentStatus.UNPAID, PaymentMethod.COD)),
+    ).toBe('placed')
+    expect(
+      headingOf(orderOf(OrderPaymentStatus.UNPAID, { payments: [] })),
+    ).toBe('placed')
+  })
+
+  it('an unpaid online order no longer PENDING is closed', () => {
+    expect(
+      headingOf(
+        orderOf(OrderPaymentStatus.UNPAID, { status: OrderStatus.CANCELLED }),
+      ),
+    ).toBe('closed')
+  })
+
+  it('an unpaid online order past its deadline is closed', () => {
+    expect(headingOf(orderOf(OrderPaymentStatus.UNPAID), true)).toBe('closed')
+  })
+})
+
+describe('getPayByCountdown', () => {
+  const now = Date.parse('2026-11-25T04:35:00.000Z')
+  const inMs = (ms: number) => new Date(now + ms).toISOString()
+
+  it('is null without a valid expiresAt', () => {
+    expect(getPayByCountdown(null, now)).toBeNull()
+    expect(getPayByCountdown('not-a-date', now)).toBeNull()
+  })
+
+  it('rounds the minutes left up', () => {
+    const expiresAt = inMs(18.2 * 60_000)
+    expect(getPayByCountdown(expiresAt, now)).toEqual({
+      deadlineLabel: formatOrderDateTime(expiresAt),
+      minutesLeft: 19,
+      isExpired: false,
+    })
+  })
+
+  it('shows 1 min, never 0, in the last minute', () => {
+    expect(getPayByCountdown(inMs(20_000), now)?.minutesLeft).toBe(1)
+  })
+
+  it('is expired at and after the deadline', () => {
+    expect(getPayByCountdown(inMs(0), now)?.isExpired).toBe(true)
+    expect(getPayByCountdown(inMs(-60_000), now)?.isExpired).toBe(true)
   })
 })
 
