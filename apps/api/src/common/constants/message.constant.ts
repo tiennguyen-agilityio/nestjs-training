@@ -67,8 +67,15 @@ export const ERROR_MESSAGES = {
       'Order cannot be completed: it is not delivered',
     SHIPPING_NEEDS_CONFIRMED:
       'Shipping cannot start: the order is not confirmed',
+    REFUND_EXCEEDS_PAID: 'Refunds cannot exceed the amount paid',
+    NOT_REFUNDABLE: 'Order has no paid online payment to refund',
+    REFUND_NOT_RETRYABLE: 'Only a failed refund can be retried',
+    ALREADY_REFUNDED: 'Order already has a refund',
   },
   PAYMENT: {
+    NOT_FOUND: 'Payment not found',
+    REFUND_UNSENDABLE: (method: string) =>
+      `No ${method} gateway or charge reference to refund through`,
     METHOD_NOT_ONLINE: 'This order is paid on delivery, not online',
     METHOD_UNAVAILABLE: 'Online payment is not available for this method yet',
     NOT_PAYABLE: 'This order cannot be paid now',
@@ -200,6 +207,13 @@ export const ERROR_DESCRIPTIONS = {
     STATUS_NOT_ALLOWED: 'Not allowed. Pick one of the next statuses.',
     NOT_CANCELLABLE_SHIPPED:
       'The order has left the shop and can no longer be cancelled.',
+    REFUND_EXCEEDS_PAID: (refundable: string) =>
+      `At most ${refundable} can still be refunded.`,
+    NOT_REFUNDABLE:
+      'Only a card or PayPal payment that is paid can be refunded.',
+    REFUND_NOT_RETRYABLE: 'Check the payment status.',
+    ALREADY_REFUNDED:
+      'An order is refunded once. Retry its refund if it failed.',
     PAYMENT_HELD_ADMIN:
       'The payment is being reviewed. Wait for it to settle before changing the order.',
     NOT_CANCELLABLE_SHIPPED_SHOPPER:
@@ -210,6 +224,7 @@ export const ERROR_DESCRIPTIONS = {
     SHIPPING_NEEDS_CONFIRMED: 'Confirm the order first.',
   },
   PAYMENT: {
+    NOT_FOUND: 'The payment might not exist, or the id is incorrect.',
     METHOD_NOT_ONLINE: 'Only CARD and PAYPAL orders are paid online.',
     METHOD_UNAVAILABLE: 'Pick another payment method for new orders.',
     NOT_PAYABLE:

@@ -1,5 +1,6 @@
 import { OrderStatus, ShippingStatus } from '@repo/constants';
 import {
+  createRefundSchema,
   placeOrderSchema,
   updateOrderShippingStatusSchema,
   updateOrderStatusSchema,
@@ -96,5 +97,24 @@ describe('updateOrderShippingStatusSchema', () => {
       updateOrderShippingStatusSchema.safeParse({ shippingStatus: 'LOST' })
         .error?.issues[0],
     ).toMatchObject({ path: ['shippingStatus'] });
+  });
+});
+
+describe('createRefundSchema', () => {
+  it('createRefundSchema accepts 10.5 and 0.01', () => {
+    expect(createRefundSchema.safeParse({ amount: 10.5 }).success).toBe(true);
+    expect(createRefundSchema.safeParse({ amount: 0.01 }).success).toBe(true);
+  });
+
+  it('createRefundSchema refuses 0, -1 and a string', () => {
+    for (const amount of [0, -1, '10']) {
+      expect(createRefundSchema.safeParse({ amount }).success).toBe(false);
+    }
+  });
+
+  it('createRefundSchema refuses more than 2 decimals', () => {
+    expect(createRefundSchema.safeParse({ amount: 10.555 }).success).toBe(
+      false,
+    );
   });
 });

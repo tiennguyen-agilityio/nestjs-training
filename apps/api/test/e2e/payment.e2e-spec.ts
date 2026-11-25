@@ -453,6 +453,109 @@ describe('Payments (e2e)', () => {
       });
     });
 
+    const paidCharge = async (): Promise<{
+      orderId: string;
+      transactionId: string;
+      clerkId: string;
+    }> => {
+      const user = await createUser();
+      const { orderId, paymentId } = await seedOrder(user.id);
+      const transactionId = `pi_e2e_${suffix()}`;
+      await execute(
+        `update payments set status = 'PAID', transaction_id = ?, completed_at = now() where id = ?`,
+        [transactionId, paymentId],
+      );
+      await execute(`update orders set status = 'CONFIRMED' where id = ?`, [
+        orderId,
+      ]);
+      return { orderId, transactionId, clerkId: user.clerkId };
+    };
+
+    const refundEvent = (type: string, object: Record<string, unknown>) =>
+      stripeEvent(type, {
+        object: 'refund',
+        currency: 'usd',
+        created: Math.floor(Date.now() / 1000),
+        metadata: {},
+        ...object,
+      });
+
+    const refundRows = (orderId: string) =>
+      execute<
+        {
+          id: string;
+          status: string;
+          amount: string;
+          transaction_id: string | null;
+          failure_reason: string | null;
+        }[]
+      >(
+        `select id, status, amount, transaction_id, failure_reason from payments where order_id = ? and type = 'REFUND'`,
+        [orderId],
+      );
+
+    it('a dashboard refund webhook adds a REFUND row (AC7)', async () => {
+      const { orderId, transactionId, clerkId } = await paidCharge();
+      const refundId = `re_e2e_${suffix()}`;
+
+      await deliver(
+        refundEvent('refund.updated', {
+          id: refundId,
+          payment_intent: transactionId,
+          amount: 500,
+          status: 'succeeded',
+        }),
+      ).expect(200);
+
+      expect(await refundRows(orderId)).toEqual([
+        expect.objectContaining({
+          status: 'PAID',
+          amount: '5.00',
+          transaction_id: refundId,
+        }),
+      ]);
+      const [{ status }] = await execute<{ status: string }[]>(
+        'select status from orders where id = ?',
+        [orderId],
+      );
+      expect(status).toBe('CONFIRMED');
+      signIn(clerkId);
+      const detail = await request(app.getHttpServer())
+        .get(`${ORDERS}/${orderId}`)
+        .expect(200);
+      expect(
+        (detail.body as { data: { paymentStatus: string } }).data.paymentStatus,
+      ).toBe('PARTIALLY_REFUNDED');
+    });
+
+    it("a refund.failed webhook marks the shop's refund FAILED", async () => {
+      const { orderId, transactionId } = await paidCharge();
+      const [{ id: rowId }] = await execute<{ id: string }[]>(
+        `insert into payments (id, order_id, type, method, status, amount, created_at, updated_at)
+         values (gen_random_uuid(), ?, 'REFUND', 'CARD', 'PENDING', 12.5, now(), now()) returning id`,
+        [orderId],
+      );
+
+      await deliver(
+        refundEvent('refund.failed', {
+          id: `re_e2e_${suffix()}`,
+          payment_intent: transactionId,
+          amount: 1250,
+          status: 'failed',
+          failure_reason: 'lost_or_stolen_card',
+          metadata: { paymentId: rowId },
+        }),
+      ).expect(200);
+
+      expect(await refundRows(orderId)).toEqual([
+        expect.objectContaining({
+          id: rowId,
+          status: 'FAILED',
+          failure_reason: 'lost_or_stolen_card',
+        }),
+      ]);
+    });
+
     it('POST /webhooks/stripe decline and expiry mark the payment FAILED and the order stays PENDING (AC5)', async () => {
       const user = await createUser();
       const declined = await seedOrder(user.id, {

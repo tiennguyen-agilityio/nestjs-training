@@ -1,4 +1,5 @@
 import type {
+  CreateRefundPayload,
   PlaceOrderPayload,
   UpdateOrderShippingStatusPayload,
   UpdateOrderStatusPayload,
@@ -105,6 +106,64 @@ export async function cancelOrder(
   }
 
   return { ok: true, order: result.data }
+}
+
+type RefundResult =
+  | { ok: true }
+  | {
+      ok: false
+      error: string
+      status?: number
+      errorResponse?: ApiErrorResponse
+    }
+
+/**
+ * `POST /orders/:id/refunds`: an admin refunds part of an order's paid online
+ * charge. The `Idempotency-Key` makes a retry replay the first result.
+ */
+export async function createRefund(
+  orderId: string,
+  amount: CreateRefundPayload['amount'],
+  options: {
+    getToken: () => Promise<string | null>
+    idempotencyKey: string
+  },
+): Promise<RefundResult> {
+  const body: CreateRefundPayload = { amount }
+  const result = await apiClient.post(
+    `${API_ROUTES.ORDERS}/${encodeURIComponent(orderId)}/refunds`,
+    body,
+    {
+      getToken: options.getToken,
+      fallbackError: API_FALLBACK_ERRORS.REFUND_CREATE,
+      headers: { [IDEMPOTENCY.HEADER]: options.idempotencyKey },
+    },
+  )
+  if (!result.ok) return result
+
+  return { ok: true }
+}
+
+/** `POST /payments/:id/retry`: an admin sends a FAILED refund again. */
+export async function retryRefund(
+  paymentId: string,
+  options: {
+    getToken: () => Promise<string | null>
+    idempotencyKey: string
+  },
+): Promise<RefundResult> {
+  const result = await apiClient.post(
+    `${API_ROUTES.PAYMENTS}/${encodeURIComponent(paymentId)}/retry`,
+    undefined,
+    {
+      getToken: options.getToken,
+      fallbackError: API_FALLBACK_ERRORS.REFUND_RETRY,
+      headers: { [IDEMPOTENCY.HEADER]: options.idempotencyKey },
+    },
+  )
+  if (!result.ok) return result
+
+  return { ok: true }
 }
 
 /** Every order (`GET /orders?all=true`): the API answers 403 to anyone but an active admin. */

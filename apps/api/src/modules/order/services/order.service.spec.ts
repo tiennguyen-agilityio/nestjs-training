@@ -12,6 +12,8 @@ import {
   ShippingStatus,
 } from '@repo/constants';
 import { OrderService } from './order.service.js';
+import { RefundService } from './refund.service.js';
+import { ResponsePaymentDto } from '../dto/response-order.dto.js';
 import { OrderRepository } from '../repositories/order.repository.js';
 import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
@@ -125,12 +127,15 @@ describe('OrderService', () => {
     | 'transactionalWithOutbox'
     | 'lockMineForCancel'
     | 'lockForStatusChange'
+    | 'lockForPayment'
     | 'save'
     | 'saveCancelled'
     | 'saveDelivered',
     Mock
   >;
   let enqueueCheckoutExpire: Mock;
+  let enqueueRefund: Mock;
+  let refundService: Record<'startLocked' | 'retryLocked', Mock>;
   let cartService: Record<'lockForCheckout' | 'clearItems', Mock>;
   let productVariantService: Record<
     'reserve' | 'reload' | 'release' | 'sell',
@@ -154,6 +159,11 @@ describe('OrderService', () => {
 
   beforeEach(async () => {
     enqueueCheckoutExpire = vi.fn();
+    enqueueRefund = vi.fn();
+    refundService = {
+      startLocked: vi.fn().mockResolvedValue(null),
+      retryLocked: vi.fn(),
+    };
     orderRepository = {
       transactional: vi.fn((work: () => Promise<unknown>) => work()),
       create: vi.fn().mockResolvedValue(created),
@@ -163,11 +173,12 @@ describe('OrderService', () => {
       findMineByIdOrNumber: vi.fn(),
       findAnyByIdOrNumber: vi.fn(),
       transactionalWithOutbox: vi.fn(
-        (work: (enqueue: Mock) => Promise<unknown>) =>
-          work(enqueueCheckoutExpire),
+        (work: (expire: Mock, refund: Mock) => Promise<unknown>) =>
+          work(enqueueCheckoutExpire, enqueueRefund),
       ),
       lockMineForCancel: vi.fn(),
       lockForStatusChange: vi.fn(),
+      lockForPayment: vi.fn(),
       save: vi.fn(),
       saveCancelled: vi.fn(),
       saveDelivered: vi.fn(),
@@ -198,6 +209,7 @@ describe('OrderService', () => {
         { provide: ProductVariantService, useValue: productVariantService },
         { provide: ShippingMethodService, useValue: shippingMethodService },
         { provide: UserAddressService, useValue: userAddressService },
+        { provide: RefundService, useValue: refundService },
       ],
     }).compile();
     service = module.get(OrderService);
@@ -1261,6 +1273,131 @@ describe('OrderService', () => {
       });
       expect(orderRepository.transactionalWithOutbox).toHaveBeenCalledTimes(2);
       expect(orderRepository.lockMineForCancel).not.toHaveBeenCalled();
+    });
+
+    it('cancel of a paid card order starts a refund of the rest', async () => {
+      const paid = charge(
+        PaymentStatus.PAID,
+        'cs_1',
+        PaymentMethod.CARD,
+        'pi_1',
+      );
+      const order = orderWith(OrderStatus.CONFIRMED, ShippingStatus.PENDING, [
+        paid,
+      ]);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await service.updateStatus(ORDER_ID, OrderStatus.CANCELLED, ADMIN_ID);
+
+      expect(refundService.startLocked).toHaveBeenCalledWith(
+        order,
+        'rest',
+        ADMIN_ID,
+        enqueueRefund,
+      );
+      expect(
+        orderRepository.saveCancelled.mock.invocationCallOrder[0],
+      ).toBeLessThan(refundService.startLocked.mock.invocationCallOrder[0]);
+    });
+
+    it('RETURNED of a paid order starts a refund of the rest', async () => {
+      const paid = charge(
+        PaymentStatus.PAID,
+        'cs_1',
+        PaymentMethod.CARD,
+        'pi_1',
+      );
+      const order = orderWith(OrderStatus.CONFIRMED, ShippingStatus.SHIPPING, [
+        paid,
+      ]);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await service.updateShippingStatus(
+        ORDER_ID,
+        ShippingStatus.RETURNED,
+        ADMIN_ID,
+      );
+
+      expect(refundService.startLocked).toHaveBeenCalledWith(
+        order,
+        'rest',
+        ADMIN_ID,
+        enqueueRefund,
+      );
+    });
+
+    it('cancel of a COD order starts no refund', async () => {
+      const order = orderWith(OrderStatus.CONFIRMED);
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+
+      await service.updateStatus(ORDER_ID, OrderStatus.CANCELLED, ADMIN_ID);
+
+      expect(refundService.startLocked).toHaveBeenCalledWith(
+        order,
+        'rest',
+        ADMIN_ID,
+        enqueueRefund,
+      );
+      await expect(
+        refundService.startLocked.mock.results[0].value,
+      ).resolves.toBeNull();
+    });
+
+    it('refund locks the order and returns the new refund', async () => {
+      const order = orderWith(OrderStatus.CANCELLED);
+      const refund = { id: 'refund-1' };
+      const dto = { id: 'refund-1' } as ResponsePaymentDto;
+      orderRepository.lockForStatusChange.mockResolvedValue(order);
+      refundService.startLocked.mockResolvedValue(refund);
+      const toDto = vi
+        .spyOn(ResponsePaymentDto, 'fromEntity')
+        .mockReturnValue(dto);
+
+      await expect(service.refund('CH-1', 12.5, ADMIN_ID)).resolves.toBe(dto);
+
+      expect(orderRepository.lockForStatusChange).toHaveBeenCalledWith({
+        orderNumber: 'CH-1',
+      });
+      expect(refundService.startLocked).toHaveBeenCalledWith(
+        order,
+        12.5,
+        ADMIN_ID,
+        enqueueRefund,
+      );
+      expect(toDto).toHaveBeenCalledWith(refund);
+    });
+
+    it("retryRefund locks the payment's order", async () => {
+      const order = orderWith(OrderStatus.CANCELLED);
+      const refund = { id: 'refund-2' };
+      const dto = { id: 'refund-2' } as ResponsePaymentDto;
+      orderRepository.lockForPayment.mockResolvedValue(order);
+      refundService.retryLocked.mockResolvedValue(refund);
+      vi.spyOn(ResponsePaymentDto, 'fromEntity').mockReturnValue(dto);
+
+      await expect(service.retryRefund('refund-1', ADMIN_ID)).resolves.toBe(
+        dto,
+      );
+
+      expect(orderRepository.lockForPayment).toHaveBeenCalledWith('refund-1');
+      expect(refundService.retryLocked).toHaveBeenCalledWith(
+        order,
+        'refund-1',
+        ADMIN_ID,
+        enqueueRefund,
+      );
+    });
+
+    it('retryRefund of an unknown payment throws paymentNotFound', async () => {
+      orderRepository.lockForPayment.mockResolvedValue(null);
+
+      const error = await errorOf(service.retryRefund('missing', ADMIN_ID));
+
+      expect(error).toBeInstanceOf(ItemNotFoundException);
+      expect(error.getErrors()[0]).toMatchObject({
+        errCode: ERROR_CODES.PAYMENT.NOT_FOUND,
+        field: 'id',
+      });
     });
 
     it('updateShippingStatus moves PENDING to SHIPPING (AC3)', async () => {

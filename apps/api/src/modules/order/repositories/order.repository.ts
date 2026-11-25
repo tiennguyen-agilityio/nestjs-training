@@ -4,11 +4,17 @@ import {
   InventoryMovementType,
   type OrderPaymentStatus,
   PaymentMethod,
+  PaymentStatus,
+  PaymentType,
 } from '@repo/constants';
 import { Order } from '../entities/order.entity.js';
+import { Payment } from '../entities/payment.entity.js';
 import { InventoryMovement } from '../entities/inventory-movement.entity.js';
 import { OUTBOX_TOPICS } from '../../../common/constants/outbox.constant.js';
-import type { PaymentCheckoutExpirePayload } from '../../../common/interfaces/outbox-payload.interface.js';
+import type {
+  PaymentCheckoutExpirePayload,
+  PaymentRefundPayload,
+} from '../../../common/interfaces/outbox-payload.interface.js';
 import { BaseRepository } from '../../../common/repositories/base.repository.js';
 import type { ActorId } from '../../../common/utils/audit.util.js';
 import type {
@@ -54,6 +60,8 @@ const lockOrderSql = (column: 'id' | 'order_number'): string =>
 export type EnqueueCheckoutExpire = (
   payload: PaymentCheckoutExpirePayload,
 ) => Promise<void>;
+
+export type EnqueueRefund = (payload: PaymentRefundPayload) => Promise<void>;
 
 const PAYMENT_STATUS_IDS_SQL = `select o.id from orders o
 left join lateral (
@@ -129,27 +137,66 @@ export class OrderRepository extends BaseRepository<Order> {
   private readonly outbox!: Outbox;
 
   /**
-   * Runs `work` in one transaction and hands it a function that adds a
-   * `payment.checkout-expire` outbox message to that transaction; wakes the
-   * relay after the commit when a message was added.
+   * Runs `work` in one transaction and hands it functions that add a
+   * `payment.checkout-expire` or `payment.refund` outbox message to that
+   * transaction; wakes the relay after the commit when a message was added.
    */
   async transactionalWithOutbox<R>(
-    work: (enqueueCheckoutExpire: EnqueueCheckoutExpire) => Promise<R>,
+    work: (
+      enqueueCheckoutExpire: EnqueueCheckoutExpire,
+      enqueueRefund: EnqueueRefund,
+    ) => Promise<R>,
   ): Promise<R> {
     let enqueued = false;
     const result = await this.inTransaction((tx) =>
-      work(async (payload) => {
-        await this.outbox.add<PaymentCheckoutExpirePayload>(tx, {
-          topic: OUTBOX_TOPICS.PAYMENT_CHECKOUT_EXPIRE,
-          key: payload.paymentId,
-          payload,
-        });
-        enqueued = true;
-      }),
+      work(
+        async (payload) => {
+          await this.outbox.add<PaymentCheckoutExpirePayload>(tx, {
+            topic: OUTBOX_TOPICS.PAYMENT_CHECKOUT_EXPIRE,
+            key: payload.paymentId,
+            payload,
+          });
+          enqueued = true;
+        },
+        async (payload) => {
+          await this.outbox.add<PaymentRefundPayload>(tx, {
+            topic: OUTBOX_TOPICS.PAYMENT_REFUND,
+            key: payload.paymentId,
+            payload,
+          });
+          enqueued = true;
+        },
+      ),
     );
     if (enqueued) this.outbox.notify();
 
     return result;
+  }
+
+  /** A PENDING REFUND row of the order, saved with the order. */
+  async addRefund(
+    order: Order,
+    data: { method: PaymentMethod; amount: string; currency: string },
+    actorId: ActorId,
+  ): Promise<Payment> {
+    const refund = this.createRelated<Payment>(Payment.name, {
+      order,
+      type: PaymentType.REFUND,
+      status: PaymentStatus.PENDING,
+      ...data,
+    });
+    order.payments.add(refund);
+    await this.save(order, actorId);
+    return refund;
+  }
+
+  /** The order of a payment, locked as `lockForStatusChange` locks it. */
+  async lockForPayment(paymentId: string): Promise<Order | null> {
+    const [orderId] = await this.selectIds(
+      'select p.order_id as id from payments p where p.id = ? and p.deleted_at is null',
+      [paymentId],
+    );
+    return orderId ? this.lockForStatusChange({ id: orderId }) : null;
   }
 
   /**

@@ -281,6 +281,155 @@ describe('PayPalPaymentGateway', () => {
     });
   });
 
+  describe('refund', () => {
+    const REFUND_ID = '33333333-3333-4333-8333-333333333333';
+    const refundRequest = {
+      refundId: REFUND_ID,
+      chargeTransactionId: 'CAPTURE-1',
+      amountCents: 1250,
+      currency: 'usd' as const,
+    };
+
+    it('refund posts to the capture with the request id', async () => {
+      answer(201, {
+        id: 'REFUND-1',
+        status: 'COMPLETED',
+        create_time: '2026-11-25T10:00:00Z',
+      });
+
+      await gateway.refund(refundRequest);
+
+      expect(http.request).toHaveBeenCalledWith(
+        'POST',
+        '/v2/payments/captures/CAPTURE-1/refund',
+        {
+          headers: { 'PayPal-Request-Id': `refund-${REFUND_ID}` },
+          body: {
+            amount: { value: '12.50', currency_code: 'USD' },
+            custom_id: REFUND_ID,
+          },
+        },
+      );
+    });
+
+    it('refund maps COMPLETED, PENDING and FAILED', async () => {
+      answer(201, {
+        id: 'REFUND-1',
+        status: 'COMPLETED',
+        create_time: '2026-11-25T10:00:00Z',
+      });
+      answer(201, { id: 'REFUND-2', status: 'PENDING' });
+      answer(201, {
+        id: 'REFUND-3',
+        status: 'FAILED',
+        status_details: { reason: 'ECHECK' },
+      });
+
+      await expect(gateway.refund(refundRequest)).resolves.toEqual({
+        kind: 'succeeded',
+        refundTransactionId: 'REFUND-1',
+        refundedAt: new Date('2026-11-25T10:00:00Z'),
+      });
+      await expect(gateway.refund(refundRequest)).resolves.toEqual({
+        kind: 'pending',
+        refundTransactionId: 'REFUND-2',
+      });
+      await expect(gateway.refund(refundRequest)).resolves.toEqual({
+        kind: 'failed',
+        refundTransactionId: 'REFUND-3',
+        reason: 'ECHECK',
+      });
+    });
+
+    it('refund returns failed on a 422', async () => {
+      answer(422, {
+        name: 'UNPROCESSABLE_ENTITY',
+        details: [
+          {
+            issue: 'CAPTURE_FULLY_REFUNDED',
+            description: 'The capture has already been fully refunded',
+          },
+        ],
+      });
+
+      await expect(gateway.refund(refundRequest)).resolves.toEqual({
+        kind: 'failed',
+        refundTransactionId: null,
+        reason: 'The capture has already been fully refunded',
+      });
+    });
+
+    it('refund rejects on a 503', async () => {
+      http.request.mockRejectedValueOnce(new PayPalUnavailableError('down'));
+
+      await expect(gateway.refund(refundRequest)).rejects.toBeInstanceOf(
+        DependencyUnavailableException,
+      );
+    });
+
+    it('parseWebhook maps PAYMENT.CAPTURE.REFUNDED to a refund event', async () => {
+      await expect(
+        verified({
+          id: 'WH-R1',
+          event_type: 'PAYMENT.CAPTURE.REFUNDED',
+          resource: {
+            id: 'REFUND-1',
+            status: 'COMPLETED',
+            amount: { value: '5.00', currency_code: 'USD' },
+            create_time: '2026-11-25T10:00:00Z',
+            links: [
+              {
+                rel: 'up',
+                href: 'https://api.sandbox.paypal.com/v2/payments/captures/CAPTURE-1',
+              },
+            ],
+          },
+        }),
+      ).resolves.toEqual({
+        id: 'WH-R1',
+        type: 'PAYMENT.CAPTURE.REFUNDED',
+        event: {
+          kind: 'refund',
+          refundTransactionId: 'REFUND-1',
+          chargeTransactionId: 'CAPTURE-1',
+          refundId: null,
+          amountCents: 500,
+          currency: 'usd',
+          status: 'succeeded',
+          reason: null,
+          at: new Date('2026-11-25T10:00:00Z'),
+        },
+      });
+    });
+
+    it('parseWebhook maps PAYMENT.REFUND.FAILED with its reason', async () => {
+      const { event } = await verified({
+        id: 'WH-R2',
+        event_type: 'PAYMENT.REFUND.FAILED',
+        resource: {
+          id: 'REFUND-3',
+          status: 'FAILED',
+          status_details: { reason: 'ECHECK' },
+          custom_id: REFUND_ID,
+          amount: { value: '12.50', currency_code: 'USD' },
+          links: [
+            {
+              rel: 'up',
+              href: 'https://api.sandbox.paypal.com/v2/payments/captures/CAPTURE-1',
+            },
+          ],
+        },
+      });
+
+      expect(event).toMatchObject({
+        kind: 'refund',
+        refundId: REFUND_ID,
+        status: 'failed',
+        reason: 'ECHECK',
+      });
+    });
+  });
+
   describe('capture', () => {
     it('capture maps COMPLETED to succeeded and sends no fixed PayPal-Request-Id', async () => {
       answer(201, capturedOrder('COMPLETED'));

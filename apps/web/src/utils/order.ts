@@ -1,4 +1,4 @@
-import { PaymentMethod, PaymentType } from '@repo/constants'
+import { PaymentMethod, PaymentStatus, PaymentType } from '@repo/constants'
 import type { PlaceOrderPayload } from '@repo/schemas'
 import { Banknote, Package, Truck } from 'lucide-react'
 
@@ -644,4 +644,29 @@ export function placedOrderTotals(order: PlacedOrder): CartTotals {
     tax: order.tax,
     total: order.totalAmount,
   }
+}
+
+const ONLINE_METHODS = new Set<string>([
+  PaymentMethod.CARD,
+  PaymentMethod.PAYPAL,
+])
+
+/**
+ * What can still be refunded: the PAID online charge, or 0 once the order has
+ * a PENDING or PAID refund (an order is refunded once).
+ */
+export const refundableOf = (order: Pick<PlacedOrder, 'payments'>): number => {
+  const charge = order.payments.find(
+    (payment) =>
+      payment.type === PaymentType.CHARGE &&
+      payment.status === PaymentStatus.PAID &&
+      ONLINE_METHODS.has(payment.method),
+  )
+  const held = order.payments.some(
+    (payment) =>
+      payment.type === PaymentType.REFUND &&
+      (payment.status === PaymentStatus.PENDING ||
+        payment.status === PaymentStatus.PAID),
+  )
+  return charge && !held ? charge.amount : 0
 }

@@ -7,6 +7,8 @@ import { InventoryMovement } from './entities/inventory-movement.entity.js';
 import { OrderRepository } from './repositories/order.repository.js';
 import { OrderService } from './services/order.service.js';
 import { OrderController } from './controllers/order.controller.js';
+import { RefundController } from './controllers/refund.controller.js';
+import { RefundService } from './services/refund.service.js';
 import { CartModule } from '../cart/cart.module.js';
 import { ProductVariantModule } from '../product-variant/product-variant.module.js';
 import { ShippingMethodModule } from '../shipping-method/shipping-method.module.js';
@@ -20,8 +22,8 @@ import { UserModule } from '../user/user.module.js';
     ShippingMethodModule,
     UserModule,
   ],
-  providers: [OrderService, OrderRepository],
-  controllers: [OrderController],
-  exports: [OrderRepository],
+  providers: [OrderService, OrderRepository, RefundService],
+  controllers: [OrderController, RefundController],
+  exports: [OrderRepository, RefundService],
 })
 export class OrderModule {}

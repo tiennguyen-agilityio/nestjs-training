@@ -5,6 +5,7 @@ import {
   ShippingStatus,
 } from '@repo/constants';
 import {
+  createRefundSchema,
   placeOrderSchema,
   updateOrderShippingStatusSchema,
   updateOrderStatusSchema,
@@ -12,12 +13,15 @@ import {
 import { paginationQuerySchema } from '../../../common/dto/pagination.schema.js';
 
 export {
+  createRefundSchema,
   placeOrderSchema,
   updateOrderShippingStatusSchema,
   updateOrderStatusSchema,
 };
 
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>;
+
+export type CreateRefundInput = z.infer<typeof createRefundSchema>;
 
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
 

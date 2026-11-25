@@ -9,6 +9,8 @@ import { PaymentGateways } from './gateways/payment-gateways.js';
 import { StripePaymentGateway } from './gateways/stripe-payment.gateway.js';
 import { stripeClientProvider } from './gateways/stripe-client.provider.js';
 import { PaymentCheckoutExpireHandler } from './handlers/payment-checkout-expire.handler.js';
+import { PaymentRefundHandler } from './handlers/payment-refund.handler.js';
+import { PaymentRefundDeadLetterListener } from './handlers/payment-refund-dead-letter.listener.js';
 import { PayPalHttpClient } from './gateways/paypal-http.client.js';
 import { PayPalPaymentGateway } from './gateways/paypal-payment.gateway.js';
 
@@ -21,6 +23,8 @@ import { PayPalPaymentGateway } from './gateways/paypal-payment.gateway.js';
     StripePaymentGateway,
     stripeClientProvider,
     PaymentCheckoutExpireHandler,
+    PaymentRefundHandler,
+    PaymentRefundDeadLetterListener,
     PayPalHttpClient,
     PayPalPaymentGateway,
   ],
