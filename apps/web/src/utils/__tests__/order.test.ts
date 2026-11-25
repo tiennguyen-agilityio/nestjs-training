@@ -17,6 +17,7 @@ import {
 } from '@/utils/order'
 import {
   buildOrderDashboardStats,
+  canRetryPayment,
   formatOrderCustomerName,
   formatOrderDateTime,
   getCancelOrderErrorMessage,
@@ -539,5 +540,57 @@ describe('placed order summary', () => {
       tax: 41.8,
       total: 471.8,
     })
+  })
+})
+
+describe('canRetryPayment', () => {
+  const NOW = new Date('2026-11-25T10:00:00.000Z')
+  const failedOrder = (
+    method: PaymentMethod,
+    overrides: Partial<OrderDetail> = {},
+  ): OrderDetail =>
+    orderOf(OrderPaymentStatus.FAILED, {
+      payments: [charge(method, PaymentStatus.FAILED)],
+      expiresAt: '2026-11-25T22:00:00.000Z',
+      ...overrides,
+    })
+
+  it('canRetryPayment is true only for a FAILED online charge on a PENDING order before its deadline', () => {
+    expect(canRetryPayment(failedOrder(PaymentMethod.CARD), NOW)).toBe(true)
+    expect(canRetryPayment(failedOrder(PaymentMethod.PAYPAL), NOW)).toBe(true)
+    expect(
+      canRetryPayment(
+        failedOrder(PaymentMethod.PAYPAL, { expiresAt: null }),
+        NOW,
+      ),
+    ).toBe(true)
+
+    for (const paymentStatus of [
+      OrderPaymentStatus.PAID,
+      OrderPaymentStatus.PENDING,
+      OrderPaymentStatus.UNPAID,
+    ]) {
+      expect(
+        canRetryPayment(
+          failedOrder(PaymentMethod.CARD, { paymentStatus }),
+          NOW,
+        ),
+      ).toBe(false)
+    }
+    expect(
+      canRetryPayment(
+        failedOrder(PaymentMethod.CARD, { status: OrderStatus.CANCELLED }),
+        NOW,
+      ),
+    ).toBe(false)
+    expect(canRetryPayment(failedOrder(PaymentMethod.COD), NOW)).toBe(false)
+    expect(
+      canRetryPayment(
+        failedOrder(PaymentMethod.CARD, {
+          expiresAt: '2026-11-25T09:59:59.000Z',
+        }),
+        NOW,
+      ),
+    ).toBe(false)
   })
 })

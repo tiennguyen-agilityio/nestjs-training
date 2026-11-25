@@ -29,6 +29,7 @@ const VERIFY_PATH = '/v1/notifications/verify-webhook-signature';
 const DENIED_REASON = 'PayPal denied the payment';
 const NO_RESULT_REASON = 'PayPal did not complete the payment';
 const OPEN_STATUSES = new Set(['CREATED', 'PAYER_ACTION_REQUIRED', 'APPROVED']);
+const HELD_CAPTURE_STATUSES = new Set(['COMPLETED', 'PENDING']);
 const APPROVAL_RELS = ['approve', 'payer-action'];
 const NOT_FOUND = 404;
 const TOO_MANY_REQUESTS = 429;
@@ -102,7 +103,11 @@ export class PayPalPaymentGateway extends PaymentGateway {
 
   async createCheckout(request: CheckoutRequest): Promise<CheckoutSession> {
     const response = await this.call<PayPalOrder>('POST', ORDERS_PATH, {
-      headers: { 'PayPal-Request-Id': `create-${request.paymentId}` },
+      headers: {
+        'PayPal-Request-Id': request.replacesCheckoutId
+          ? `create-${request.paymentId}-after-${request.replacesCheckoutId}`
+          : `create-${request.paymentId}`,
+      },
       body: {
         intent: 'CAPTURE',
         purchase_units: [
@@ -312,10 +317,15 @@ export class PayPalPaymentGateway extends PaymentGateway {
     const link = order.links?.find((candidate) =>
       APPROVAL_RELS.includes(candidate.rel),
     );
+    const open = OPEN_STATUSES.has(order.status);
+    const holdsMoney = this.capturesOf(order).some((capture) =>
+      HELD_CAPTURE_STATUSES.has(capture.status),
+    );
     return {
       id: order.id,
       url: link?.href ?? '',
-      open: OPEN_STATUSES.has(order.status),
+      open,
+      endedUnpaid: !open && !holdsMoney,
       expiresAt,
     };
   }
