@@ -7,6 +7,8 @@ export interface User {
   firstName: string | null
   lastName: string | null
   phoneNumber?: string | null
+  /** Only from GET /users/me: the saved addresses, the default first. */
+  addresses?: UserAddress[]
   name: string | null
   avatarUrl: string | null
   role?: UserRole

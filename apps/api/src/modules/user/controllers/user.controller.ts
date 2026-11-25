@@ -14,12 +14,9 @@ import {
 import {
   ApiBearerAuth,
   ApiExcludeEndpoint,
-  ApiExtraModels,
   ApiNoContentResponse,
-  ApiOkResponse,
   ApiOperation,
   ApiTags,
-  getSchemaPath,
 } from '@nestjs/swagger';
 import { UserService } from '../services/user.service.js';
 import { UserAddressService } from '../services/user-address.service.js';
@@ -32,7 +29,6 @@ import {
   type UpdateUserInput,
 } from '../dto/user.schema.js';
 import { ResponseUserDto } from '../dto/response-user.dto.js';
-import { ResponseUserAddressDto } from '../dto/response-user-address.dto.js';
 import { isActiveAdmin } from '../../../common/utils/user.util.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import {
@@ -112,44 +108,20 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      'Get the currently authenticated user (any authenticated user, not just admin)',
+      'Get the currently authenticated user with their saved addresses, the default first (any authenticated user, not just admin)',
   })
   @ApiDataResponse(HttpStatus.OK, ResponseUserDto)
   @ApiErrorResponse(
     HttpStatus.UNAUTHORIZED,
     ERROR_MESSAGES.AUTH.UNAUTHENTICATED,
   )
-  getCurrentUser(@AuthUser() user: User): ResponseUserDto {
+  async getCurrentUser(@AuthUser() user: User): Promise<ResponseUserDto> {
+    const addresses = await this.userAddressService.findMine(user.id);
     return ResponseUserDto.fromEntity(user, {
       withAudit: isActiveAdmin(user),
       withPhone: true,
+      addresses,
     });
-  }
-
-  @Get('me/addresses')
-  @UseGuards(AuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary:
-      "The current user's saved addresses, the default first (any authenticated user)",
-  })
-  @ApiExtraModels(ResponseUserAddressDto)
-  @ApiOkResponse({
-    schema: {
-      properties: {
-        data: {
-          type: 'array',
-          items: { $ref: getSchemaPath(ResponseUserAddressDto) },
-        },
-      },
-    },
-  })
-  @ApiErrorResponse(
-    HttpStatus.UNAUTHORIZED,
-    ERROR_MESSAGES.AUTH.UNAUTHENTICATED,
-  )
-  getMyAddresses(@AuthUser() user: User): Promise<ResponseUserAddressDto[]> {
-    return this.userAddressService.findMine(user.id);
   }
 
   @Get(':id')

@@ -31,7 +31,6 @@ import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
 import { orderSuccessPath, profileOrderPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart } from '@/hooks/useCart'
-import { addressQueryKeys, useMyAddresses } from '@/hooks/useMyAddresses'
 import { useCreateOrder } from '@/hooks/useOrder'
 import { usePayPalCheckout } from '@/hooks/usePayPalCheckout'
 import { useStartPayment } from '@/hooks/usePayment'
@@ -163,8 +162,9 @@ const CheckoutPageContent = () => {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { getToken } = useClerkAuth()
-  const { user } = useAuth()
-  const { defaultAddress } = useMyAddresses()
+  const { user, refresh: refreshUser } = useAuth()
+  const defaultAddress =
+    user?.addresses?.find((address) => address.isDefault) ?? null
   const { mutateAsync: createOrder } = useCreateOrder()
   const { mutateAsync: startPayment } = useStartPayment()
 
@@ -469,7 +469,8 @@ const CheckoutPageContent = () => {
       })
       // The API emptied the server cart: read it again (header count → 0).
       void queryClient.invalidateQueries({ queryKey: cartQueryKeys.root })
-      void queryClient.invalidateQueries({ queryKey: addressQueryKeys.root })
+      // The API saves the first order's address as the default: read the user again.
+      void refreshUser()
       return order
     } catch (error) {
       const errors = error instanceof ServiceError ? error.errors : []

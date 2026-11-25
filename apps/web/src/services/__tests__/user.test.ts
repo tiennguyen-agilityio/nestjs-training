@@ -1,11 +1,6 @@
 import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
 import { API_ROUTES } from '@/constants/routes'
-import {
-  deleteUserById,
-  fetchMyAddresses,
-  fetchUser,
-  fetchUsers,
-} from '@/services/user'
+import { deleteUserById, fetchUser, fetchUsers } from '@/services/user'
 import { UserRole, UserStatus } from '@repo/constants'
 
 describe('fetchUsers', () => {
@@ -241,38 +236,6 @@ describe('fetchUser', () => {
     globalThis.fetch = originalFetch
   })
 
-  it('fetchUser returns phoneNumber and no address', async () => {
-    globalThis.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: {
-          id: 'u-1',
-          email: 'jane@example.com',
-          firstName: 'Jane',
-          lastName: 'Doe',
-          phoneNumber: '0912345678',
-          addresses: [{ addressLine: '1 Old Shape Street' }],
-        },
-      }),
-    }) as typeof fetch
-
-    const result = await fetchUser(async () => 'session-token')
-
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.user.phoneNumber).toBe('0912345678')
-      expect('address' in result.user).toBe(false)
-    }
-  })
-})
-
-describe('fetchMyAddresses', () => {
-  const originalFetch = globalThis.fetch
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch
-  })
-
   const address = {
     id: 'address-1',
     userId: 'u-1',
@@ -286,38 +249,55 @@ describe('fetchMyAddresses', () => {
     updatedAt: '2026-11-01T00:00:00.000Z',
   }
 
-  it('fetchMyAddresses GETs /users/me/addresses with credentials and the token', async () => {
+  const mockMe = (data: Record<string, unknown>) => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: [address] }),
+      json: async () => ({ data }),
     })
     globalThis.fetch = fetchMock as typeof fetch
+    return fetchMock
+  }
 
-    const result = await fetchMyAddresses(async () => 'session-token')
+  it('fetchUser GETs /users/me and returns phoneNumber and addresses', async () => {
+    const fetchMock = mockMe({
+      id: 'u-1',
+      email: 'jane@example.com',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      phoneNumber: '0912345678',
+      addresses: [address],
+    })
+
+    const result = await fetchUser(async () => 'session-token')
 
     expect(fetchMock).toHaveBeenCalledWith(
-      API_ROUTES.MY_ADDRESSES,
+      API_ROUTES.ME,
       expect.objectContaining({ credentials: 'include' }),
     )
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit
     expect((init.headers as Headers).get('Authorization')).toBe(
       'Bearer session-token',
     )
-    expect(result).toEqual({ ok: true, addresses: [address] })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.user.phoneNumber).toBe('0912345678')
+      expect(result.user.addresses).toEqual([address])
+    }
   })
 
-  it('fetchMyAddresses returns ADDRESSES_LOAD on failure', async () => {
-    globalThis.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-    }) as typeof fetch
+  it('fetchUser returns no addresses when the response has none', async () => {
+    mockMe({ id: 'u-1', email: 'jane@example.com', addresses: 'oops' })
 
-    const result = await fetchMyAddresses(async () => 'session-token')
+    const result = await fetchUser(async () => 'session-token')
 
-    expect(result).toEqual({
-      ok: false,
-      error: `${API_FALLBACK_ERRORS.ADDRESSES_LOAD} (500)`,
-      status: 500,
-    })
+    expect(result.ok && result.user.addresses).toEqual([])
+  })
+
+  it('fetchUser drops address entries that are not objects', async () => {
+    mockMe({ id: 'u-1', addresses: [address, null, 'x'] })
+
+    const result = await fetchUser(async () => 'session-token')
+
+    expect(result.ok && result.user.addresses).toEqual([address])
   })
 })

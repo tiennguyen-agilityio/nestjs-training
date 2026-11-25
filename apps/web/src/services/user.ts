@@ -56,6 +56,14 @@ function readDeletedAt(payload: Record<string, unknown>): string | null {
   return raw.trim()
 }
 
+function readAddresses(value: unknown): UserAddress[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (item): item is UserAddress =>
+      item !== null && typeof item === 'object' && !Array.isArray(item),
+  )
+}
+
 function normalizeUserListItem(item: unknown): User | null {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return null
 
@@ -154,6 +162,7 @@ export async function fetchUser(
   const role = getRole(payload.role)
   const status = getStatus(payload.status)
   const deletedAt = readDeletedAt(payload)
+  const addresses = readAddresses(payload.addresses)
   const user: User = {
     id,
     deletedAt,
@@ -161,6 +170,7 @@ export async function fetchUser(
     firstName,
     lastName,
     phoneNumber,
+    addresses,
     name,
     avatarUrl: imageUrl,
     role,
@@ -168,25 +178,6 @@ export async function fetchUser(
   }
 
   return { ok: true, user }
-}
-
-export async function fetchMyAddresses(
-  getToken?: () => Promise<string | null>,
-): Promise<
-  | { ok: true; addresses: UserAddress[] }
-  | { ok: false; error: string; status?: number }
-> {
-  const result = await apiClient.get<Response<UserAddress[]>>(
-    API_ROUTES.MY_ADDRESSES,
-    {
-      getToken,
-      fallbackError: API_FALLBACK_ERRORS.ADDRESSES_LOAD,
-    },
-  )
-  if (!result.ok) return result
-
-  const { data } = result.data
-  return { ok: true, addresses: Array.isArray(data) ? data : [] }
 }
 
 export async function fetchUsers(

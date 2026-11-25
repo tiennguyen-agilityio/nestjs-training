@@ -142,61 +142,72 @@ describe('UserController', () => {
   });
 
   describe('getCurrentUser', () => {
-    it('returns the response DTO built from the authenticated user, without calling UserService', () => {
-      const result = controller.getCurrentUser(user);
+    const addresses = [
+      {
+        id: 'address-1',
+        userId: 'user-id-1',
+        addressLine: '12 Roast Street',
+        ward: 'Ben Nghe',
+        district: 'District 1',
+        city: 'Ho Chi Minh',
+        postalCode: '700000',
+        isDefault: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+
+    beforeEach(() => {
+      userAddressService.findMine.mockResolvedValue([]);
+    });
+
+    it('returns the response DTO built from the authenticated user, without calling UserService', async () => {
+      const result = await controller.getCurrentUser(user);
 
       expect(result).toEqual(
-        ResponseUserDto.fromEntity(user, { withPhone: true }),
+        ResponseUserDto.fromEntity(user, { withPhone: true, addresses: [] }),
       );
       expect(JSON.parse(JSON.stringify(result))).not.toHaveProperty(
         'createdBy',
       );
     });
 
-    it('getCurrentUser returns phoneNumber', () => {
-      expect(
+    it("getCurrentUser returns the caller's addresses", async () => {
+      userAddressService.findMine.mockResolvedValue(addresses);
+
+      const result = await controller.getCurrentUser(user);
+
+      expect(userAddressService.findMine).toHaveBeenCalledWith('user-id-1');
+      expect(result.addresses).toBe(addresses);
+    });
+
+    it('getCurrentUser returns an empty addresses list when the caller has none', async () => {
+      const result = await controller.getCurrentUser(user);
+
+      expect(result.addresses).toEqual([]);
+    });
+
+    it('getCurrentUser returns phoneNumber', async () => {
+      await expect(
         controller.getCurrentUser({
           ...user,
           phoneNumber: '0912345678',
         }),
-      ).toMatchObject({ phoneNumber: '0912345678' });
-      expect(controller.getCurrentUser(user)).toMatchObject({
+      ).resolves.toMatchObject({ phoneNumber: '0912345678' });
+      await expect(controller.getCurrentUser(user)).resolves.toMatchObject({
         phoneNumber: null,
       });
     });
 
-    it('includes the audit ids for an active admin', () => {
-      expect(controller.getCurrentUser(adminUser)).toMatchObject({
-        createdBy: 'admin-id-1',
-        updatedBy: 'admin-id-1',
-        deletedBy: null,
-      });
-      expect(userService.findOne).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('getMyAddresses', () => {
-    it("getMyAddresses returns the caller's addresses", async () => {
-      const addresses = [
+    it('includes the audit ids for an active admin', async () => {
+      await expect(controller.getCurrentUser(adminUser)).resolves.toMatchObject(
         {
-          id: 'address-1',
-          userId: 'user-id-1',
-          addressLine: '12 Roast Street',
-          ward: 'Ben Nghe',
-          district: 'District 1',
-          city: 'Ho Chi Minh',
-          postalCode: '700000',
-          isDefault: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdBy: 'admin-id-1',
+          updatedBy: 'admin-id-1',
+          deletedBy: null,
         },
-      ];
-      userAddressService.findMine.mockResolvedValue(addresses);
-
-      const result = await controller.getMyAddresses(user);
-
-      expect(userAddressService.findMine).toHaveBeenCalledWith('user-id-1');
-      expect(result).toBe(addresses);
+      );
+      expect(userService.findOne).not.toHaveBeenCalled();
     });
   });
 
@@ -223,6 +234,23 @@ describe('UserController', () => {
       expect(json(list.data[0])).not.toHaveProperty('phoneNumber');
       expect(json(detail)).not.toHaveProperty('phoneNumber');
       expect(json(updated)).not.toHaveProperty('phoneNumber');
+    });
+
+    it('admin user responses leave addresses out', async () => {
+      userService.findAll.mockResolvedValue({
+        data: [user],
+        meta: { limit: 10, currentPage: 1, pageCount: 1, totalCount: 1 },
+      });
+      userService.findOne.mockResolvedValue(user);
+
+      const list = await controller.findAll({ page: 1, limit: 10 }, adminUser);
+      const detail = await controller.findOne({ id: 'user-id-1' });
+
+      const json = (value: unknown) =>
+        JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+      expect(json(list.data[0])).not.toHaveProperty('addresses');
+      expect(json(detail)).not.toHaveProperty('addresses');
+      expect(userAddressService.findMine).not.toHaveBeenCalled();
     });
   });
 

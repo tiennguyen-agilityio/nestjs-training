@@ -17,6 +17,7 @@ import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
 import { ShippingMethodService } from '../../shipping-method/services/shipping-method.service.js';
 import { UserAddressService } from '../../user/services/user-address.service.js';
+import { UserService } from '../../user/services/user.service.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
 import { ResponseOrderDetailDto } from '../dto/response-order-detail.dto.js';
@@ -94,6 +95,7 @@ export class OrderService {
     private readonly productVariantService: ProductVariantService,
     private readonly shippingMethodService: ShippingMethodService,
     private readonly userAddressService: UserAddressService,
+    private readonly userService: UserService,
   ) {}
 
   /** The caller's own orders only, whatever their role (`findAll` lists every order). */
@@ -309,6 +311,7 @@ export class OrderService {
         city,
         postalCode,
       });
+      await this.userService.saveFirstPhone(userId, recipient.recipientPhone);
       await this.cartService.clearItems(cart.id);
 
       return ResponseOrderDto.fromEntity(order);

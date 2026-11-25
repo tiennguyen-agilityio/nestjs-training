@@ -687,6 +687,39 @@ describe('UserService', () => {
     });
   });
 
+  describe('saveFirstPhone', () => {
+    it('saveFirstPhone stores the phone, stamped by the user, when the user has none', async () => {
+      const user = buildUser({ phoneNumber: null });
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.saveFirstPhone('user-id-1', '0901234567');
+
+      expect(userRepository.findById).toHaveBeenCalledWith('user-id-1');
+      expect(user.phoneNumber).toBe('0901234567');
+      expect(userRepository.save).toHaveBeenCalledWith(user, 'user-id-1');
+    });
+
+    it('saveFirstPhone does nothing when the user is gone', async () => {
+      userRepository.findById.mockResolvedValue(null);
+
+      await expect(
+        service.saveFirstPhone('user-id-1', '0901234567'),
+      ).resolves.toBeUndefined();
+
+      expect(userRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('saveFirstPhone leaves an existing phone unchanged', async () => {
+      const user = buildUser({ phoneNumber: '0912345678' });
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.saveFirstPhone('user-id-1', '0901234567');
+
+      expect(user.phoneNumber).toBe('0912345678');
+      expect(userRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
   describe('remove', () => {
     it('sets status to INACTIVE and soft-deletes the user', async () => {
       const user = buildUser();

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole, UserStatus } from '@repo/constants';
 import { User } from '../entities/user.entity.js';
+import { ResponseUserAddressDto } from './response-user-address.dto.js';
 import {
   auditFieldsOf,
   type ResponseOptions,
@@ -29,6 +30,13 @@ export class ResponseUserDto {
   })
   phoneNumber?: string | null;
 
+  @ApiPropertyOptional({
+    type: [ResponseUserAddressDto],
+    description:
+      "Only on GET /users/me: the user's saved addresses, the default first",
+  })
+  addresses?: ResponseUserAddressDto[];
+
   @ApiPropertyOptional({ nullable: true, type: Date })
   deletedAt: Date | null = null;
 
@@ -43,7 +51,10 @@ export class ResponseUserDto {
 
   static fromEntity(
     user: User,
-    options: ResponseOptions & { withPhone?: boolean } = {},
+    options: ResponseOptions & {
+      withPhone?: boolean;
+      addresses?: ResponseUserAddressDto[];
+    } = {},
   ): ResponseUserDto {
     const dto = new ResponseUserDto();
     dto.id = user.id;
@@ -55,6 +66,7 @@ export class ResponseUserDto {
     dto.status = user.status;
     dto.avatarUrl = user.avatarUrl;
     if (options.withPhone) dto.phoneNumber = user.phoneNumber;
+    if (options.addresses) dto.addresses = options.addresses;
     dto.deletedAt = user.deletedAt;
     if (options.withAudit) Object.assign(dto, auditFieldsOf(user));
     return dto;

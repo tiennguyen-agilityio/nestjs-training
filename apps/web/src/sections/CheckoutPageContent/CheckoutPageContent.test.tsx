@@ -22,7 +22,6 @@ import {
 import { orderSuccessPath, profileOrderPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart, type UseCartResult } from '@/hooks/useCart'
-import { addressQueryKeys, useMyAddresses } from '@/hooks/useMyAddresses'
 import { useCreateOrder } from '@/hooks/useOrder'
 import { useCapturePayment, useStartPayment } from '@/hooks/usePayment'
 import {
@@ -120,13 +119,6 @@ jest.mock(
   }),
   { virtual: true },
 )
-jest.mock('@/hooks/useMyAddresses', () => ({
-  useMyAddresses: jest.fn(),
-  addressQueryKeys: {
-    root: ['addresses'],
-    mine: (userId: string | null) => ['addresses', 'mine', userId],
-  },
-}))
 jest.mock('@/hooks/useShippingMethod', () => ({
   useActiveShippingMethods: jest.fn(),
 }))
@@ -141,7 +133,7 @@ const mockUseRouter = jest.mocked(useRouter)
 const mockUseCartStore = jest.mocked(useCartStore)
 const mockUseCart = jest.mocked(useCart)
 const mockUseAuth = jest.mocked(useAuth)
-const mockUseMyAddresses = jest.mocked(useMyAddresses)
+const refreshUser = jest.fn()
 const mockUseShippingMethods = jest.mocked(useActiveShippingMethods)
 const mockUseCreateOrder = jest.mocked(useCreateOrder)
 const mutateAsync = jest.fn()
@@ -295,18 +287,12 @@ const savedAddress: UserAddress = {
   updatedAt: '2026-11-01T00:00:00.000Z',
 }
 
-const addressesResult = (
-  overrides: Partial<ReturnType<typeof useMyAddresses>> = {},
-): ReturnType<typeof useMyAddresses> => ({
-  addresses: overrides.defaultAddress ? [overrides.defaultAddress] : [],
-  defaultAddress: null,
-  isLoading: false,
-  isFetching: false,
-  isError: false,
-  errorMessage: null,
-  refetch: jest.fn().mockResolvedValue(undefined),
-  ...overrides,
-})
+const otherAddress: UserAddress = {
+  ...savedAddress,
+  id: 'address-2',
+  addressLine: '5 Side Lane',
+  isDefault: false,
+}
 
 const deliverySpeed = () =>
   within(screen.getByRole('region', { name: 'Delivery Speed' }))
@@ -352,10 +338,12 @@ describe('CheckoutPageContent', () => {
     } as unknown as ReturnType<typeof useCapturePayment>)
     mockUseCart.mockReturnValue(cartResult)
     mockUseCartStore.mockReturnValue({ clearCart, setItemSnapshots })
-    mockUseAuth.mockReturnValue({ user: null } as unknown as ReturnType<
-      typeof useAuth
-    >)
-    mockUseMyAddresses.mockReturnValue(addressesResult())
+    refreshUser.mockReset()
+    refreshUser.mockResolvedValue(undefined)
+    mockUseAuth.mockReturnValue({
+      user: null,
+      refresh: refreshUser,
+    } as unknown as ReturnType<typeof useAuth>)
     jest.mocked(findMapboxAddressSuggestions).mockClear()
   })
 
@@ -370,18 +358,17 @@ describe('CheckoutPageContent', () => {
           phoneNumber: '0912345678',
           name: 'Jane Doe',
           avatarUrl: null,
+          addresses: [],
           ...overrides,
         },
+        refresh: refreshUser,
       } as unknown as ReturnType<typeof useAuth>)
 
     const field = (name: string) =>
       screen.getByRole<HTMLInputElement>('textbox', { name })
 
     it('prefills the address from the default address and the phone from the profile (R4, R6)', () => {
-      profile()
-      mockUseMyAddresses.mockReturnValue(
-        addressesResult({ defaultAddress: savedAddress }),
-      )
+      profile({ addresses: [otherAddress, savedAddress] })
       mockUseShippingMethods.mockReturnValue(
         shippingResult({ shippingMethods: [standard] }),
       )
@@ -414,9 +401,7 @@ describe('CheckoutPageContent', () => {
       const { rerender } = renderCheckout()
       await user.click(field('Delivery Address'))
       await user.paste('5 Typed Lane')
-      mockUseMyAddresses.mockReturnValue(
-        addressesResult({ defaultAddress: savedAddress }),
-      )
+      profile({ addresses: [savedAddress] })
       rerender(<CheckoutPageContent />)
 
       await waitFor(() => expect(field('First Name').value).toBe('Jane'))
@@ -436,9 +421,7 @@ describe('CheckoutPageContent', () => {
       const { rerender } = renderCheckout()
       await user.click(field('First Name'))
       await user.paste('Ada')
-      mockUseMyAddresses.mockReturnValue(
-        addressesResult({ defaultAddress: savedAddress }),
-      )
+      profile({ addresses: [savedAddress] })
       rerender(<CheckoutPageContent />)
 
       await waitFor(() =>
@@ -452,10 +435,7 @@ describe('CheckoutPageContent', () => {
     })
 
     it('a prefilled address does not look up suggestions', async () => {
-      profile()
-      mockUseMyAddresses.mockReturnValue(
-        addressesResult({ defaultAddress: savedAddress }),
-      )
+      profile({ addresses: [savedAddress] })
       mockUseShippingMethods.mockReturnValue(
         shippingResult({ shippingMethods: [standard] }),
       )
@@ -467,14 +447,12 @@ describe('CheckoutPageContent', () => {
       expect(findMapboxAddressSuggestions).not.toHaveBeenCalled()
     })
 
-    it('leaves the address empty when the addresses request fails', async () => {
+    it.each([
+      ['has no saved address', []],
+      ['has no default address', [{ ...savedAddress, isDefault: false }]],
+    ])('leaves the address empty when the user %s', async (_, addresses) => {
       const user = userEvent.setup()
-      mockUseMyAddresses.mockReturnValue(
-        addressesResult({
-          isError: true,
-          errorMessage: API_FALLBACK_ERRORS.ADDRESSES_LOAD,
-        }),
-      )
+      profile({ addresses })
       mockUseShippingMethods.mockReturnValue(
         shippingResult({ shippingMethods: [standard] }),
       )
@@ -487,7 +465,7 @@ describe('CheckoutPageContent', () => {
     })
 
     it.each([['COD'], ['STRIPE']])(
-      'invalidates the addresses after a placed order (%s)',
+      'reads the user again after a placed order (%s)',
       async (method) => {
         const user = userEvent.setup()
         mutateAsync.mockResolvedValue(placedOrder)
@@ -500,11 +478,7 @@ describe('CheckoutPageContent', () => {
         if (method === 'COD') await pickCashOnDelivery(user)
         await user.click(placeOrderButton())
 
-        await waitFor(() =>
-          expect(invalidateQueries).toHaveBeenCalledWith({
-            queryKey: addressQueryKeys.root,
-          }),
-        )
+        await waitFor(() => expect(refreshUser).toHaveBeenCalledTimes(1))
       },
     )
   })
