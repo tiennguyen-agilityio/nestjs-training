@@ -185,6 +185,13 @@ pnpm run docker:prod:down
   Stripe Checkout Session (USD) and returns its URL, so card numbers never reach the shop. The
   session ends with the order's `expires_at` (24 h after placing the order). A second call while
   the session is open returns the same URL.
+- **Retry** — the same call retries a FAILED payment whose checkout ended unpaid (an expired Stripe
+  session, a PayPal order closed with only declined captures, or one the gateway no longer has):
+  it opens a new checkout with the same gateway on the same payment row, keyed by the checkout it
+  replaces. The payment stays FAILED with its reason until the gateway reports the new attempt.
+  The order's deadline does not move (an order with none, after a held PayPal capture was denied,
+  gets 24 h); a closed checkout that may hold money, or a card retry with under 31 minutes left,
+  answers 409 `paymentNotPayable`.
 - **Webhook outcome** — `POST /webhooks/stripe`, verified by the `Stripe-Signature` header on the
   raw body: a paid session sets the payment PAID (`transaction_id` = the PaymentIntent id,
   `completed_at`) and the order CONFIRMED; a declined card or an expired session sets it FAILED
@@ -542,7 +549,7 @@ The signed-in user's own cart; every success returns the whole cart.
 | Method | Path                           | Auth | Description                                                                                                                                                                                                                                                                                                                                         |
 | :----- | :----------------------------- | :--- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST` | `/orders`                      | 🔒   | Place an order from my cart (`Idempotency-Key` required): holds the stock (`reserved_quantity` + a `RESERVE` movement), copies names, prices and the method's fee, adds 10% tax, creates a PENDING CHARGE and empties the cart; any 400 saves nothing                                                                                               |
-| `POST` | `/orders/:id/payments`         | 🔒   | Start the online payment of my CARD or PAYPAL order: opens a card-only Stripe Checkout Session or a PayPal order and returns `{ paymentId, checkoutId, checkoutUrl, expiresAt }`; the same one while it is open. 404 for another user's order, 400 `paymentMethodNotOnline` for COD, 409 `paymentNotPayable` / `paymentOrderExpired`                |
+| `POST` | `/orders/:id/payments`         | 🔒   | Start the online payment of my CARD or PAYPAL order: opens a card-only Stripe Checkout Session or a PayPal order and returns `{ paymentId, checkoutId, checkoutUrl, expiresAt }`; the same one while it is open; a FAILED payment whose checkout ended unpaid gets a new one on the same payment (retry). 404 for another user's order, 400 `paymentMethodNotOnline` for COD, 409 `paymentNotPayable` / `paymentOrderExpired`                |
 | `POST` | `/orders/:id/payments/capture` | 🔒   | Capture the PayPal order I approved: `{ paymentId, paymentStatus, failureReason, retryable }` with PAID (order CONFIRMED), FAILED or PENDING (held for review). 404 for another user's order, 400 `paymentMethodNotOnline` / `paymentCaptureUnsupported` (CARD), 409 `paymentNotPayable` / `paymentOrderExpired`, 503 when PayPal cannot be reached |
 | `GET`  | `/orders`                      | 🔒   | My orders; an active admin with `all=true` gets every order (anyone else: 403). `search` (every word, accents ignored: order number, recipient, customer name or email), `status`, `shippingStatus`, `paymentStatus`, `sort`, `order`; paginated, newest first                                                                                      |
 | `GET`  | `/orders/:idOrOrderNumber`     | 🔒   | My order (by id or order number) with its items, payments and customer; an active admin reads any order; otherwise 404                                                                                                                                                                                                                              |

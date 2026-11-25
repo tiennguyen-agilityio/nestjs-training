@@ -10,12 +10,16 @@ export interface CheckoutRequest {
   expiresAt: Date;
   successUrl: string;
   cancelUrl: string;
+  /** The checkout a retry replaces (it keys the new attempt); `null` for a first attempt. */
+  replacesCheckoutId: string | null;
 }
 
 export interface CheckoutSession {
   id: string;
   url: string;
   open: boolean;
+  /** Closed and holding no money (expired, voided or only declined): a retry may replace it. */
+  endedUnpaid: boolean;
   expiresAt: Date;
 }
 

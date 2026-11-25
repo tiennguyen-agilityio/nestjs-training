@@ -14,6 +14,7 @@ import {
 import {
   ORDER_STATUS,
   SHIPPING_STATUS,
+  type OrderDetail,
   type OrderSummary,
   type PlacedOrder,
 } from '@/types/order'
@@ -490,10 +491,8 @@ export interface OrderSuccessPaymentView {
   showRetry: boolean
 }
 
-/** The method of the order's latest charge, or null with none. */
-export const getOrderChargeMethod = (
-  order: PlacedOrder,
-): PaymentMethod | null => {
+/** The method of the order's newest CHARGE, or `null` without one. */
+export const chargeMethodOf = (order: PlacedOrder): PaymentMethod | null => {
   const charges = order.payments
     .filter((payment) => payment.type === PaymentType.CHARGE)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -530,7 +529,7 @@ export function getOrderSuccessPaymentView(input: {
   const kind = paymentKindOf(order.paymentStatus, hasSessionId, isPollExhausted)
   const isUnfinished = kind === 'notCompleted' || kind === 'failed'
   const isConfirming = kind === 'confirming' || kind === 'stillConfirming'
-  const chargeMethod = getOrderChargeMethod(order)
+  const chargeMethod = chargeMethodOf(order)
   const showRetry =
     isUnfinished &&
     order.status === OrderStatus.PENDING &&
@@ -593,6 +592,24 @@ export function getPayByCountdown(
     minutesLeft: msLeft > 0 ? Math.max(1, Math.ceil(msLeft / 60_000)) : 0,
     isExpired: msLeft <= 0,
   }
+}
+
+const RETRYABLE_METHODS = new Set<PaymentMethod | null>([
+  PaymentMethod.CARD,
+  PaymentMethod.PAYPAL,
+])
+
+/** Order details offers "Retry payment": a FAILED online charge on a PENDING order before its deadline. */
+export function canRetryPayment(
+  order: OrderDetail,
+  now: Date = new Date(),
+): boolean {
+  return (
+    order.paymentStatus === OrderPaymentStatus.FAILED &&
+    order.status === OrderStatus.PENDING &&
+    RETRYABLE_METHODS.has(chargeMethodOf(order)) &&
+    (!order.expiresAt || new Date(order.expiresAt) > now)
+  )
 }
 
 /** The cancel dialog's message: the API's `errCode`, never its `message`, picks it. */

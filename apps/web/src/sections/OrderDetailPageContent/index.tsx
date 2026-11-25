@@ -40,6 +40,7 @@ import { Button } from '@/components/ui/button'
 import Loading from '@/components/Loading'
 import ConfirmActionDialog from '@/components/ConfirmActionDialog'
 import PageHeader from '@/components/PageHeader'
+import OrderRetryPayment from '@/sections/OrderRetryPayment'
 import OrderStatusPanel from '@/sections/OrderStatusPanel'
 
 export interface OrderDetailPageContentProps {
@@ -250,7 +251,14 @@ function ProgressPanel({ order }: { order: OrderDetail }) {
   )
 }
 
-function PaymentPanel({ order }: { order: OrderDetail }) {
+function PaymentPanel({
+  order,
+  canRetry,
+}: {
+  order: OrderDetail
+  /** The shopper's page offers "Retry payment"; the admin's does not. */
+  canRetry: boolean
+}) {
   const charge = newestChargeOf(order.payments)
   const status = getPaymentStatusPresentation(order.paymentStatus)
   const rows: [string, ReactNode][] = [
@@ -268,6 +276,14 @@ function PaymentPanel({ order }: { order: OrderDetail }) {
       charge?.completedAt ? formatOrderDateTime(charge.completedAt) : '—',
     ],
   ]
+  if (charge?.failureReason) {
+    rows.push([
+      'Last failure',
+      <span key="failure" className="text-destructive">
+        {charge.failureReason}
+      </span>,
+    ])
+  }
 
   return (
     <Panel title="Payment">
@@ -322,6 +338,7 @@ function PaymentPanel({ order }: { order: OrderDetail }) {
           </table>
         </div>
       )}
+      {canRetry && <OrderRetryPayment order={order} />}
     </Panel>
   )
 }
@@ -531,7 +548,7 @@ export default function OrderDetailPageContent({
               </div>
               <div className="flex min-w-0 flex-col gap-6">
                 {isDashboard && <CustomerPanel order={order} />}
-                <PaymentPanel order={order} />
+                <PaymentPanel order={order} canRetry={!isDashboard} />
                 <ShipToPanel order={order} />
                 {!isDashboard && <CancelPanel order={order} />}
               </div>

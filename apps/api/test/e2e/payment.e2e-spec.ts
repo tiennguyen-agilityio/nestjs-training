@@ -304,6 +304,101 @@ describe('Payments (e2e)', () => {
     });
   });
 
+  describe('POST /orders/:id/payments retry', () => {
+    const OLD_SESSION = 'cs_test_old';
+
+    const seedFailed = async (
+      userId: string,
+      status = 'FAILED',
+    ): Promise<{ orderId: string; paymentId: string }> => {
+      const seeded = await seedOrder(userId);
+      await execute(
+        `update payments set status = ?, failure_reason = 'Card declined',
+           checkout_session_id = ? where id = ?`,
+        [status, `${OLD_SESSION}_${suffix()}`, seeded.paymentId],
+      );
+      return seeded;
+    };
+
+    const closedAs = (status: 'expired' | 'complete') =>
+      retrieve.mockImplementation(((id: string) =>
+        Promise.resolve({
+          ...fakeSession(id, Math.floor(ORDER_EXPIRES_AT.getTime() / 1000)),
+          status,
+        })) as never);
+
+    const errCodeOf = (response: { body: unknown }) =>
+      (response.body as { errors: { errCode: string }[] }).errors[0].errCode;
+
+    it('retries a FAILED card payment whose session expired on the same payment row (retry AC1)', async () => {
+      const user = await createUser();
+      const { orderId, paymentId } = await seedFailed(user.id);
+      const before = await paymentRow(paymentId);
+      const orderBefore = await orderRow(orderId);
+      closedAs('expired');
+      signIn(user.clerkId);
+
+      await start(orderId).expect(200);
+
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create.mock.calls[0][1]).toEqual({
+        idempotencyKey: `checkout-${paymentId}-after-${before.checkout_session_id}`,
+      });
+      const row = await paymentRow(paymentId);
+      expect(row.checkout_session_id).toMatch(/^cs_test_e2e_/);
+      expect(row.status).toBe('FAILED');
+      expect(row.failure_reason).toBe('Card declined');
+      const [{ count }] = await execute<{ count: string }[]>(
+        'select count(*) from payments where order_id = ?',
+        [orderId],
+      );
+      expect(Number(count)).toBe(1);
+      expect(
+        new Date((await orderRow(orderId)).expires_at as Date).toISOString(),
+      ).toBe(new Date(orderBefore.expires_at as Date).toISOString());
+    });
+
+    it('a FAILED card payment whose session is complete returns 409 and creates no session', async () => {
+      const user = await createUser();
+      const { orderId, paymentId } = await seedFailed(user.id);
+      const before = await paymentRow(paymentId);
+      closedAs('complete');
+      signIn(user.clerkId);
+
+      const response = await start(orderId).expect(409);
+
+      expect(errCodeOf(response)).toBe(ERROR_CODES.PAYMENT.NOT_PAYABLE);
+      expect(create).not.toHaveBeenCalled();
+      expect(await paymentRow(paymentId)).toEqual(before);
+    });
+
+    it('POST /orders/:id/payments for a PAID payment returns 409 and creates no session (retry AC2)', async () => {
+      const user = await createUser();
+      const { orderId } = await seedFailed(user.id, 'PAID');
+      signIn(user.clerkId);
+
+      const response = await start(orderId).expect(409);
+
+      expect(errCodeOf(response)).toBe(ERROR_CODES.PAYMENT.NOT_PAYABLE);
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('POST /orders/:id/payments retry by another user returns 404 (retry AC3)', async () => {
+      const owner = await createUser();
+      const other = await createUser();
+      const { orderId, paymentId } = await seedFailed(owner.id);
+      const before = await paymentRow(paymentId);
+      closedAs('expired');
+      signIn(other.clerkId);
+
+      const response = await start(orderId).expect(404);
+
+      expect(errCodeOf(response)).toBe(ERROR_CODES.ORDER.NOT_FOUND);
+      expect(create).not.toHaveBeenCalled();
+      expect(await paymentRow(paymentId)).toEqual(before);
+    });
+  });
+
   describe('POST /orders/:id/cancel', () => {
     it('cancelling a card order with a checkout session expires the session through the outbox', async () => {
       const user = await createUser();

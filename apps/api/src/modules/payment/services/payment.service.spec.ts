@@ -86,6 +86,7 @@ describe('PaymentService', () => {
     id: 'cs_test_1',
     url: 'https://checkout.stripe.com/c/pay/cs_test_1',
     open: true,
+    endedUnpaid: false,
     expiresAt: new Date('2026-11-25T09:00:00Z'),
     ...overrides,
   });
@@ -217,7 +218,9 @@ describe('PaymentService', () => {
 
     it('start rejects a closed session with NOT_PAYABLE', async () => {
       withCharge(buildPayment({ checkoutSessionId: 'cs_test_1' }));
-      gateway.findCheckout.mockResolvedValue(session({ open: false }));
+      gateway.findCheckout.mockResolvedValue(
+        session({ open: false, endedUnpaid: true }),
+      );
 
       expect(await errCodeOf(service.start(USER_ID, ORDER_ID))).toBe(
         ERROR_CODES.PAYMENT.NOT_PAYABLE,
@@ -243,6 +246,7 @@ describe('PaymentService', () => {
         expiresAt: new Date('2026-11-25T09:00:00Z'),
         successUrl: `${WEB_APP_URL}/order-success?orderId=${ORDER_ID}&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${WEB_APP_URL}/order-success?orderId=${ORDER_ID}`,
+        replacesCheckoutId: null,
       });
       expect(payment.checkoutSessionId).toBe('cs_test_1');
       expect(order.expiresAt).toEqual(new Date('2026-11-25T08:59:59Z'));
@@ -321,6 +325,150 @@ describe('PaymentService', () => {
       expect(gateway.createCheckout).toHaveBeenCalledTimes(1);
     });
   });
+  describe('start (retry)', () => {
+    const failedCharge = (overrides: Partial<Payment> = {}): Payment =>
+      buildPayment({
+        status: PaymentStatus.FAILED,
+        failureReason: 'Card declined',
+        checkoutSessionId: 'cs_old',
+        ...overrides,
+      });
+
+    it('start opens a new checkout on the same FAILED payment when its checkout ended unpaid', async () => {
+      payment = failedCharge();
+      withCharge(payment);
+      gateway.findCheckout.mockResolvedValue(
+        session({ id: 'cs_old', open: false, endedUnpaid: true }),
+      );
+      gateway.createCheckout.mockResolvedValue(
+        session({
+          id: 'cs_new',
+          url: 'https://checkout.stripe.com/c/pay/cs_new',
+        }),
+      );
+
+      const result = await service.start(USER_ID, ORDER_ID);
+
+      expect(gateway.createCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          paymentId: PAYMENT_ID,
+          replacesCheckoutId: 'cs_old',
+          expiresAt: new Date('2026-11-25T09:00:00Z'),
+        }),
+      );
+      expect(payment.checkoutSessionId).toBe('cs_new');
+      expect(payment.status).toBe(PaymentStatus.FAILED);
+      expect(payment.failureReason).toBe('Card declined');
+      expect(order.expiresAt).toEqual(new Date('2026-11-25T09:00:00Z'));
+      expect(paymentRepository.save).toHaveBeenCalledTimes(1);
+      expect(paymentRepository.save).toHaveBeenCalledWith(payment, USER_ID);
+      expect(result).toEqual({
+        paymentId: PAYMENT_ID,
+        checkoutId: 'cs_new',
+        checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_new',
+        expiresAt: new Date('2026-11-25T09:00:00Z'),
+      });
+    });
+
+    it('start retries when the gateway no longer knows the checkout', async () => {
+      withCharge(failedCharge());
+      gateway.findCheckout.mockResolvedValue(null);
+
+      await service.start(USER_ID, ORDER_ID);
+
+      expect(gateway.createCheckout).toHaveBeenCalledTimes(1);
+      expect(gateway.createCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ replacesCheckoutId: 'cs_old' }),
+      );
+    });
+
+    it('start rejects a FAILED payment whose closed checkout may hold money with NOT_PAYABLE', async () => {
+      withCharge(failedCharge());
+      gateway.findCheckout.mockResolvedValue(
+        session({ id: 'cs_old', open: false, endedUnpaid: false }),
+      );
+
+      expect(await errCodeOf(service.start(USER_ID, ORDER_ID))).toBe(
+        ERROR_CODES.PAYMENT.NOT_PAYABLE,
+      );
+      expect(gateway.createCheckout).not.toHaveBeenCalled();
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('start returns the open retry checkout again', async () => {
+      payment = failedCharge();
+      withCharge(payment);
+      gateway.findCheckout.mockResolvedValueOnce(
+        session({ id: 'cs_old', open: false, endedUnpaid: true }),
+      );
+      gateway.createCheckout.mockResolvedValue(session({ id: 'cs_new' }));
+      await service.start(USER_ID, ORDER_ID);
+
+      gateway.findCheckout.mockResolvedValueOnce(session({ id: 'cs_new' }));
+      const again = await service.start(USER_ID, ORDER_ID);
+
+      expect(gateway.findCheckout).toHaveBeenLastCalledWith('cs_new');
+      expect(again.checkoutId).toBe('cs_new');
+      expect(gateway.createCheckout).toHaveBeenCalledTimes(1);
+    });
+
+    it("start keeps the order's deadline on a retry", async () => {
+      order = buildOrder({ expiresAt: new Date('2026-11-24T12:00:00Z') });
+      withCharge(failedCharge({ order }));
+      gateway.findCheckout.mockResolvedValue(
+        session({ id: 'cs_old', open: false, endedUnpaid: true }),
+      );
+      gateway.createCheckout.mockResolvedValue(
+        session({ id: 'cs_new', expiresAt: new Date('2026-11-25T09:00:00Z') }),
+      );
+
+      const result = await service.start(USER_ID, ORDER_ID);
+
+      expect(gateway.createCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expiresAt: new Date('2026-11-24T12:00:00Z'),
+        }),
+      );
+      expect(result.expiresAt).toEqual(new Date('2026-11-24T12:00:00Z'));
+      expect(order.expiresAt).toEqual(new Date('2026-11-24T12:00:00Z'));
+    });
+
+    it('start sets a 24 h deadline on a retry of an order with none', async () => {
+      order = buildOrder({ expiresAt: null });
+      withCharge(failedCharge({ order, method: PaymentMethod.PAYPAL }));
+      gateway.findCheckout.mockResolvedValue(
+        session({ id: 'cs_old', open: false, endedUnpaid: true }),
+      );
+
+      await service.start(USER_ID, ORDER_ID);
+
+      const deadline = new Date('2026-11-25T10:00:00Z');
+      expect(order.expiresAt).toEqual(deadline);
+      expect(gateway.createCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ expiresAt: deadline }),
+      );
+    });
+
+    it('start rejects a CARD retry with under 31 minutes left with NOT_PAYABLE', async () => {
+      const soon = new Date(NOW.getTime() + 20 * 60_000);
+      order = buildOrder({ expiresAt: soon });
+      withCharge(failedCharge({ order }));
+      gateway.findCheckout.mockResolvedValue(
+        session({ id: 'cs_old', open: false, endedUnpaid: true }),
+      );
+
+      expect(await errCodeOf(service.start(USER_ID, ORDER_ID))).toBe(
+        ERROR_CODES.PAYMENT.NOT_PAYABLE,
+      );
+      expect(gateway.createCheckout).not.toHaveBeenCalled();
+
+      order = buildOrder({ expiresAt: soon });
+      withCharge(failedCharge({ order, method: PaymentMethod.PAYPAL }));
+      await service.start(USER_ID, ORDER_ID);
+      expect(gateway.createCheckout).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('apply', () => {
     const PAID_AT = new Date('2026-11-24T10:05:00Z');
     const succeeded: GatewayEvent = {
@@ -568,6 +716,30 @@ describe('PaymentService', () => {
         checkoutId: PAYPAL_ORDER,
       });
       expect(gateway.createCheckout).not.toHaveBeenCalled();
+    });
+
+    it("start retries with the gateway of the payment's method", async () => {
+      withCharge(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          status: PaymentStatus.FAILED,
+          checkoutSessionId: 'PP-OLD',
+        }),
+      );
+      gateway.findCheckout.mockResolvedValue(
+        session({ id: 'PP-OLD', open: false, endedUnpaid: true }),
+      );
+      gateway.createCheckout.mockResolvedValue(
+        session({ id: PAYPAL_ORDER, url: approveUrl }),
+      );
+
+      await expect(service.start(USER_ID, ORDER_ID)).resolves.toMatchObject({
+        checkoutId: PAYPAL_ORDER,
+      });
+      expect(gateways.for).toHaveBeenCalledWith(PaymentMethod.PAYPAL);
+      expect(gateway.createCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({ replacesCheckoutId: 'PP-OLD' }),
+      );
     });
   });
 
