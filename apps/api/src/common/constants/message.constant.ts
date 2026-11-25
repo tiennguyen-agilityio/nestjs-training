@@ -199,9 +199,7 @@ export const ERROR_DESCRIPTIONS = {
     ITEM_UNAVAILABLE: 'Remove it from the cart and try again.',
     OUT_OF_STOCK: 'Update your cart and try again.',
     NOT_CANCELLABLE:
-      'Only a pending order can be cancelled. Contact the shop to cancel a confirmed order.',
-    NOT_CANCELLABLE_PAID:
-      'The order is already paid. Contact the shop to cancel it.',
+      'Only a pending or confirmed order can be cancelled. Contact the shop for help.',
     NOT_CANCELLABLE_PAYMENT_HELD:
       'The payment is being reviewed. Contact the shop to cancel the order.',
     STATUS_NOT_ALLOWED: 'Not allowed. Pick one of the next statuses.',

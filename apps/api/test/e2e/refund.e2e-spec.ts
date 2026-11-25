@@ -301,6 +301,22 @@ describe('Refunds (e2e)', () => {
     expect(refunds.find((row) => row.id === failedId)?.status).toBe('FAILED');
   });
 
+  it('POST /orders/:id/cancel of a CONFIRMED paid card order cancels it and creates a PENDING refund (AC1)', async () => {
+    const order = await paidCardOrder();
+
+    const response = await request(app.getHttpServer())
+      .post(`${ORDERS}/${order.id}/cancel`)
+      .expect(200);
+
+    expect((response.body as { data: { status: string } }).data.status).toBe(
+      'CANCELLED',
+    );
+    const refunds = await refundsOf(order.id);
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0]).toMatchObject({ method: 'CARD' });
+    expect(Number(refunds[0].amount)).toBe(order.totalAmount);
+  });
+
   it('cancelling a COD order creates no refund (AC8)', async () => {
     const order = await placeOrder();
     await asAdmin();
