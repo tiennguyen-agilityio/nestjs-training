@@ -13,6 +13,7 @@ import {
   FindOptions,
   Criteria,
   ListOptions,
+  OrderByOptions,
   SearchOptions,
 } from '../interfaces/repository-options.interface.js';
 import { PaginatedResult } from '../dto/pagination.dto.js';
@@ -249,6 +250,43 @@ export abstract class BaseRepository<T extends BaseEntity> {
     return this.toPaginatedResult(data, totalCount, query);
   }
 
+  protected async paginateOf<R extends object>(
+    entity: EntityName<R>,
+    query: QueryParams,
+    options: {
+      where: Criteria<R>;
+      relations?: string[];
+      orderBy: OrderByOptions<R>;
+      includeDeleted?: boolean;
+    },
+  ): Promise<PaginatedResult<R>> {
+    const { page, limit } = query;
+    const [data, totalCount] = await this.em.findAndCount(
+      entity,
+      options.where as never,
+      {
+        limit,
+        offset: (page - 1) * limit,
+        filters: { softDelete: !options.includeDeleted },
+        ...(options.relations && { populate: options.relations as never }),
+        orderBy: [
+          { [options.orderBy.field]: options.orderBy.direction },
+          { id: 'ASC' },
+        ] as never,
+      },
+    );
+
+    return {
+      data,
+      meta: {
+        limit,
+        currentPage: page,
+        pageCount: Math.ceil(totalCount / limit),
+        totalCount,
+      },
+    };
+  }
+
   protected toPaginatedResult(
     data: T[],
     totalCount: number,
@@ -270,11 +308,14 @@ export abstract class BaseRepository<T extends BaseEntity> {
    * persistence context; the next flush (`save`) inserts it. For child rows
    * that have no repository of their own (an `InventoryMovement`).
    */
-  protected createRelated(
+  /** Persists a related row (flushed with the next save) and returns it. */
+  protected createRelated<R = unknown>(
     entityName: string,
     data: Record<string, unknown>,
-  ): void {
-    this.em.persist(this.em.create(entityName as never, data as never));
+  ): R {
+    const entity = this.em.create(entityName as never, data as never);
+    this.em.persist(entity);
+    return entity as R;
   }
 
   protected async createAndSave(

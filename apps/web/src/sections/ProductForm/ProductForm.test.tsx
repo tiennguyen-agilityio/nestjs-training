@@ -248,10 +248,31 @@ describe('ProductForm', () => {
 
     expect(screen.getByRole('textbox', { name: 'Size' })).toBeInTheDocument()
     expect(screen.getByLabelText('Unit')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Weight')).not.toBeInTheDocument()
+  })
+
+  it('ProductForm in edit mode shows stock read-only with a link to Inventory', () => {
+    renderForm()
+
+    expect(
+      screen.queryByRole('textbox', { name: 'Quantity' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Quantity' })).toHaveTextContent(
+      '5',
+    )
+    expect(
+      screen.getByRole('link', { name: 'Change stock in Inventory' }),
+    ).toHaveAttribute('href', ROUTES.DASHBOARD_INVENTORY)
+  })
+
+  it('ProductForm in add mode keeps the stock field', () => {
+    renderForm({ mode: 'create', initialState: emptyState })
+
     expect(
       screen.getByRole('textbox', { name: 'Quantity' }),
     ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Weight')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/initial|stock/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Change stock in Inventory' }),
+    ).not.toBeInTheDocument()
   })
 })

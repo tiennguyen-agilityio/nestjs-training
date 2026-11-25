@@ -55,6 +55,11 @@ export const productUrlSchema = {
   status: parseOptionalQueryParam,
 } as const
 
+export const inventoryUrlSchema = {
+  ...urlSchema,
+  lowStock: parseOptionalQueryParam,
+} as const
+
 export const ordersUrlSchema = {
   ...urlSchema,
   status: parseOptionalQueryParam,

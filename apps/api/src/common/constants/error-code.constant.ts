@@ -37,6 +37,7 @@ export const ERROR_CODES = {
     MAX_PERCENT_DISCOUNT_VALUE: 'maxPercentDiscountValue',
     DUPLICATE_IDS: 'duplicateProductVariantIds',
     STOCK_BELOW_RESERVED: 'stockBelowReserved',
+    STOCK_ABOVE_MAX: 'stockAboveMax',
   },
   PRODUCT_IMAGE: {
     NOT_FOUND: 'productImageNotFound',

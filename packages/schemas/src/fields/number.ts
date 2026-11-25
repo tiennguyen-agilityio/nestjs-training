@@ -14,6 +14,9 @@ export const discountValueField = z
   .min(DISCOUNT.MIN)
   .max(DISCOUNT.MAX);
 
-export const stockQuantityField = z.int().min(STOCK_QUANTITY.MIN);
+export const stockQuantityField = z
+  .int()
+  .min(STOCK_QUANTITY.MIN)
+  .max(STOCK_QUANTITY.MAX);
 
 export const cartQuantityField = z.int().min(CART_QUANTITY.MIN);

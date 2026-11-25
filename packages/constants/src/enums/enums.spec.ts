@@ -4,6 +4,7 @@ import { UserRole, UserStatus } from './user.enum.js';
 import { ShippingMethodStatus } from './shipping-method.enum.js';
 import {
   InventoryMovementType,
+  StockLevel,
   OrderPaymentStatus,
   OrderStatus,
   PaymentMethod,
@@ -92,5 +93,9 @@ describe('shared enums', () => {
       'RESTOCK',
       'ADJUSTMENT',
     ]);
+  });
+
+  it('StockLevel has OUT, LOW, OK', () => {
+    expect(Object.values(StockLevel)).toEqual(['OUT', 'LOW', 'OK']);
   });
 });

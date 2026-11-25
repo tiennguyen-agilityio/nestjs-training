@@ -38,7 +38,6 @@ export const updateProductVariantSchema = z.object({
   price: decimal(priceField).optional(),
   discountType: z.enum(DiscountType).optional(),
   discountValue: decimal(discountValueField).optional(),
-  stockQuantity: stockQuantityField.optional(),
 });
 
 export type CreateProductVariantPayload = z.input<

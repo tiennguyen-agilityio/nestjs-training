@@ -4,6 +4,7 @@ import {
   Check,
   Entity,
   Enum,
+  Formula,
   ManyToOne,
   Property,
   Unique,
@@ -59,4 +60,11 @@ export class ProductVariant extends AuditableEntity {
 
   @Property({ type: 'number', fieldName: 'reserved_quantity' })
   reservedQuantity: number & Opt = 0;
+
+  /** Read-only: stock − reserved, computed by the database (never persisted). */
+  @Formula<ProductVariant>(
+    (columns) => `${columns.stockQuantity} - ${columns.reservedQuantity}`,
+    { type: 'number', lazy: false },
+  )
+  availableQuantity?: number & Opt;
 }

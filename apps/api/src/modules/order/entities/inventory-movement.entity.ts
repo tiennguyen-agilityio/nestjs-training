@@ -4,6 +4,7 @@ import type { Rel } from '@mikro-orm/core';
 import {
   Entity,
   Enum,
+  Index,
   ManyToOne,
   PrimaryKey,
   Property,
@@ -11,10 +12,12 @@ import {
 import { InventoryMovementType } from '@repo/constants';
 import { ProductVariant } from '../../product-variant/entities/product-variant.entity.js';
 import { Order } from './order.entity.js';
+import { User } from '../../user/entities/user.entity.js';
 
 const REASON_LENGTH = 255;
 
 @Entity({ tableName: 'inventory_movements' })
+@Index({ properties: ['productVariant', 'createdAt'] })
 export class InventoryMovement {
   @PrimaryKey({ type: 'uuid' })
   id: string & Opt = uuidv4();
@@ -41,8 +44,12 @@ export class InventoryMovement {
   @Property({ type: 'string', length: REASON_LENGTH, nullable: true })
   reason: string | null = null;
 
-  @Property({ type: 'uuid', fieldName: 'created_by', nullable: true })
-  createdBy: string | null = null;
+  @ManyToOne(() => User, {
+    fieldName: 'created_by',
+    nullable: true,
+    deleteRule: 'restrict',
+  })
+  createdBy: Rel<User> | null = null;
 
   @Property({ type: Date, fieldName: 'created_at', onCreate: () => new Date() })
   createdAt: Date & Opt = new Date();

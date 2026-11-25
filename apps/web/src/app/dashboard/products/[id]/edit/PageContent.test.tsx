@@ -139,7 +139,9 @@ describe('EditProductForm pricing', () => {
 
     expect(field('Base Price')).toHaveValue('100')
     expect(field('Discount (%)')).toHaveValue('10')
-    expect(field('Quantity')).toHaveValue('30')
+    expect(screen.getByRole('status', { name: 'Quantity' })).toHaveTextContent(
+      '30',
+    )
     expect(screen.getByRole('button', { name: 'Percent' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -164,7 +166,6 @@ describe('EditProductForm pricing', () => {
         price: 120,
         discountType: DiscountType.PERCENT,
         discountValue: 10,
-        stockQuantity: 30,
       },
     ])
     expect(mockPush).toHaveBeenCalledWith(ROUTES.DASHBOARD_PRODUCTS)
@@ -177,20 +178,20 @@ describe('EditProductForm pricing', () => {
     expect(field('Unit')).toHaveTextContent('Grams')
   })
 
-  it('sends size, unit and stockQuantity in updateVariants', async () => {
+  it('sends size and unit in updateVariants, never stockQuantity', async () => {
     mockMutate.mockImplementation((_input, options: MutateOptions) =>
       options.onSuccess?.(),
     )
     renderPage()
 
     await replaceValue('Size', '500')
-    await replaceValue('Quantity', '5')
     await save()
 
     await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
     expect(sentBody().updateVariants?.[0]).toEqual(
-      expect.objectContaining({ size: 500, unit: 'G', stockQuantity: 5 }),
+      expect.objectContaining({ size: 500, unit: 'G' }),
     )
+    expect(sentBody().updateVariants?.[0]).not.toHaveProperty('stockQuantity')
   })
 
   it('sends PERCENT 0 when Discount (%) is 0', async () => {
@@ -210,7 +211,7 @@ describe('EditProductForm pricing', () => {
     renderPage({ discountValue: 12.5 })
 
     expect(field('Discount (%)')).toHaveValue('12.5')
-    await replaceValue('Quantity', '31')
+    await replaceValue('Size', '251')
     await save()
 
     await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
@@ -231,14 +232,6 @@ describe('EditProductForm pricing', () => {
     await replaceValue('Discount (%)', '100')
 
     expect(field('Discount (%)')).toHaveValue('10')
-  })
-
-  it('accepts a stock above 500, since the API has no maximum', async () => {
-    renderPage()
-
-    await replaceValue('Quantity', '501')
-
-    expect(field('Quantity')).toHaveValue('501')
   })
 
   it('blocks a fixed discount equal to the price without sending', async () => {
@@ -269,7 +262,7 @@ describe('EditProductForm pricing', () => {
     )
     renderPage()
 
-    await replaceValue('Quantity', '50')
+    await replaceValue('Size', '251')
     await save()
 
     expect(
@@ -297,7 +290,7 @@ describe('EditProductForm pricing', () => {
     )
     renderPage()
 
-    await replaceValue('Quantity', '50')
+    await replaceValue('Size', '251')
     await save()
 
     expect(
@@ -329,7 +322,7 @@ describe('EditProductForm pricing', () => {
     )
     renderPage()
 
-    await replaceValue('Quantity', '50')
+    await replaceValue('Size', '251')
     await save()
 
     expect(

@@ -2,6 +2,7 @@ import { VALIDATION_RULES } from '@repo/constants'
 
 export const ERROR_MESSAGES = {
   ORDER_NOT_FOUND: 'Order not found.',
+  PRODUCT_VARIANT_NOT_FOUND: 'Product variant not found.',
   ORDER_NOT_CANCELLABLE:
     'This order can no longer be cancelled. Contact the shop for help.',
   PAYPAL_UNAVAILABLE: 'PayPal is not available right now.',
@@ -120,11 +121,18 @@ export const API_FALLBACK_ERRORS = {
   CART_UPDATE: 'Could not update the cart',
   CART_REMOVE: 'Could not remove the item',
   CART_MERGE: 'Could not merge your cart',
+  INVENTORY_LOAD: 'Could not load inventory',
+  INVENTORY_ITEM_LOAD: 'Could not load the variant stock',
+  STOCK_RESTOCK: 'Could not restock',
+  STOCK_ADJUST: 'Could not adjust the stock',
+  STOCK_HISTORY_LOAD: 'Could not load the stock history',
 } as const
 
 export const SUCCESS_MESSAGES = {
   ORDER_PLACED: 'Order placed successfully',
   ORDER_CANCELLED: 'Order cancelled',
+  STOCK_RESTOCKED: 'Stock restocked',
+  STOCK_ADJUSTED: 'Stock adjusted',
   PAYMENT_SUCCESSFUL: 'Payment successful',
   ORDER_TOTAL: (total: string) => `Order total: ${total}`,
   SIGNED_OUT: 'Signed out successfully',
@@ -169,6 +177,16 @@ export const NOTICE_MESSAGES = {
     NOT_COMPLETED: 'Payment not completed.',
     FAILED: 'Payment failed. Try another card.',
   },
+  /** A movement's change: `+10 stock`, `−2 reserved`. */
+  STOCK_MOVEMENT: {
+    STOCK: (signed: string) => `${signed} stock`,
+    RESERVED: (signed: string) => `${signed} reserved`,
+    SYSTEM: 'System',
+  },
+  LOW_STOCK: (count: number) =>
+    count === 0
+      ? 'Stock levels are fine.'
+      : `${count} ${count === 1 ? 'item is' : 'items are'} running low on stock.`,
   PAYPAL_CANCELLED: 'You cancelled the PayPal payment. Nothing was charged.',
 }
 

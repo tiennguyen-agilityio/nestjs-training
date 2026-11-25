@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { BadgeCheck, Leaf, Plus, X } from 'lucide-react'
 import {
@@ -38,6 +39,7 @@ import {
 // Components
 import { type BreadcrumbNavItem } from '@/components/Breadcrumb'
 import { Input } from '@/components/Input'
+import { ROUTES } from '@/constants/routes'
 import NumberInput from '@/components/NumberInput'
 import PageHeader from '@/components/PageHeader'
 import { Select } from '@/components/Select'
@@ -609,28 +611,52 @@ const ProductForm = ({
                     />
                   )}
                 />
-                <Controller
-                  control={control}
-                  name="stockQuantity"
-                  render={({ field }) => (
-                    <NumberInput
-                      ref={field.ref}
-                      className="h-14"
-                      label="Quantity"
-                      type="number"
-                      min={0}
-                      max={isCreate ? QUANTITY_MAX : undefined}
-                      step={1}
-                      maxDecimalPlaces={0}
-                      disabled={isSubmitting}
-                      errorMessage={errors.stockQuantity?.message}
-                      name={field.name}
-                      onBlur={field.onBlur}
-                      value={field.value}
-                      onValueChange={field.onChange}
-                    />
-                  )}
-                />
+                {isCreate ? (
+                  <Controller
+                    control={control}
+                    name="stockQuantity"
+                    render={({ field }) => (
+                      <NumberInput
+                        ref={field.ref}
+                        className="h-14"
+                        label="Quantity"
+                        type="number"
+                        min={0}
+                        max={isCreate ? QUANTITY_MAX : undefined}
+                        step={1}
+                        maxDecimalPlaces={0}
+                        disabled={isSubmitting}
+                        errorMessage={errors.stockQuantity?.message}
+                        name={field.name}
+                        onBlur={field.onBlur}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      />
+                    )}
+                  />
+                ) : (
+                  // Stock changes only in Inventory, with a movement.
+                  <div className="min-w-0 space-y-2">
+                    <p
+                      id="product-stock-label"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Quantity
+                    </p>
+                    <output
+                      aria-labelledby="product-stock-label"
+                      className="flex h-14 items-center rounded-xs bg-surface-container-high px-4 font-semibold text-foreground"
+                    >
+                      {watch('stockQuantity')}
+                    </output>
+                    <Link
+                      href={ROUTES.DASHBOARD_INVENTORY}
+                      className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      Change stock in Inventory
+                    </Link>
+                  </div>
+                )}
                 <Controller
                   control={control}
                   name="discountType"
