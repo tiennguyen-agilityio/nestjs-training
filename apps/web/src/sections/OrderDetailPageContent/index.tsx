@@ -40,10 +40,11 @@ import { Button } from '@/components/ui/button'
 import Loading from '@/components/Loading'
 import ConfirmActionDialog from '@/components/ConfirmActionDialog'
 import PageHeader from '@/components/PageHeader'
+import OrderStatusPanel from '@/sections/OrderStatusPanel'
 
 export interface OrderDetailPageContentProps {
   className?: string
-  /** `dashboard`: the admin's page (breadcrumbs, Customer panel, no Cancel panel). */
+  /** `dashboard`: the admin's page (breadcrumbs, Customer and Update status panels, no Cancel panel). */
   variant?: 'profile' | 'dashboard'
 }
 
@@ -526,6 +527,7 @@ export default function OrderDetailPageContent({
               <div className="flex min-w-0 flex-col gap-6">
                 <ItemsPanel order={order} />
                 <ProgressPanel order={order} />
+                {isDashboard && <OrderStatusPanel order={order} />}
               </div>
               <div className="flex min-w-0 flex-col gap-6">
                 {isDashboard && <CustomerPanel order={order} />}

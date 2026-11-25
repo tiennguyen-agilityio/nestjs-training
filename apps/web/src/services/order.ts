@@ -1,4 +1,8 @@
-import type { PlaceOrderPayload } from '@repo/schemas'
+import type {
+  PlaceOrderPayload,
+  UpdateOrderShippingStatusPayload,
+  UpdateOrderStatusPayload,
+} from '@repo/schemas'
 
 import { IDEMPOTENCY } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
@@ -157,19 +161,24 @@ export async function deleteOrder(
   return { ok: true }
 }
 
+type StatusUpdateResult =
+  | { ok: true }
+  | {
+      ok: false
+      error: string
+      status?: number
+      errorResponse?: ApiErrorResponse
+    }
+
 export async function updateOrderStatus(
   id: string,
-  status: OrderStatus,
-  options: { getToken?: () => Promise<string | null> } = {},
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const orderId = id.trim()
-  if (!orderId) {
-    return { ok: false, error: API_FALLBACK_ERRORS.ORDER_STATUS_UPDATE }
-  }
-
+  status: UpdateOrderStatusPayload['status'],
+  options: { getToken: () => Promise<string | null> },
+): Promise<StatusUpdateResult> {
+  const body: UpdateOrderStatusPayload = { status }
   const result = await apiClient.patch(
-    `${API_ROUTES.ORDERS}/${orderId}/status`,
-    { status },
+    `${API_ROUTES.ORDERS}/${encodeURIComponent(id)}/status`,
+    body,
     {
       getToken: options.getToken,
       fallbackError: API_FALLBACK_ERRORS.ORDER_STATUS_UPDATE,
@@ -182,20 +191,13 @@ export async function updateOrderStatus(
 
 export async function updateOrderShippingStatus(
   id: string,
-  shippingStatus: ShippingStatus,
-  options: { getToken?: () => Promise<string | null> } = {},
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const orderId = id.trim()
-  if (!orderId) {
-    return {
-      ok: false,
-      error: API_FALLBACK_ERRORS.ORDER_SHIPPING_STATUS_UPDATE,
-    }
-  }
-
+  shippingStatus: UpdateOrderShippingStatusPayload['shippingStatus'],
+  options: { getToken: () => Promise<string | null> },
+): Promise<StatusUpdateResult> {
+  const body: UpdateOrderShippingStatusPayload = { shippingStatus }
   const result = await apiClient.patch(
-    `${API_ROUTES.ORDERS}/${orderId}/shipping-status`,
-    { shippingStatus },
+    `${API_ROUTES.ORDERS}/${encodeURIComponent(id)}/shipping-status`,
+    body,
     {
       getToken: options.getToken,
       fallbackError: API_FALLBACK_ERRORS.ORDER_SHIPPING_STATUS_UPDATE,

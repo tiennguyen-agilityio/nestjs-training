@@ -33,6 +33,14 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/hooks/useOrder', () => ({
   useOrderDetail: jest.fn(),
   useCancelOrder: jest.fn(),
+  useUpdateOrderStatus: jest.fn(() => ({
+    mutate: jest.fn(),
+    isPending: false,
+  })),
+  useUpdateOrderShippingStatus: jest.fn(() => ({
+    mutate: jest.fn(),
+    isPending: false,
+  })),
 }))
 jest.mock('sonner', () => ({ toast: { success: jest.fn() } }))
 
@@ -169,6 +177,19 @@ describe('OrderDetailPageContent', () => {
       screen.getByRole('link', { name: 'Back to orders' }),
     ).toHaveAttribute('href', ROUTES.DASHBOARD_ORDERS)
     expect(screen.queryByRole('link', { name: 'Profile' })).toBeNull()
+  })
+
+  it('OrderDetailPageContent shows Update status only on the dashboard', () => {
+    const { unmount } = render(<OrderDetailPageContent variant="dashboard" />)
+    expect(section('Update status')).toBeInTheDocument()
+    expect(section('Progress').nextElementSibling).toBe(
+      section('Update status'),
+    )
+    unmount()
+
+    render(<OrderDetailPageContent variant="profile" />)
+    expect(screen.queryByRole('region', { name: 'Update status' })).toBeNull()
+    expect(section('Cancel order')).toBeInTheDocument()
   })
 
   it('the profile variant shows no Customer panel', () => {

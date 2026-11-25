@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -17,9 +18,13 @@ import {
   orderParamSchema,
   orderQuerySchema,
   placeOrderSchema,
+  updateOrderShippingStatusSchema,
+  updateOrderStatusSchema,
   type OrderParam,
   type OrderQueryInput,
   type PlaceOrderInput,
+  type UpdateOrderShippingStatusInput,
+  type UpdateOrderStatusInput,
 } from '../dto/order.schema.js';
 import { ResponseOrderDto } from '../dto/response-order.dto.js';
 import { ResponseOrderRowDto } from '../dto/response-order-row.dto.js';
@@ -29,6 +34,7 @@ import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import { AuthGuard } from '../../../common/guards/auth.guard.js';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator.js';
 import { IdempotentCreate } from '../../../common/decorators/idempotent-create.decorator.js';
+import { AdminOnly } from '../../../common/decorators/admin-only.decorator.js';
 import {
   ApiDataResponse,
   ApiErrorResponse,
@@ -52,6 +58,28 @@ const ApiListAuthErrors = (): MethodDecorator =>
     ),
     ApiErrorResponse(HttpStatus.FORBIDDEN, ERROR_MESSAGES.AUTH.FORBIDDEN, {
       description: `${ERROR_MESSAGES.AUTH.INACTIVE_ACCOUNT}, or \`all=true\` from a caller who is not an active admin.`,
+    }),
+  );
+
+/** 400, 404 and the refused move's 409 of an admin status change. */
+const ApiStatusChangeErrors = (
+  field: 'status' | 'shippingStatus',
+  refusedExample: string,
+): MethodDecorator =>
+  applyDecorators(
+    ApiErrorResponse(
+      HttpStatus.BAD_REQUEST,
+      ERROR_MESSAGES.EXCEPTION.VALIDATION_FAILED,
+    ),
+    ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.ORDER.NOT_FOUND, {
+      errCode: ERROR_CODES.ORDER.NOT_FOUND,
+      field: 'idOrOrderNumber',
+      description: ERROR_DESCRIPTIONS.ORDER.NOT_FOUND,
+    }),
+    ApiErrorResponse(HttpStatus.CONFLICT, refusedExample, {
+      errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
+      field,
+      description: ERROR_DESCRIPTIONS.ORDER.STATUS_NOT_ALLOWED,
     }),
   );
 
@@ -184,5 +212,51 @@ export class OrderController {
     @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
   ): Promise<ResponseOrderDto> {
     return this.orderService.cancel(user.id, idOrOrderNumber);
+  }
+
+  @Patch(':idOrOrderNumber/status')
+  @AdminOnly()
+  @ApiOperation({
+    summary: "Change any order's status (admin)",
+    description:
+      "Allowed: PENDING → CONFIRMED or CANCELLED; CONFIRMED → COMPLETED or CANCELLED. Any other move returns 409 and saves nothing. CANCELLED does the shopper cancel's steps in one transaction: each item's held stock is released (RELEASE), PENDING charges become FAILED and an open checkout session is expired through the outbox; a PAID charge stays PAID (no refund). A UUID looks up by id, anything else by orderNumber.",
+  })
+  @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
+  @ApiStatusChangeErrors(
+    'status',
+    ERROR_MESSAGES.ORDER.STATUS_NOT_ALLOWED('PENDING', 'COMPLETED'),
+  )
+  updateStatus(
+    @AuthUser() user: User,
+    @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
+    @Body({ schema: updateOrderStatusSchema })
+    { status }: UpdateOrderStatusInput,
+  ): Promise<ResponseOrderDto> {
+    return this.orderService.updateStatus(idOrOrderNumber, status, user.id);
+  }
+
+  @Patch(':idOrOrderNumber/shipping-status')
+  @AdminOnly()
+  @ApiOperation({
+    summary: "Change any order's shipping status (admin)",
+    description:
+      'Allowed: PENDING → SHIPPING; SHIPPING → DELIVERED or RETURNED. Any other move returns 409 and saves nothing. No stock or payment change. A UUID looks up by id, anything else by orderNumber.',
+  })
+  @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
+  @ApiStatusChangeErrors(
+    'shippingStatus',
+    ERROR_MESSAGES.ORDER.SHIPPING_STATUS_NOT_ALLOWED('PENDING', 'DELIVERED'),
+  )
+  updateShippingStatus(
+    @AuthUser() user: User,
+    @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
+    @Body({ schema: updateOrderShippingStatusSchema })
+    { shippingStatus }: UpdateOrderShippingStatusInput,
+  ): Promise<ResponseOrderDto> {
+    return this.orderService.updateShippingStatus(
+      idOrOrderNumber,
+      shippingStatus,
+      user.id,
+    );
   }
 }

@@ -125,22 +125,32 @@ export function useDeleteOrder() {
   })
 }
 
+/**
+ * An admin's order status change. Success or failure, the orders are
+ * refetched, so the list and the detail show the current state; a failure
+ * throws a `ServiceError` carrying the API's `errors[]`.
+ */
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient()
+  const { getToken } = useAuth()
 
   return useMutation({
     mutationFn: async (input: { id: string; status: OrderStatus }) => {
-      const result = await updateOrderStatus(input.id, input.status)
-      if (!result.ok) throw new Error(result.error)
+      const result = await updateOrderStatus(input.id, input.status, {
+        getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
+      })
+      if (!result.ok) throwIfServiceFailed(result)
     },
-    onSuccess: () => {
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })
     },
   })
 }
 
+/** An admin's shipping status change; refetches and throws as `useUpdateOrderStatus`. */
 export function useUpdateOrderShippingStatus() {
   const queryClient = useQueryClient()
+  const { getToken } = useAuth()
 
   return useMutation({
     mutationFn: async (input: {
@@ -150,10 +160,11 @@ export function useUpdateOrderShippingStatus() {
       const result = await updateOrderShippingStatus(
         input.id,
         input.shippingStatus,
+        { getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }) },
       )
-      if (!result.ok) throw new Error(result.error)
+      if (!result.ok) throwIfServiceFailed(result)
     },
-    onSuccess: () => {
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ordersQueryRoot })
     },
   })

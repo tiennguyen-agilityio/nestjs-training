@@ -15,6 +15,8 @@ import {
   fetchMyOrders,
   fetchOrderDetail,
   fetchOrders,
+  updateOrderShippingStatus,
+  updateOrderStatus,
 } from '@/services/order'
 import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 
@@ -360,5 +362,79 @@ describe('order service (admin)', () => {
       ok: false,
       error: expect.objectContaining({ statusCode: 403 }),
     })
+  })
+})
+
+describe('order status updates (admin)', () => {
+  const originalFetch = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('updateOrderStatus PATCHes /orders/:id/status with the token', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ data: { id: 'o-1' } }))
+    globalThis.fetch = fetchMock
+
+    const result = await updateOrderStatus('o-1', OrderStatus.CONFIRMED, {
+      getToken,
+    })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${API_ROUTES.ORDERS}/o-1/status`)
+    expect(requestInit(fetchMock).method).toBe('PATCH')
+    expect(requestInit(fetchMock).body).toBe('{"status":"CONFIRMED"}')
+    expect(requestInit(fetchMock).credentials).toBe('include')
+    const headers = requestInit(fetchMock).headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer tok')
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('updateOrderShippingStatus PATCHes /orders/:id/shipping-status', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ data: { id: 'o-1' } }))
+    globalThis.fetch = fetchMock
+
+    const result = await updateOrderShippingStatus(
+      'o-1',
+      ShippingStatus.SHIPPING,
+      { getToken },
+    )
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `${API_ROUTES.ORDERS}/o-1/shipping-status`,
+    )
+    expect(requestInit(fetchMock).method).toBe('PATCH')
+    expect(requestInit(fetchMock).body).toBe('{"shippingStatus":"SHIPPING"}')
+    const headers = requestInit(fetchMock).headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer tok')
+    expect(result).toEqual({ ok: true })
+  })
+
+  it("updateOrderStatus returns the API's errors on a 409", async () => {
+    const conflict = {
+      statusCode: 409,
+      message: 'Conflict',
+      errors: [
+        {
+          errCode: 'statusNotAllowed',
+          field: 'status',
+          message: 'Cannot move order from COMPLETED to PENDING',
+          description: 'Not allowed. Pick one of the next statuses.',
+        },
+      ],
+    }
+    globalThis.fetch = jest.fn().mockResolvedValue(fetchResponse(conflict, 409))
+
+    const result = await updateOrderStatus('o-1', OrderStatus.PENDING, {
+      getToken,
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toBe('Cannot move order from COMPLETED to PENDING')
+    expect(result.errorResponse?.errors?.[0]?.errCode).toBe('statusNotAllowed')
   })
 })

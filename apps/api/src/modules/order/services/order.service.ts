@@ -5,11 +5,13 @@ import {
   PaymentMethod,
   PaymentStatus,
   PaymentType,
+  ShippingStatus,
   VALIDATION_RULES,
 } from '@repo/constants';
 import {
   OrderRepository,
   type CreateOrderData,
+  type EnqueueCheckoutExpire,
 } from '../repositories/order.repository.js';
 import { CartService } from '../../cart/services/cart.service.js';
 import { ProductVariantService } from '../../product-variant/services/product-variant.service.js';
@@ -30,6 +32,11 @@ import { variantNameFrom } from '../../product-variant/utils/variant-name.util.j
 import { pricingOf } from '../../cart/utils/cart-pricing.util.js';
 import { orderTotalsOf } from '../utils/order-pricing.util.js';
 import { generateOrderNumber } from '../utils/order-number.util.js';
+import {
+  canMoveOrderStatus,
+  canMoveShippingStatus,
+} from '../utils/order-status.util.js';
+import type { ActorId } from '../../../common/utils/audit.util.js';
 import {
   InvalidStateException,
   ItemNotFoundException,
@@ -141,51 +148,69 @@ export class OrderService {
         );
         if (!order) throw this.orderNotFound();
         this.assertCancellable(order);
+        await this.cancelLocked(order, userId, enqueueCheckoutExpire);
 
-        const items = [...order.items.getItems()].sort((a, b) =>
-          a.productVariant.id.localeCompare(b.productVariant.id),
-        );
-        for (const item of items) {
-          const released = await this.productVariantService.release(
-            item.productVariant.id,
-            item.quantity,
-            userId,
+        return ResponseOrderDto.fromEntity(order);
+      },
+    );
+  }
+
+  /**
+   * An admin moves any order's status along the allowed moves; CANCELLED
+   * runs the shopper cancel's steps, a paid order included (its PAID charge
+   * stays PAID).
+   */
+  updateStatus(
+    idOrOrderNumber: string,
+    status: OrderStatus,
+    actorId: ActorId,
+  ): Promise<ResponseOrderDto> {
+    return this.orderRepository.transactionalWithOutbox(
+      async (enqueueCheckoutExpire) => {
+        const order = await this.lockForStatusChange(idOrOrderNumber);
+        const from = order.status as OrderStatus;
+        if (!canMoveOrderStatus(from, status)) {
+          throw this.statusNotAllowed(
+            'status',
+            ERROR_MESSAGES.ORDER.STATUS_NOT_ALLOWED(from, status),
           );
-          if (!released) {
-            throw new Error(
-              `Order ${order.id} holds no reservation of ${item.quantity} for variant ${item.productVariant.id}`,
-            );
-          }
         }
 
-        const charges = order.payments
-          .getItems()
-          .filter(
-            (payment) => (payment.type as PaymentType) === PaymentType.CHARGE,
-          );
-        for (const charge of charges) {
-          if ((charge.status as PaymentStatus) === PaymentStatus.PENDING) {
-            charge.status = PaymentStatus.FAILED;
-            charge.failureReason = CANCELLED_REASON;
-          }
-        }
-        order.status = OrderStatus.CANCELLED;
-        order.expiresAt = null;
-        await this.orderRepository.saveCancelled(order, userId);
-
-        for (const charge of charges) {
-          if (charge.checkoutSessionId) {
-            await enqueueCheckoutExpire({
-              paymentId: charge.id,
-              method: charge.method,
-              checkoutSessionId: charge.checkoutSessionId,
-            });
-          }
+        if (status === OrderStatus.CANCELLED) {
+          await this.cancelLocked(order, actorId, enqueueCheckoutExpire);
+        } else {
+          order.status = status;
+          await this.orderRepository.save(order, actorId);
         }
 
         return ResponseOrderDto.fromEntity(order);
       },
     );
+  }
+
+  /** An admin moves any order's shipping status along the allowed moves. */
+  updateShippingStatus(
+    idOrOrderNumber: string,
+    shippingStatus: ShippingStatus,
+    actorId: ActorId,
+  ): Promise<ResponseOrderDto> {
+    return this.orderRepository.transactionalWithOutbox(async () => {
+      const order = await this.lockForStatusChange(idOrOrderNumber);
+      const from = order.shippingStatus as ShippingStatus;
+      if (!canMoveShippingStatus(from, shippingStatus)) {
+        throw this.statusNotAllowed(
+          'shippingStatus',
+          ERROR_MESSAGES.ORDER.SHIPPING_STATUS_NOT_ALLOWED(
+            from,
+            shippingStatus,
+          ),
+        );
+      }
+      order.shippingStatus = shippingStatus;
+      await this.orderRepository.save(order, actorId);
+
+      return ResponseOrderDto.fromEntity(order);
+    });
   }
 
   place(userId: string, input: PlaceOrderInput): Promise<ResponseOrderDto> {
@@ -313,6 +338,79 @@ export class OrderService {
         description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_PAYMENT_HELD,
       });
     }
+  }
+
+  private async lockForStatusChange(idOrOrderNumber: string): Promise<Order> {
+    const order = await this.orderRepository.lockForStatusChange(
+      whereOf(idOrOrderNumber),
+    );
+    if (!order) throw this.orderNotFound();
+
+    return order;
+  }
+
+  /**
+   * A locked order's cancel steps: releases each item's held stock (RELEASE),
+   * fails the PENDING charges, cancels the order and queues the expiry of any
+   * open checkout session. A PAID charge is left as it is.
+   */
+  private async cancelLocked(
+    order: Order,
+    actorId: ActorId,
+    enqueueCheckoutExpire: EnqueueCheckoutExpire,
+  ): Promise<void> {
+    const items = [...order.items.getItems()].sort((a, b) =>
+      a.productVariant.id.localeCompare(b.productVariant.id),
+    );
+    for (const item of items) {
+      const released = await this.productVariantService.release(
+        item.productVariant.id,
+        item.quantity,
+        actorId,
+      );
+      if (!released) {
+        throw new Error(
+          `Order ${order.id} holds no reservation of ${item.quantity} for variant ${item.productVariant.id}`,
+        );
+      }
+    }
+
+    const charges = order.payments
+      .getItems()
+      .filter(
+        (payment) => (payment.type as PaymentType) === PaymentType.CHARGE,
+      );
+    for (const charge of charges) {
+      if ((charge.status as PaymentStatus) === PaymentStatus.PENDING) {
+        charge.status = PaymentStatus.FAILED;
+        charge.failureReason = CANCELLED_REASON;
+      }
+    }
+    order.status = OrderStatus.CANCELLED;
+    order.expiresAt = null;
+    await this.orderRepository.saveCancelled(order, actorId);
+
+    for (const charge of charges) {
+      if (charge.checkoutSessionId) {
+        await enqueueCheckoutExpire({
+          paymentId: charge.id,
+          method: charge.method,
+          checkoutSessionId: charge.checkoutSessionId,
+        });
+      }
+    }
+  }
+
+  private statusNotAllowed(
+    field: 'status' | 'shippingStatus',
+    message: string,
+  ): InvalidStateException {
+    return new InvalidStateException({
+      errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
+      field,
+      message,
+      description: ERROR_DESCRIPTIONS.ORDER.STATUS_NOT_ALLOWED,
+    });
   }
 
   private orderNotFound(): ItemNotFoundException {

@@ -211,6 +211,7 @@ export const DIALOG_MESSAGES = {
       KEEP: 'Keep order',
       DESCRIPTION: (orderNumber: string) =>
         `Order ${orderNumber} will be cancelled and its items go back into stock. This cannot be undone.`,
+      NOT_REFUNDED: 'The payment is not refunded.',
     },
     DELETE: {
       ACTION: 'Delete order',

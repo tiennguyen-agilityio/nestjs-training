@@ -21,6 +21,8 @@ import {
   useMyOrders,
   useOrderDetail,
   useOrders,
+  useUpdateOrderShippingStatus,
+  useUpdateOrderStatus,
 } from '@/hooks/useOrder'
 import {
   cancelOrder,
@@ -28,6 +30,8 @@ import {
   fetchMyOrders,
   fetchOrderDetail,
   fetchOrders,
+  updateOrderShippingStatus,
+  updateOrderStatus,
 } from '@/services/order'
 import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 import { ServiceError } from '@/utils/query'
@@ -770,5 +774,143 @@ describe('useCancelOrder', () => {
 
     expect(caught).toBeInstanceOf(ServiceError)
     expect((caught as ServiceError).errors[0]?.errCode).toBe('statusNotAllowed')
+  })
+})
+
+describe('useUpdateOrderStatus and useUpdateOrderShippingStatus', () => {
+  const mockUpdateOrderStatus = jest.mocked(updateOrderStatus)
+  const mockUpdateOrderShippingStatus = jest.mocked(updateOrderShippingStatus)
+  const conflict = {
+    ok: false as const,
+    status: 409,
+    error: 'Cannot move order from COMPLETED to PENDING',
+    errorResponse: {
+      statusCode: 409,
+      message: 'Conflict',
+      errors: [
+        {
+          errCode: 'statusNotAllowed',
+          field: 'status',
+          message: 'Cannot move order from COMPLETED to PENDING',
+          description: 'Not allowed. Pick one of the next statuses.',
+        },
+      ],
+    },
+  }
+
+  const setup = <T,>(useHook: () => T) => {
+    signedIn()
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidate = jest.spyOn(client, 'invalidateQueries')
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    return { ...renderHook(useHook, { wrapper }), invalidate }
+  }
+
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('useUpdateOrderStatus sends the Clerk token and invalidates the orders root', async () => {
+    mockUpdateOrderStatus.mockResolvedValueOnce({ ok: true })
+    const { result, invalidate } = setup(() => useUpdateOrderStatus())
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: 'o-1',
+        status: OrderStatus.CONFIRMED,
+      })
+    })
+
+    expect(mockUpdateOrderStatus).toHaveBeenCalledWith(
+      'o-1',
+      OrderStatus.CONFIRMED,
+      { getToken: expect.any(Function) },
+    )
+    await mockUpdateOrderStatus.mock.calls[0]?.[2].getToken()
+    expect(clerkGetToken).toHaveBeenCalledWith({
+      template: CLERK_SESSION_TEMPLATE,
+    })
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ordersQueryKeys.root,
+      }),
+    )
+  })
+
+  it('useUpdateOrderStatus invalidates the orders root after a failure too', async () => {
+    mockUpdateOrderStatus.mockResolvedValueOnce(conflict)
+    const { result, invalidate } = setup(() => useUpdateOrderStatus())
+
+    let caught: unknown
+    await act(async () => {
+      caught = await result.current
+        .mutateAsync({ id: 'o-1', status: OrderStatus.PENDING })
+        .catch((error: unknown) => error)
+    })
+
+    expect(caught).toBeInstanceOf(ServiceError)
+    expect((caught as ServiceError).errors[0]?.errCode).toBe('statusNotAllowed')
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ordersQueryKeys.root,
+      }),
+    )
+  })
+
+  it('useUpdateOrderShippingStatus sends the Clerk token and invalidates the orders root', async () => {
+    mockUpdateOrderShippingStatus.mockResolvedValueOnce({ ok: true })
+    const { result, invalidate } = setup(() => useUpdateOrderShippingStatus())
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: 'o-1',
+        shippingStatus: ShippingStatus.SHIPPING,
+      })
+    })
+
+    expect(mockUpdateOrderShippingStatus).toHaveBeenCalledWith(
+      'o-1',
+      ShippingStatus.SHIPPING,
+      { getToken: expect.any(Function) },
+    )
+    await mockUpdateOrderShippingStatus.mock.calls[0]?.[2].getToken()
+    expect(clerkGetToken).toHaveBeenCalledWith({
+      template: CLERK_SESSION_TEMPLATE,
+    })
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ordersQueryKeys.root,
+      }),
+    )
+  })
+
+  it('useUpdateOrderShippingStatus invalidates the orders root after a failure too', async () => {
+    mockUpdateOrderShippingStatus.mockResolvedValueOnce({
+      ...conflict,
+      error: 'Cannot move shipping from DELIVERED to SHIPPING',
+    })
+    const { result, invalidate } = setup(() => useUpdateOrderShippingStatus())
+
+    let caught: unknown
+    await act(async () => {
+      caught = await result.current
+        .mutateAsync({ id: 'o-1', shippingStatus: ShippingStatus.SHIPPING })
+        .catch((error: unknown) => error)
+    })
+
+    expect(caught).toBeInstanceOf(ServiceError)
+    expect((caught as ServiceError).errors[0]?.errCode).toBe('statusNotAllowed')
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ordersQueryKeys.root,
+      }),
+    )
   })
 })

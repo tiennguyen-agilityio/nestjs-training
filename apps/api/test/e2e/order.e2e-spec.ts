@@ -1124,4 +1124,238 @@ describe('OrderController (e2e)', () => {
       await list('?all=true').expect(401);
     });
   });
+  describe('PATCH /orders/:idOrOrderNumber/status and /shipping-status', () => {
+    const statusOf = (value: string) =>
+      `${ORDERS}/${encodeURIComponent(value)}/status`;
+    const shippingOf = (value: string) =>
+      `${ORDERS}/${encodeURIComponent(value)}/shipping-status`;
+
+    const setStatus = (value: string, status: string) =>
+      request(app.getHttpServer()).patch(statusOf(value)).send({ status });
+    const setShipping = (value: string, shippingStatus: string) =>
+      request(app.getHttpServer())
+        .patch(shippingOf(value))
+        .send({ shippingStatus });
+
+    const createAdmin = () => createUser(UserRole.ADMIN);
+
+    /** A customer's COD order of `quantity` units of a variant with stock 5. */
+    const customerOrder = async (
+      quantity = 2,
+    ): Promise<{
+      order: OrderBody;
+      variantId: string;
+      customerId: string;
+      methodId: string;
+    }> => {
+      const customer = await createUser();
+      const methodId = await createMethod();
+      const { variantId } = await createProduct(5);
+      signIn(customer.clerkId);
+      await addToCart(variantId, quantity);
+      const order = orderOf(await place(methodId).expect(201));
+      return { order, variantId, customerId: customer.id, methodId };
+    };
+
+    const orderRow = async (orderId: string) =>
+      (
+        await execute<{ status: string; shipping_status: string }[]>(
+          'select status, shipping_status from orders where id = ?',
+          [orderId],
+        )
+      )[0];
+
+    const chargeStatus = async (orderId: string) =>
+      (
+        await execute<{ status: string }[]>(
+          `select status from payments where order_id = ? and type = 'CHARGE'`,
+          [orderId],
+        )
+      )[0].status;
+
+    const releases = async (orderId: string) =>
+      execute<{ quantity: number }[]>(
+        `select quantity from inventory_movements where order_id = ? and type = 'RELEASE'`,
+        [orderId],
+      );
+
+    it('PATCH /orders/:id/status confirms a PENDING order (AC1)', async () => {
+      const { order } = await customerOrder();
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setStatus(order.id, 'CONFIRMED').expect(200);
+
+      expect(orderOf(response).status).toBe('CONFIRMED');
+      expect((await orderRow(order.id)).status).toBe('CONFIRMED');
+    });
+
+    it('PATCH /orders/:id/status COMPLETED → PENDING returns 409 and the order stays COMPLETED (AC2)', async () => {
+      const { order } = await customerOrder();
+      await execute('update orders set status = ? where id = ?', [
+        'COMPLETED',
+        order.id,
+      ]);
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setStatus(order.id, 'PENDING').expect(409);
+
+      expect((response.body as ErrorBody).errors[0]).toMatchObject({
+        errCode: 'statusNotAllowed',
+        field: 'status',
+      });
+      expect((await orderRow(order.id)).status).toBe('COMPLETED');
+    });
+
+    it('PATCH /orders/:id/shipping-status sets SHIPPING (AC3)', async () => {
+      const { order } = await customerOrder();
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setShipping(order.id, 'SHIPPING').expect(200);
+
+      expect(orderOf(response).shippingStatus).toBe('SHIPPING');
+      expect(orderOf(response).status).toBe('PENDING');
+      expect((await orderRow(order.id)).shipping_status).toBe('SHIPPING');
+    });
+
+    it('PATCH /orders/:id/status CANCELLED gives the stock back and fails the pending charge', async () => {
+      const { order, variantId } = await customerOrder(2);
+      expect(await variantRow(variantId)).toEqual({
+        stock_quantity: 5,
+        reserved_quantity: 2,
+      });
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setStatus(order.id, 'CANCELLED').expect(200);
+
+      expect(orderOf(response).status).toBe('CANCELLED');
+      expect(await variantRow(variantId)).toEqual({
+        stock_quantity: 5,
+        reserved_quantity: 0,
+      });
+      expect(await releases(order.id)).toEqual([{ quantity: 2 }]);
+      expect(await chargeStatus(order.id)).toBe('FAILED');
+    });
+
+    it('PATCH /orders/:id/status CANCELLED of a paid order keeps the payment PAID', async () => {
+      const { order, variantId } = await customerOrder(2);
+      await execute(
+        `update payments set status = 'PAID' where order_id = ? and type = 'CHARGE'`,
+        [order.id],
+      );
+      await execute(`update orders set status = 'CONFIRMED' where id = ?`, [
+        order.id,
+      ]);
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setStatus(order.id, 'CANCELLED').expect(200);
+
+      expect(orderOf(response).status).toBe('CANCELLED');
+      expect(await chargeStatus(order.id)).toBe('PAID');
+      expect((await variantRow(variantId)).reserved_quantity).toBe(0);
+      expect(await releases(order.id)).toEqual([{ quantity: 2 }]);
+    });
+
+    it('two concurrent cancels release the stock once', async () => {
+      const { order, variantId } = await customerOrder(2);
+      signIn((await createAdmin()).clerkId);
+
+      const results = await Promise.all([
+        setStatus(order.id, 'CANCELLED'),
+        setStatus(order.id, 'CANCELLED'),
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual([200, 409]);
+      expect((await variantRow(variantId)).reserved_quantity).toBe(0);
+      expect(await releases(order.id)).toHaveLength(1);
+    });
+
+    it("PATCH /orders/:orderNumber/status changes a customer's order", async () => {
+      const { order } = await customerOrder();
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setStatus(order.orderNumber, 'CONFIRMED').expect(
+        200,
+      );
+
+      expect(orderOf(response).id).toBe(order.id);
+      expect(orderOf(response).status).toBe('CONFIRMED');
+    });
+
+    it('PATCH /orders/:id/status changes the order of a soft-deleted customer', async () => {
+      const { order, customerId } = await customerOrder();
+      await execute('update users set deleted_at = now() where id = ?', [
+        customerId,
+      ]);
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setStatus(order.id, 'CONFIRMED').expect(200);
+
+      expect(orderOf(response).status).toBe('CONFIRMED');
+      expect((await orderRow(order.id)).status).toBe('CONFIRMED');
+    });
+
+    it('PATCH /orders/:id/shipping-status changes an order whose shipping method is soft-deleted', async () => {
+      const { order, methodId } = await customerOrder();
+      await execute(
+        'update shipping_methods set deleted_at = now() where id = ?',
+        [methodId],
+      );
+      signIn((await createAdmin()).clerkId);
+
+      await setShipping(order.id, 'SHIPPING').expect(200);
+
+      expect((await orderRow(order.id)).shipping_status).toBe('SHIPPING');
+    });
+
+    it('PATCH /orders/:id/status of an unknown order returns 404', async () => {
+      signIn((await createAdmin()).clerkId);
+
+      for (const value of [randomUUID(), 'CH-000000-0000']) {
+        const response = await setStatus(value, 'CONFIRMED').expect(404);
+        expect((response.body as ErrorBody).errors[0].errCode).toBe(
+          'orderNotFound',
+        );
+      }
+    });
+
+    it('PATCH /orders/:id/status with an invalid status returns 400', async () => {
+      const { order } = await customerOrder();
+      signIn((await createAdmin()).clerkId);
+
+      await setStatus(order.id, 'SHIPPED').expect(400);
+      await setShipping(order.id, 'LOST').expect(400);
+      expect(await orderRow(order.id)).toEqual({
+        status: 'PENDING',
+        shipping_status: 'PENDING',
+      });
+    });
+
+    it('PATCH /orders/:id/status as a customer returns 403', async () => {
+      const { order } = await customerOrder();
+
+      await setStatus(order.id, 'CONFIRMED').expect(403);
+      await setShipping(order.id, 'SHIPPING').expect(403);
+      expect((await orderRow(order.id)).status).toBe('PENDING');
+    });
+
+    it('PATCH /orders/:id/status as an inactive admin returns 403', async () => {
+      const { order } = await customerOrder();
+      const admin = await createAdmin();
+      await execute(`update users set status = 'INACTIVE' where id = ?`, [
+        admin.id,
+      ]);
+      signIn(admin.clerkId);
+
+      await setStatus(order.id, 'CONFIRMED').expect(403);
+      expect((await orderRow(order.id)).status).toBe('PENDING');
+    });
+
+    it('PATCH /orders/:id/status without a session returns 401', async () => {
+      const { order } = await customerOrder();
+      signIn(null);
+
+      await setStatus(order.id, 'CONFIRMED').expect(401);
+      await setShipping(order.id, 'SHIPPING').expect(401);
+    });
+  });
 });
