@@ -10,6 +10,7 @@ import {
   PaymentMethod,
   ShippingMethodStatus,
   ShippingStatus,
+  VALIDATION_MESSAGES,
 } from '@repo/constants'
 
 import {
@@ -316,8 +317,9 @@ const totalText = () =>
 const pickCashOnDelivery = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole('radio', { name: /cash on delivery/i }))
 
+// The submit button: "Continue to payment" for a card payment, "Place Order" for cash on delivery.
 const placeOrderButton = () =>
-  screen.getByRole('button', { name: /place order/i })
+  screen.getByRole('button', { name: /^(place order|continue to payment)$/i })
 
 describe('CheckoutPageContent', () => {
   beforeEach(() => {
@@ -620,6 +622,147 @@ describe('CheckoutPageContent', () => {
       expect(placeOrderButton()).toBeDisabled()
     },
   )
+
+  it('labels the button Continue to payment for a card payment and Place Order for cash on delivery', async () => {
+    const user = userEvent.setup()
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+
+    renderCheckout()
+
+    expect(
+      screen.getByRole('button', { name: 'Continue to payment' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Place Order' }),
+    ).not.toBeInTheDocument()
+
+    await pickCashOnDelivery(user)
+
+    expect(
+      screen.getByRole('button', { name: 'Place Order' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Continue to payment' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps all digits of a pasted formatted phone number', async () => {
+    const user = userEvent.setup()
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    renderCheckout()
+
+    const phone = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Phone Number',
+    })
+    await user.clear(phone)
+    await user.click(phone)
+    await user.paste('090 123 4567')
+
+    expect(phone.value).toBe('0901234567')
+  })
+
+  it('keeps every digit of a number with a country code, so it fails the format', async () => {
+    const user = userEvent.setup()
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    renderCheckout()
+
+    const phone = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Phone Number',
+    })
+    await user.clear(phone)
+    await user.click(phone)
+    await user.paste('+84 90 123 4567')
+    await user.tab()
+
+    expect(phone.value).toBe('84901234567')
+    expect(
+      screen.getByText(VALIDATION_MESSAGES.invalidFormat('Phone')),
+    ).toBeInTheDocument()
+  })
+
+  it('validates a Shipping Information field when it loses focus', async () => {
+    const user = userEvent.setup()
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    renderCheckout()
+
+    const city = screen.getByRole('textbox', { name: 'City' })
+    await user.clear(city)
+    expect(screen.queryByText(ERROR_MESSAGES.CITY_REQUIRED)).toBeNull()
+
+    await user.tab()
+    expect(screen.getByText(ERROR_MESSAGES.CITY_REQUIRED)).toBeInTheDocument()
+
+    // Typing clears it again; a valid value stays clear on the next blur.
+    await user.type(city, 'Hanoi')
+    expect(screen.queryByText(ERROR_MESSAGES.CITY_REQUIRED)).toBeNull()
+    await user.tab()
+    expect(screen.queryByText(ERROR_MESSAGES.CITY_REQUIRED)).toBeNull()
+  })
+
+  it('shows the phone format error on blur', async () => {
+    const user = userEvent.setup()
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    renderCheckout()
+
+    const phone = screen.getByRole('textbox', { name: 'Phone Number' })
+    await user.clear(phone)
+    await user.type(phone, '09123')
+    await user.tab()
+
+    expect(
+      screen.getByText(VALIDATION_MESSAGES.invalidFormat('Phone')),
+    ).toBeInTheDocument()
+  })
+
+  it('orders the steps Shipping Information, Delivery Speed, Payment Method', () => {
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    renderCheckout()
+
+    const steps = [
+      'Shipping Information',
+      'Delivery Speed',
+      'Payment Method',
+    ].map((name) => screen.getByRole('region', { name }))
+    expect(
+      steps[0].compareDocumentPosition(steps[1]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      steps[1].compareDocumentPosition(steps[2]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    steps.forEach((step, index) =>
+      expect(step).toHaveTextContent(new RegExp(`^${index + 1}`)),
+    )
+  })
+
+  it('keeps only digits in Phone Number', async () => {
+    const user = userEvent.setup()
+    mockUseShippingMethods.mockReturnValue(
+      shippingResult({ shippingMethods: [standard] }),
+    )
+    renderCheckout()
+
+    const phone = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Phone Number',
+    })
+    await user.clear(phone)
+    await user.type(phone, '09a1-2 3b4+5')
+
+    expect(phone.value).toBe('0912345')
+  })
 
   it('enables Place Order once a method is selected', () => {
     mockUseShippingMethods.mockReturnValue(

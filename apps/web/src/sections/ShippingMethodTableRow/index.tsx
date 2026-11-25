@@ -4,6 +4,7 @@ import { ChevronDown, Pencil, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { ShippingMethodStatus } from '@repo/constants'
 
+import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -17,6 +18,7 @@ import { SHIPPING_METHOD_STATUS_OPTIONS } from '@/constants/shippingMethod'
 import type { ShippingMethod } from '@/types/shippingMethod'
 import { formatPrice } from '@/utils/common'
 import { cn } from '@/utils/styles'
+import { TABLE_CELL_BADGE_CLASS } from '@/constants/common'
 
 export interface ShippingMethodTableRowProps {
   shippingMethod: ShippingMethod
@@ -68,23 +70,23 @@ const ShippingMethodTableRow = ({
             disabled={isDeleted || isStatusPending}
             aria-label={`Change status for ${name}`}
             title={lockedTitle}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium transition',
-              isActive ? 'text-foreground' : 'text-muted-foreground',
-              isDeleted || isStatusPending
-                ? 'cursor-not-allowed opacity-70'
-                : 'cursor-pointer hover:bg-muted',
-            )}
+            className="inline-flex"
           >
-            <span
+            <Badge
               className={cn(
-                'size-2 rounded-full',
-                isActive ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+                TABLE_CELL_BADGE_CLASS,
+                'transition',
+                isDeleted || isStatusPending
+                  ? 'cursor-not-allowed opacity-70'
+                  : 'cursor-pointer hover:opacity-90',
+                isActive
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'
+                  : 'bg-muted text-muted-foreground',
               )}
-              aria-hidden
-            />
-            {status}
-            <ChevronDown className="size-3" aria-hidden />
+            >
+              {status}
+              <ChevronDown className="ml-1 size-3" aria-hidden />
+            </Badge>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" className="min-w-32">
             {SHIPPING_METHOD_STATUS_OPTIONS.map((option) => (

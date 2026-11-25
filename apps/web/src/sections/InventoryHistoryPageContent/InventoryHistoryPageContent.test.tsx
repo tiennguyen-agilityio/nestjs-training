@@ -12,6 +12,31 @@ import { dashboardOrderPath } from '@/constants/routes'
 import { useInventoryItem, useVariantMovements } from '@/hooks/useInventory'
 import type { InventoryItem, InventoryMovement } from '@/types/inventory'
 
+jest.mock('@/components/Select', () => ({
+  Select: ({
+    ariaLabel,
+    selected,
+    onValueChange,
+    options,
+  }: {
+    ariaLabel?: string
+    selected?: string
+    onValueChange?: (value: string) => void
+    options: { value: string; label: string }[]
+  }) => (
+    <select
+      aria-label={ariaLabel}
+      value={selected ?? ''}
+      onChange={(event) => onValueChange?.(event.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
+}))
 jest.mock('next/navigation', () => ({
   useParams: () => ({ variantId: 'v-1' }),
   usePathname: () => '/dashboard/inventory/v-1',
@@ -129,20 +154,27 @@ describe('InventoryHistoryPageContent', () => {
     ).toBeInTheDocument()
   })
 
-  it('filters by type', async () => {
+  it('filters by type from the type select', async () => {
     const user = userEvent.setup()
     render(<InventoryHistoryPageContent />)
 
-    await user.click(screen.getByRole('button', { name: 'Adjustment' }))
+    const filter = screen.getByRole('combobox', { name: 'Movement type' })
+    expect(
+      within(filter)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['All types', 'Restock', 'Adjustment', 'Reserve', 'Release'])
 
+    await user.selectOptions(filter, InventoryMovementType.ADJUSTMENT)
     expect(useVariantMovements).toHaveBeenLastCalledWith('v-1', {
       page: 1,
       type: InventoryMovementType.ADJUSTMENT,
     })
-    expect(screen.getByRole('button', { name: 'Adjustment' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+
+    await user.selectOptions(filter, 'all')
+    expect(useVariantMovements).toHaveBeenLastCalledWith('v-1', {
+      page: 1,
+    })
   })
 
   it('shows not found for a 404', () => {

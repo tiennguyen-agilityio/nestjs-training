@@ -133,6 +133,13 @@ const SignUpForm = () => {
                             </p>
                           </div>
 
+                          <SocialButtons disabled={isLoading} />
+
+                          <Separator
+                            text="OR CONTINUE WITH"
+                            className="[&>span]:bg-surface [&>span]:px-4 [&>span]:text-[0.7rem] [&>span]:font-semibold [&>span]:tracking-[0.2em] **:data-[slot=separator]:bg-outline-variant/30"
+                          />
+
                           <div className="space-y-6">
                             <div className="space-y-2 md:grid grid-cols-2 gap-4">
                               <ClerkField
@@ -141,7 +148,6 @@ const SignUpForm = () => {
                                 label="First name"
                                 placeholder="First name"
                                 type="text"
-                                autoComplete="given-name"
                                 icon={<User className="size-4" aria-hidden />}
                                 disabled={isLoading}
                                 clientError={startErrors.firstName}
@@ -159,7 +165,6 @@ const SignUpForm = () => {
                                 label="Last name"
                                 placeholder="Last name"
                                 type="text"
-                                autoComplete="family-name"
                                 icon={<User className="size-4" aria-hidden />}
                                 disabled={isLoading}
                                 clientError={startErrors.lastName}
@@ -217,7 +222,7 @@ const SignUpForm = () => {
 
                             <Checkbox
                               defaultChecked
-                              disabled={isLoading}
+                              disabled
                               label="Keep me signed in"
                               wrapperClassName="gap-3 px-1"
                               className="size-5 border data-unchecked:border-outline-variant data-unchecked:bg-surface-container-low"
@@ -237,13 +242,6 @@ const SignUpForm = () => {
                               </Button>
                             </SignUp.Action>
                           </div>
-
-                          <Separator
-                            text="OR CONTINUE WITH"
-                            className="[&>span]:bg-surface [&>span]:px-4 [&>span]:text-[0.7rem] [&>span]:font-semibold [&>span]:tracking-[0.2em] **:data-[slot=separator]:bg-outline-variant/30"
-                          />
-
-                          <SocialButtons disabled={isLoading} />
 
                           <p className="pt-2 text-center text-base font-medium text-on-surface-variant">
                             Already have an account?{' '}

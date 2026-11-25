@@ -36,7 +36,7 @@ import { useCreateOrder } from '@/hooks/useOrder'
 import { usePayPalCheckout } from '@/hooks/usePayPalCheckout'
 import { useStartPayment } from '@/hooks/usePayment'
 import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
-import { parseCheckoutValues } from '@/schemas/checkout'
+import { parseCheckoutValues, validateCheckoutField } from '@/schemas/checkout'
 import {
   findMapboxAddressSuggestions,
   mapboxFeatureToCheckoutAddress,
@@ -300,6 +300,14 @@ const CheckoutPageContent = () => {
     setFieldErrors((previousErrors) => ({
       ...previousErrors,
       [field]: undefined,
+    }))
+  }
+
+  // A field shows its schema error once the shopper leaves it.
+  const handleFieldBlur = (field: keyof CheckoutFormValues) => () => {
+    setFieldErrors((previousErrors) => ({
+      ...previousErrors,
+      [field]: validateCheckoutField(values, field),
     }))
   }
 
@@ -727,6 +735,7 @@ const CheckoutPageContent = () => {
                 label="First Name"
                 value={values.firstName}
                 onChange={handleInputChange('firstName')}
+                onBlur={handleFieldBlur('firstName')}
                 errorMessage={fieldErrors.firstName}
                 placeholder="Enter your first name"
                 disabled={isFormLocked}
@@ -735,6 +744,7 @@ const CheckoutPageContent = () => {
                 label="Last Name"
                 value={values.lastName}
                 onChange={handleInputChange('lastName')}
+                onBlur={handleFieldBlur('lastName')}
                 errorMessage={fieldErrors.lastName}
                 placeholder="Enter your last name"
                 disabled={isFormLocked}
@@ -745,12 +755,21 @@ const CheckoutPageContent = () => {
               <Input
                 label="Phone Number"
                 value={values.phoneNumber}
-                maxLength={10}
-                onChange={handleInputChange('phoneNumber')}
+                // Digits only, typed or pasted. No maxLength or cut: either
+                // would drop digits ("090 123 4567", "+84 …") without a
+                // word; the schema reports a number that is not 10 digits.
+                onChange={(event) =>
+                  handleValueChange(
+                    'phoneNumber',
+                    event.target.value.replace(/\D/g, ''),
+                  )
+                }
+                onBlur={handleFieldBlur('phoneNumber')}
                 errorMessage={fieldErrors.phoneNumber}
                 placeholder="Enter your phone number"
                 disabled={isFormLocked}
                 inputMode="numeric"
+                type="tel"
               />
               <div className="relative">
                 <Input
@@ -758,7 +777,10 @@ const CheckoutPageContent = () => {
                   value={values.addressLine}
                   onChange={handleAddressInputChange}
                   onFocus={() => setIsAddressInputFocused(true)}
-                  onBlur={() => setIsAddressInputFocused(false)}
+                  onBlur={() => {
+                    setIsAddressInputFocused(false)
+                    handleFieldBlur('addressLine')()
+                  }}
                   errorMessage={fieldErrors.addressLine}
                   placeholder="Enter your delivery address"
                   disabled={isFormLocked}
@@ -808,6 +830,7 @@ const CheckoutPageContent = () => {
                 label="City"
                 value={values.city}
                 onChange={handleInputChange('city')}
+                onBlur={handleFieldBlur('city')}
                 errorMessage={fieldErrors.city}
                 placeholder="Enter your city"
                 disabled={isFormLocked}
@@ -816,6 +839,7 @@ const CheckoutPageContent = () => {
                 label="District"
                 value={values.district}
                 onChange={handleInputChange('district')}
+                onBlur={handleFieldBlur('district')}
                 errorMessage={fieldErrors.district}
                 placeholder="Enter your district"
                 disabled={isFormLocked}
@@ -827,6 +851,7 @@ const CheckoutPageContent = () => {
                 label="Ward"
                 value={values.ward}
                 onChange={handleInputChange('ward')}
+                onBlur={handleFieldBlur('ward')}
                 errorMessage={fieldErrors.ward}
                 placeholder="Enter your ward"
                 disabled={isFormLocked}
@@ -835,6 +860,7 @@ const CheckoutPageContent = () => {
                 label="Postal Code"
                 value={values.postalCode}
                 onChange={handleInputChange('postalCode')}
+                onBlur={handleFieldBlur('postalCode')}
                 errorMessage={fieldErrors.postalCode}
                 placeholder="Enter your postal code"
                 disabled={isFormLocked}
@@ -842,10 +868,21 @@ const CheckoutPageContent = () => {
             </div>
           </section>
 
+          <CheckoutShippingMethods
+            methods={shippingMethods}
+            selectedId={selectedShippingMethod?.id ?? ''}
+            onSelect={handleSelectShippingMethod}
+            isLoading={isShippingMethodsLoading}
+            isError={isShippingMethodsError}
+            errorMessage={shippingMethodsErrorMessage}
+            onRetry={() => void refetchShippingMethods()}
+            disabled={isFormLocked}
+          />
+
           <section aria-label="Payment Method">
             <div className="flex items-center justify-start gap-2">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ring text-sm font-semibold text-primary-foreground">
-                2
+                3
               </div>
               <h2 className="text-2xl font-medium text-on-surface">
                 Payment Method
@@ -891,17 +928,6 @@ const CheckoutPageContent = () => {
               </div>
             )} */}
           </section>
-
-          <CheckoutShippingMethods
-            methods={shippingMethods}
-            selectedId={selectedShippingMethod?.id ?? ''}
-            onSelect={handleSelectShippingMethod}
-            isLoading={isShippingMethodsLoading}
-            isError={isShippingMethodsError}
-            errorMessage={shippingMethodsErrorMessage}
-            onRetry={() => void refetchShippingMethods()}
-            disabled={isFormLocked}
-          />
         </form>
 
         <CheckoutOrderSummary
@@ -931,6 +957,11 @@ const CheckoutPageContent = () => {
           }}
           isPlacingOrder={isSubmitting}
           isPlaceOrderDisabled={isPlaceOrderDisabled}
+          placeOrderLabel={
+            values.paymentMethod === PAYMENT_METHOD.STRIPE
+              ? 'Continue to payment'
+              : 'Place Order'
+          }
         />
       </div>
     </div>

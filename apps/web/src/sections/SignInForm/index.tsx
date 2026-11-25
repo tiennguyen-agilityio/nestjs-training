@@ -105,6 +105,13 @@ const SignInForm = () => {
 
                           <Clerk.GlobalError className="block rounded-xs border border-error/30 bg-error-container px-4 py-3 text-sm text-on-error-container" />
 
+                          <SocialButtons disabled={isLoading} />
+
+                          <Separator
+                            text="OR CONTINUE WITH"
+                            className="[&>span]:bg-surface [&>span]:px-4 [&>span]:text-[0.7rem] [&>span]:font-semibold [&>span]:tracking-[0.2em] **:data-[slot=separator]:bg-outline-variant/30"
+                          />
+
                           <div className="space-y-6">
                             <ClerkField
                               required
@@ -156,7 +163,7 @@ const SignInForm = () => {
 
                             <Checkbox
                               defaultChecked
-                              disabled={isLoading}
+                              disabled
                               label="Keep me signed in"
                               wrapperClassName="gap-3 px-1"
                               className="size-5 border data-unchecked:border-outline-variant data-unchecked:bg-surface-container-low"
@@ -176,13 +183,6 @@ const SignInForm = () => {
                               </Button>
                             </SignIn.Action>
                           </div>
-
-                          <Separator
-                            text="OR CONTINUE WITH"
-                            className="[&>span]:bg-surface [&>span]:px-4 [&>span]:text-[0.7rem] [&>span]:font-semibold [&>span]:tracking-[0.2em] **:data-[slot=separator]:bg-outline-variant/30"
-                          />
-
-                          <SocialButtons disabled={isLoading} />
 
                           <p className="pt-2 text-center text-base font-medium text-on-surface-variant">
                             New to CoffeeHub?{' '}

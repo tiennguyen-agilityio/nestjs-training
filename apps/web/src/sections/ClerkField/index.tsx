@@ -39,11 +39,15 @@ const ClerkField = ({
   icon,
   clientError,
   disabled = false,
+  autoComplete,
   'aria-invalid': ariaInvalidProp,
   ...props
 }: ClerkFieldProps) => {
   const [isVisible, setIsVisible] = useState(false)
   const isPassword = type === 'password'
+  // No browser autofill of saved values; browsers ignore "off" on a password.
+  const resolvedAutoComplete =
+    autoComplete ?? (isPassword ? 'new-password' : 'off')
 
   const handleToggleVisible = () => {
     setIsVisible((prevVisible) => !prevVisible)
@@ -79,6 +83,7 @@ const ClerkField = ({
                 type={isPassword && isVisible ? 'text' : type}
                 placeholder={placeholder}
                 disabled={disabled}
+                autoComplete={resolvedAutoComplete}
                 aria-invalid={hasError ? true : ariaInvalidProp}
                 className={cn(
                   'min-h-14 w-full min-w-0 rounded-xs border border-outline-variant/70 bg-surface-container-low px-4 py-4 text-sm leading-normal text-on-surface outline-none transition-[background-color,border-color,box-shadow,color] placeholder:text-outline/60 focus-visible:border-ring focus-visible:bg-surface-container-high focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-container disabled:text-on-surface-variant/80 disabled:opacity-100',

@@ -1,6 +1,7 @@
 import { VALIDATION_MESSAGES } from '@repo/constants'
 
-import { parseCheckoutValues } from '@/schemas/checkout'
+import { ERROR_MESSAGES } from '@/constants/messages'
+import { parseCheckoutValues, validateCheckoutField } from '@/schemas/checkout'
 import { PAYMENT_METHOD, type CheckoutFormValues } from '@/types/checkout'
 
 const values = (phoneNumber: string): CheckoutFormValues => ({
@@ -31,5 +32,19 @@ describe('parseCheckoutValues', () => {
 
   it('accepts a 10-digit phone', () => {
     expect(parseCheckoutValues(values('0912345678')).success).toBe(true)
+  })
+})
+
+describe('validateCheckoutField', () => {
+  it('returns the message for that field only', () => {
+    const invalid = { ...values('09123'), firstName: ' ' }
+
+    expect(validateCheckoutField(invalid, 'firstName')).toBe(
+      ERROR_MESSAGES.FIRST_NAME_REQUIRED,
+    )
+    expect(validateCheckoutField(invalid, 'phoneNumber')).toBe(
+      VALIDATION_MESSAGES.invalidFormat('Phone'),
+    )
+    expect(validateCheckoutField(invalid, 'city')).toBeUndefined()
   })
 })

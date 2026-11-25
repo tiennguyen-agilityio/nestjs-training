@@ -3,11 +3,13 @@
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import AlertDialog from '@/components/AlertDialog'
 import { CartLineItem } from '@/components/CartLineItem'
 import { CartSummaryCard } from '@/components/CartSummaryCard'
 import { Button } from '@/components/ui/button'
+import { CART_QUANTITY_DEBOUNCE_MS } from '@/constants/common'
 import { API_FALLBACK_ERRORS } from '@/constants/messages'
 import { CART_CHECKOUT_BLOCKED_MESSAGE } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
@@ -50,38 +52,136 @@ export default function CartPageContent() {
   // One request at a time per line: a click while it runs would send a stale value.
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set())
 
+  // The same set as a ref, for a debounce timer set in an older render, and
+  // each running line request, so a later action can wait for it.
+  const pendingRef = useRef(new Set<string>())
+  const lineRequests = useRef(new Map<string, Promise<void>>())
+
   const runForLine = (
     itemId: string,
     action: () => Promise<CartActionResult>,
     fallbackError: string,
   ) => {
-    if (pendingIds.has(itemId)) return
+    if (pendingRef.current.has(itemId)) return
+    pendingRef.current.add(itemId)
     setPendingIds((current) => new Set(current).add(itemId))
-    void action()
+    // A synchronous throw becomes a rejection, so the line is always freed.
+    let started: Promise<CartActionResult>
+    try {
+      started = action()
+    } catch (error) {
+      started = Promise.reject(
+        error instanceof Error ? error : new Error(String(error)),
+      )
+    }
+    const request = started
       .then((result) => setActionError(result.ok ? null : result.error))
       .catch(() => setActionError(fallbackError))
-      .finally(() =>
+      .finally(() => {
+        pendingRef.current.delete(itemId)
+        lineRequests.current.delete(itemId)
         setPendingIds((current) => {
           const next = new Set(current)
           next.delete(itemId)
           return next
-        }),
-      )
+        })
+      })
+    lineRequests.current.set(itemId, request)
   }
 
-  const handleChangeQuantity = (itemId: string, quantity: number) => {
+  // Quick clicks show at once as a draft and are sent once, with the last
+  // value, CART_QUANTITY_DEBOUNCE_MS after the last click.
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, number>>(new Map())
+  const draftsRef = useRef<ReadonlyMap<string, number>>(drafts)
+  const draftTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+
+  const setDraft = (itemId: string, quantity?: number) => {
+    const next = new Map(draftsRef.current)
+    if (quantity === undefined) next.delete(itemId)
+    else next.set(itemId, quantity)
+    draftsRef.current = next
+    setDrafts(next)
+  }
+
+  const cancelDraft = (itemId: string) => {
+    const timer = draftTimers.current.get(itemId)
+    if (timer !== undefined) clearTimeout(timer)
+    draftTimers.current.delete(itemId)
+    // A draft already being saved is cleared when that request lands.
+    if (!lineRequests.current.has(itemId)) setDraft(itemId)
+  }
+
+  // Leaving the page sends a queued quantity at once instead of dropping it.
+  const changeQuantityRef = useRef(changeQuantity)
+  changeQuantityRef.current = changeQuantity
+  useEffect(() => {
+    const timers = draftTimers.current
+    const lines = lineRequests.current
+    return () => {
+      timers.forEach((timer, itemId) => {
+        clearTimeout(timer)
+        const quantity = draftsRef.current.get(itemId)
+        if (quantity === undefined) return
+        // The page is gone, so a failure is a toast, not the banner. A line
+        // request still out goes first: one request at a time per line.
+        const send = () =>
+          changeQuantityRef.current(itemId, quantity).then(
+            (result) => {
+              if (!result.ok) toast.error(result.error)
+            },
+            () => toast.error(API_FALLBACK_ERRORS.CART_UPDATE),
+          )
+        const running = lines.get(itemId)
+        void (running ? running.then(send) : send())
+      })
+      timers.clear()
+    }
+  }, [])
+
+  const scheduleDraft = (itemId: string) => {
+    const timer = draftTimers.current.get(itemId)
+    if (timer !== undefined) clearTimeout(timer)
+    draftTimers.current.set(
+      itemId,
+      setTimeout(() => sendDraft(itemId), CART_QUANTITY_DEBOUNCE_MS),
+    )
+  }
+
+  function sendDraft(itemId: string) {
+    draftTimers.current.delete(itemId)
+    const quantity = draftsRef.current.get(itemId)
+    if (quantity === undefined) return
+    // The line is busy: try again later rather than leave the draft stuck.
+    if (pendingRef.current.has(itemId)) {
+      scheduleDraft(itemId)
+      return
+    }
     runForLine(
       itemId,
-      () => changeQuantity(itemId, quantity),
+      // The draft goes once the reply lands: the line shows the cart's value.
+      async () => {
+        try {
+          return await changeQuantityRef.current(itemId, quantity)
+        } finally {
+          setDraft(itemId)
+        }
+      },
       API_FALLBACK_ERRORS.CART_UPDATE,
     )
   }
 
+  const handleChangeQuantity = (itemId: string, quantity: number) => {
+    setDraft(itemId, quantity)
+    scheduleDraft(itemId)
+  }
+
   const hasItems = items.length > 0
   const hasOutOfStockItems = items.some(isCartItemBlocked)
+  // A quantity not yet saved would reach checkout as the old one.
+  const hasUnsavedQuantity = drafts.size > 0 || pendingIds.size > 0
 
   const handleCheckout = () => {
-    if (hasOutOfStockItems) {
+    if (hasOutOfStockItems || hasUnsavedQuantity) {
       return
     }
     router.push(ROUTES.CHECKOUT)
@@ -146,11 +246,17 @@ export default function CartPageContent() {
         onClickAction={() => {
           const itemId = pendingRemoveItem?.id
           if (!itemId) return
-          runForLine(
-            itemId,
-            () => removeItem(itemId),
-            API_FALLBACK_ERRORS.CART_REMOVE,
-          )
+          cancelDraft(itemId)
+          const remove = () =>
+            runForLine(
+              itemId,
+              () => removeItem(itemId),
+              API_FALLBACK_ERRORS.CART_REMOVE,
+            )
+          // A quantity still saving for this line goes first, then the remove.
+          const running = lineRequests.current.get(itemId)
+          if (running) void running.then(remove)
+          else remove()
           setPendingRemoveItem(null)
         }}
       >
@@ -235,7 +341,14 @@ export default function CartPageContent() {
             {items.map((item) => (
               <CartLineItem
                 key={item.id}
-                item={item}
+                item={
+                  drafts.has(item.id)
+                    ? {
+                        ...item,
+                        quantity: drafts.get(item.id) ?? item.quantity,
+                      }
+                    : item
+                }
                 onChangeQuantity={handleChangeQuantity}
                 disabled={pendingIds.has(item.id)}
                 onRemove={() => setPendingRemoveItem(item)}
@@ -247,7 +360,9 @@ export default function CartPageContent() {
             totals={totals}
             onCheckout={handleCheckout}
             onContinueShopping={handleContinueShopping}
-            isCheckoutDisabled={!hasItems || hasOutOfStockItems}
+            isCheckoutDisabled={
+              !hasItems || hasOutOfStockItems || hasUnsavedQuantity
+            }
           />
         </div>
       )}

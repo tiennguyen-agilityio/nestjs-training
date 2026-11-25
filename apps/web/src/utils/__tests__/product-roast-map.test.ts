@@ -1,4 +1,9 @@
-import { ProductStatus, ProductUnit, RoastLevel } from '@repo/constants'
+import {
+  DiscountType,
+  ProductStatus,
+  ProductUnit,
+  RoastLevel,
+} from '@repo/constants'
 import { type Product } from '@/types/product'
 import { mapProductToRoastCollection } from '@/utils/product'
 
@@ -41,6 +46,7 @@ describe('mapProductToRoastCollection', () => {
     expect(item.id).toBe('p-1')
     expect(item.name).toBe('Test Bean')
     expect(item.price).toBe(18.5)
+    expect(item.salePrice).toBe(18.5)
     expect(item.roastLevel).toBe(RoastLevel.MEDIUM)
     expect(item.imageUrl).toBe(PLACEHOLDER)
     expect(item.flavorNotes).toBe('Chocolate, caramel')
@@ -82,6 +88,43 @@ describe('mapProductToRoastCollection', () => {
 
     const item = mapProductToRoastCollection(product, PLACEHOLDER)
     expect(item.badgeLabel).toBe('Low Stock')
+  })
+
+  it('maps the list price and the sale price of a discounted first variant', () => {
+    const product: Product = {
+      id: 'p-4',
+      categoryId: 'cat',
+      name: 'Sale Bean',
+      description: '',
+      roastLevel: RoastLevel.LIGHT,
+      isOrganic: false,
+      isFairTrade: false,
+      status: ProductStatus.ACTIVE,
+      tastingNotes: '',
+      origin: '',
+      processingMethod: '',
+      variants: [
+        {
+          sku: 's',
+          size: 250,
+          unit: ProductUnit.G,
+          name: '250g',
+          price: 20,
+          discountType: DiscountType.PERCENT,
+          discountValue: 25,
+          stockQuantity: 30,
+        },
+      ],
+      images: [],
+      createdAt: null,
+      updatedAt: null,
+      deletedAt: null,
+    }
+
+    const item = mapProductToRoastCollection(product, PLACEHOLDER)
+
+    expect(item.price).toBe(20)
+    expect(item.salePrice).toBe(15)
   })
 
   describe('starts the roast line with the variant name', () => {

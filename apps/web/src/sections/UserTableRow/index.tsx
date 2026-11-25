@@ -21,6 +21,7 @@ import { ROLES_OPTIONS } from '@/constants/user'
 // Utils
 import { formatUserListEmailForDisplay, getNameInitials } from '@/utils/common'
 import { cn } from '@/utils/styles'
+import { TABLE_CELL_BADGE_CLASS } from '@/constants/common'
 
 export interface UserTableRowProps {
   user: User
@@ -88,7 +89,8 @@ export function UserTableRow({
             >
               <Badge
                 className={cn(
-                  'h-7 px-3 text-[0.65rem] tracking-[0.16em] uppercase transition',
+                  TABLE_CELL_BADGE_CLASS,
+                  'transition',
                   isRoleDisabled
                     ? 'cursor-not-allowed opacity-70'
                     : 'cursor-pointer hover:opacity-90',
@@ -116,7 +118,7 @@ export function UserTableRow({
         ) : (
           <Badge
             className={cn(
-              'h-7 px-3 text-[0.65rem] tracking-[0.16em] uppercase',
+              TABLE_CELL_BADGE_CLASS,
               isRoleDisabled && 'opacity-70',
               isAdmin
                 ? 'bg-foreground text-background'

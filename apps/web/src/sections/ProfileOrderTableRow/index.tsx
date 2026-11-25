@@ -1,12 +1,16 @@
 'use client'
 
 import Link from 'next/link'
+import { Eye } from 'lucide-react'
 
 // Types
 import type { OrderSummary } from '@/types/order'
 
 // Constants
 import { profileOrderPath } from '@/constants/routes'
+
+// Components
+import { buttonVariants } from '@/components/ui/button'
 
 // Utils
 import { formatPrice } from '@/utils/common'
@@ -20,7 +24,7 @@ import { cn } from '@/utils/styles'
 
 export interface ProfileOrderTableRowProps {
   order: OrderSummary
-  /** Opens the order's details page; every cell calls it, the number is a link. */
+  /** Opens the order's details page; every cell but the actions calls it, the number and the eye are links. */
   onOpen?: (order: OrderSummary) => void
 }
 
@@ -69,6 +73,20 @@ export function ProfileOrderTableRow({
         onClick={open}
       >
         {formatPrice(order.totalAmount)}
+      </td>
+      <td className="px-6 py-6 text-center">
+        <Link
+          href={profileOrderPath(order.orderNumber)}
+          className={cn(
+            buttonVariants({ variant: 'ghost', size: 'icon' }),
+            'inline-flex size-9',
+          )}
+          title="View order details"
+          aria-label={`View order #${order.orderNumber}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Eye className="size-4" aria-hidden />
+        </Link>
       </td>
     </>
   )

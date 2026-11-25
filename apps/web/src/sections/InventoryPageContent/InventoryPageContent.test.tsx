@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { ProductStatus, StockLevel } from '@repo/constants'
 
 import InventoryPageContent from '@/sections/InventoryPageContent'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { dashboardInventoryHistoryPath } from '@/constants/routes'
 import { useInventory } from '@/hooks/useInventory'
 import type { InventoryItem } from '@/types/inventory'
@@ -87,6 +88,22 @@ describe('InventoryPageContent', () => {
     expect(row.getByRole('cell', { name: 'Low' })).toBeInTheDocument()
   })
 
+  it('stacks each row as a labelled card on mobile', () => {
+    render(<InventoryPageContent />)
+
+    expect(screen.getByRole('table')).toHaveClass('max-md:block')
+    const cells = within(screen.getAllByRole('row')[1]).getAllByRole('cell')
+    expect(cells.map((cell) => cell.getAttribute('data-label'))).toEqual([
+      null,
+      'Variant',
+      'Stock',
+      'Reserved',
+      'Available',
+      'Level',
+      'Actions',
+    ])
+  })
+
   it('InventoryPageContent writes lowStock to the URL', async () => {
     const user = userEvent.setup()
     render(<InventoryPageContent />)
@@ -111,4 +128,24 @@ describe('InventoryPageContent', () => {
       await screen.findByRole('alertdialog', { name: /Restock/ }),
     ).toBeInTheDocument()
   })
+
+  it.each([
+    ['button', 'Restock KEN-250', 'Restock'],
+    ['button', 'Adjust KEN-250', 'Adjust stock'],
+    ['link', 'History of KEN-250', 'View history'],
+  ] as const)(
+    'shows a tooltip on hovering the %s "%s"',
+    async (role, name, tooltip) => {
+      const user = userEvent.setup()
+      render(
+        <TooltipProvider delay={0}>
+          <InventoryPageContent />
+        </TooltipProvider>,
+      )
+
+      await user.hover(screen.getByRole(role, { name }))
+
+      expect(await screen.findByText(tooltip)).toBeInTheDocument()
+    },
+  )
 })
