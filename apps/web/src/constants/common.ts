@@ -18,3 +18,10 @@ export const IDEMPOTENCY = {
   IN_FLIGHT_RETRY_MS: 1000,
   IN_FLIGHT_MAX_RETRIES: 5,
 } as const
+
+/** The pill a table cell's dropdown shows (the Users role cell's look). */
+export const TABLE_CELL_BADGE_CLASS =
+  'h-7 px-3 text-[0.65rem] tracking-[0.16em] uppercase'
+
+/** How long the cart waits after the last quantity click before it sends it. */
+export const CART_QUANTITY_DEBOUNCE_MS = 500

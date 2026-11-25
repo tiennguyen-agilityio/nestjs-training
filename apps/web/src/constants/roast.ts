@@ -51,7 +51,10 @@ export const ROAST_SORT_OPTIONS: OptionItem[] = Object.entries(
 export interface RoastCollection {
   id: string
   name: string
+  /** The first variant's list price, before the discount. */
   price: number
+  /** The price the shopper pays; equals `price` without a discount. */
+  salePrice: number
   flavorNotes: string
   roastMeta: string
   roastLevel: RoastLevel

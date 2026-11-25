@@ -14,12 +14,10 @@ import { ProductTrustRow } from '@/components/ProductTrustRow'
 import { Button } from '@/components/ui/button'
 
 import { EMPTY_IMAGE } from '@/constants/images'
-import { OUT_OF_STOCK_LABEL } from '@/constants/order'
 import { SERIES_KICKER } from '@/constants/product'
 import { useProductById } from '@/hooks/useProduct'
 import { type ProductImage } from '@/types/product'
-import { isProductOutOfStock } from '@/utils/inventory'
-import { getProductPricing } from '@/utils/product'
+import { getProductPricing, getStockBadgeLabel } from '@/utils/product'
 import { cn } from '@/utils/styles'
 
 const ROASTS_LIST_HREF = '/roasts'
@@ -92,7 +90,7 @@ export default function RoastDetailPageContent() {
   const productImages = [...product.images].sort(
     (a, b) => a.sortOrder - b.sortOrder,
   )
-  const isOutOfStock = isProductOutOfStock(product)
+  const stockBadgeLabel = getStockBadgeLabel(product)
 
   return (
     <div className={cn('min-w-0 w-full', 'bg-background text-on-surface')}>
@@ -111,14 +109,14 @@ export default function RoastDetailPageContent() {
             className="relative space-y-5"
             data-testid="product-detail-gallery"
           >
-            {isOutOfStock ? (
+            {stockBadgeLabel ? (
               <span
                 className={cn(
                   'absolute top-3 left-3 z-10 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide',
                   'bg-surface-container-highest text-on-surface',
                 )}
               >
-                {OUT_OF_STOCK_LABEL}
+                {stockBadgeLabel}
               </span>
             ) : null}
             <Carousel

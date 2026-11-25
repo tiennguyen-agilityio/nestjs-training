@@ -256,6 +256,28 @@ describe('SignUpForm', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows the social buttons before the start form fields', () => {
+    render(<SignUpForm />)
+
+    expect(
+      screen
+        .getByText('Social buttons')
+        .compareDocumentPosition(
+          within(getStartForm()).getByPlaceholderText('First name'),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('keeps Keep me signed in disabled', () => {
+    render(<SignUpForm />)
+
+    expect(
+      within(getStartForm()).getByRole('checkbox', {
+        name: 'Keep me signed in',
+      }),
+    ).toBeDisabled()
+  })
+
   it('renders continue step when Clerk needs an extra step', () => {
     render(<SignUpForm />)
 

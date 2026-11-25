@@ -57,6 +57,35 @@ describe('ClerkField', () => {
     )
   })
 
+  it('turns browser autofill off by default', () => {
+    const { rerender } = render(
+      <ClerkField name="identifier" type="email" placeholder="Email" />,
+    )
+    expect(screen.getByPlaceholderText('Email')).toHaveAttribute(
+      'autocomplete',
+      'off',
+    )
+
+    // Browsers ignore "off" on a password; "new-password" stops the saved fill.
+    rerender(<ClerkField name="password" type="password" placeholder="Email" />)
+    expect(screen.getByPlaceholderText('Email')).toHaveAttribute(
+      'autocomplete',
+      'new-password',
+    )
+
+    rerender(
+      <ClerkField
+        name="code"
+        autoComplete="one-time-code"
+        placeholder="Email"
+      />,
+    )
+    expect(screen.getByPlaceholderText('Email')).toHaveAttribute(
+      'autocomplete',
+      'one-time-code',
+    )
+  })
+
   it('shows toggle button for password field', async () => {
     const user = userEvent.setup()
 

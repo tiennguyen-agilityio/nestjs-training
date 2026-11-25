@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import ConfirmActionDialog from '@/components/ConfirmActionDialog'
+import { SELECT_TRIGGER_VARIANT_CLASS } from '@/components/Select'
 
 export interface OrderStatusPanelProps {
   order: OrderDetail
@@ -136,7 +137,10 @@ export default function OrderStatusPanel({
             }}
             disabled={isPending}
           >
-            <SelectTrigger aria-label="Next status" className="w-full">
+            <SelectTrigger
+              aria-label="Next status"
+              className={cn('w-full', SELECT_TRIGGER_VARIANT_CLASS.form)}
+            >
               <SelectValue placeholder="Choose the next status…">
                 {choice ? labelOf(choice) : 'Choose the next status…'}
               </SelectValue>

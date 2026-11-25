@@ -32,6 +32,7 @@ import {
   getShippingStatusPresentation,
 } from '@/utils/order'
 import { cn } from '@/utils/styles'
+import { TABLE_CELL_BADGE_CLASS } from '@/constants/common'
 
 export interface OrderTableRowProps {
   order: OrderSummary
@@ -134,7 +135,7 @@ export function OrderTableRow({
             >
               <Badge
                 className={cn(
-                  'h-7 px-3 text-[0.65rem] font-semibold uppercase',
+                  TABLE_CELL_BADGE_CLASS,
                   'cursor-not-allowed opacity-70',
                   statusP.badgeClassName,
                 )}
@@ -156,12 +157,7 @@ export function OrderTableRow({
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <Badge
-            className={cn(
-              'h-7 px-3 text-[0.65rem] font-semibold uppercase',
-              statusP.badgeClassName,
-            )}
-          >
+          <Badge className={cn(TABLE_CELL_BADGE_CLASS, statusP.badgeClassName)}>
             {statusP.label}
           </Badge>
         )}
@@ -211,12 +207,7 @@ export function OrderTableRow({
         )}
       </td> */}
       <td className="px-6 py-4 align-middle text-center">
-        <Badge
-          className={cn(
-            'h-7 px-3 text-[0.65rem] font-semibold uppercase',
-            shipping.badgeClassName,
-          )}
-        >
+        <Badge className={cn(TABLE_CELL_BADGE_CLASS, shipping.badgeClassName)}>
           {shipping.label}
         </Badge>
       </td>

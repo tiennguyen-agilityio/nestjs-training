@@ -211,7 +211,7 @@ export default function OrdersPageContent() {
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
             <div className="flex w-full min-w-0 gap-4 md:w-72 md:max-w-80 md:shrink-0">
               <Select
-                classNameTrigger="rounded-full"
+                variant="filter"
                 placeholder="All statuses"
                 ariaLabel="Status filter"
                 options={ORDER_STATUS_FILTER_OPTIONS}
@@ -221,7 +221,7 @@ export default function OrdersPageContent() {
             </div>
             <div className="flex w-full min-w-0 gap-4 md:w-60 md:max-w-60 md:shrink-0">
               <Select
-                classNameTrigger="rounded-full"
+                variant="filter"
                 placeholder="All shipping statuses"
                 ariaLabel="Shipping status filter"
                 options={SHIPPING_STATUS_OPTIONS}

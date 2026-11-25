@@ -36,6 +36,18 @@ const totals: CartTotals = {
 }
 
 describe('CheckoutOrderSummary', () => {
+  it('shows the quantity on the variant line', () => {
+    render(
+      <CheckoutOrderSummary
+        items={[line({ meta: '200g', quantity: 2 })]}
+        totals={totals}
+        onPlaceOrder={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByText('200g · Qty 2')).toBeInTheDocument()
+  })
+
   it('shows the struck list price for a discounted line', () => {
     render(
       <CheckoutOrderSummary
@@ -47,6 +59,34 @@ describe('CheckoutOrderSummary', () => {
 
     expect(screen.getByText('$15.00')).toBeInTheDocument()
     expect(screen.getByRole('deletion')).toHaveTextContent('$20.00')
+  })
+
+  it('labels the button Place Order by default and with the label it receives', () => {
+    const { rerender } = render(
+      <CheckoutOrderSummary
+        items={[line()]}
+        totals={totals}
+        onPlaceOrder={jest.fn()}
+      />,
+    )
+    expect(
+      screen.getByRole('button', { name: 'Place Order' }),
+    ).toBeInTheDocument()
+
+    rerender(
+      <CheckoutOrderSummary
+        items={[line()]}
+        totals={totals}
+        onPlaceOrder={jest.fn()}
+        placeOrderLabel="Continue to payment"
+      />,
+    )
+    expect(
+      screen.getByRole('button', { name: 'Continue to payment' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Place Order' }),
+    ).not.toBeInTheDocument()
   })
 
   it('renders the estimated tax and the total it receives', () => {

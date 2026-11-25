@@ -169,7 +169,7 @@ export const PageContent = () => {
           />
           <div className="flex w-full min-w-0 gap-4 md:w-auto md:flex-1 xl:w-60 xl:flex-none">
             <Select
-              classNameTrigger="h-12 rounded-full"
+              variant="filter"
               placeholder="All categories"
               options={categoryOptions}
               selected={normalizedCategoryId ?? ALL_CATEGORIES_VALUE}
@@ -179,7 +179,7 @@ export const PageContent = () => {
           </div>
           <div className="flex w-full min-w-0 gap-4 md:w-auto md:flex-1 xl:w-52 xl:flex-none">
             <Select
-              classNameTrigger="h-12 rounded-full"
+              variant="filter"
               placeholder="All statuses"
               options={PRODUCT_STATUS_OPTIONS}
               selected={normalizedStatus ?? PRODUCT_STATUS_OPTIONS[0].value}

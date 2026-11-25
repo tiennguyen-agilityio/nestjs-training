@@ -13,6 +13,11 @@ import { SearchInput } from '@/components/SearchInput'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { PRODUCT_STATUS_OPTIONS } from '@/constants/product'
 import { ROUTES, dashboardInventoryHistoryPath } from '@/constants/routes'
 import { useInventory } from '@/hooks/useInventory'
@@ -25,24 +30,31 @@ import type { InventoryItem } from '@/types/inventory'
 import { inventoryUrlSchema } from '@/utils/url'
 import { cn } from '@/utils/styles'
 
-const CELL = 'px-6 py-4'
+const CELL = 'px-6 py-4 align-middle'
+// The number and level columns: a fixed width that fits the header and badge.
+const NARROW_CELL = 'px-3 py-4 align-middle text-center'
+const HEADER = 'whitespace-nowrap'
 
 const INVENTORY_TABLE_COLUMNS: TableColumn[] = [
-  { key: 'product', label: 'Product', className: `min-w-0 ${CELL}` },
-  { key: 'variant', label: 'Variant', className: `w-[18%] ${CELL}` },
-  { key: 'stock', label: 'Stock', className: `w-[9%] ${CELL} text-center` },
+  { key: 'product', label: 'Product', className: `min-w-0 ${CELL} ${HEADER}` },
+  { key: 'variant', label: 'Variant', className: `w-44 ${CELL} ${HEADER}` },
+  { key: 'stock', label: 'Stock', className: `w-24 ${NARROW_CELL} ${HEADER}` },
   {
     key: 'reserved',
     label: 'Reserved',
-    className: `w-[9%] ${CELL} text-center`,
+    className: `w-28 ${NARROW_CELL} ${HEADER}`,
   },
   {
     key: 'available',
     label: 'Available',
-    className: `w-[9%] ${CELL} text-center`,
+    className: `w-28 ${NARROW_CELL} ${HEADER}`,
   },
-  { key: 'level', label: 'Level', className: `w-[9%] ${CELL} text-center` },
-  { key: 'actions', label: 'Actions', className: `w-36 ${CELL} text-right` },
+  { key: 'level', label: 'Level', className: `w-36 ${NARROW_CELL} ${HEADER}` },
+  {
+    key: 'actions',
+    label: 'Actions',
+    className: `w-36 ${CELL} ${HEADER} text-right`,
+  },
 ]
 
 const STOCK_LEVEL_BADGES: Record<StockLevel, { label: string; style: string }> =
@@ -134,101 +146,143 @@ export default function InventoryPageContent() {
           isFetching={isFetching}
           onRetry={() => void refetch()}
         >
-          <Table
-            columns={INVENTORY_TABLE_COLUMNS}
-            data={items}
-            getRowKey={(item) => item.id}
-            renderRow={(item) => {
-              const level = STOCK_LEVEL_BADGES[item.stockLevel]
-              return (
-                <>
-                  <td className={CELL}>
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Avatar className="size-12 shrink-0 rounded-sm after:rounded-sm after:border-transparent">
-                        <AvatarImage
-                          src={item.product.primaryImageUrl ?? ''}
-                          alt={item.product.name}
-                          className="rounded-sm"
-                        />
-                        <AvatarFallback className="rounded-sm text-xs font-semibold">
-                          {item.product.name.slice(0, 1).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-foreground">
-                          {item.product.name}
-                        </p>
-                        {item.product.status !== ProductStatus.ACTIVE && (
-                          <Badge className="mt-1 h-6 bg-muted px-2 text-[0.65rem] uppercase text-muted-foreground">
-                            {productStatusLabel(item.product.status)}
-                          </Badge>
-                        )}
+          <div className="md:overflow-x-auto">
+            <Table
+              columns={INVENTORY_TABLE_COLUMNS}
+              data={items}
+              isStackedOnMobile
+              // From md up the table keeps its columns and scrolls sideways
+              // instead of squeezing them.
+              tableClassName="w-full table-fixed text-left md:min-w-[60rem]"
+              getRowKey={(item) => item.id}
+              renderRow={(item) => {
+                const level = STOCK_LEVEL_BADGES[item.stockLevel]
+                return (
+                  <>
+                    <td className={CELL}>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar className="size-12 shrink-0 rounded-sm after:rounded-sm after:border-transparent">
+                          <AvatarImage
+                            src={item.product.primaryImageUrl ?? ''}
+                            alt={item.product.name}
+                            className="rounded-sm"
+                          />
+                          <AvatarFallback className="rounded-sm text-xs font-semibold">
+                            {item.product.name.slice(0, 1).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-foreground">
+                            {item.product.name}
+                          </p>
+                          {item.product.status !== ProductStatus.ACTIVE && (
+                            <Badge className="mt-1 h-6 bg-muted px-2 text-[0.65rem] uppercase text-muted-foreground">
+                              {productStatusLabel(item.product.status)}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className={CELL}>
-                    <p className="text-sm font-medium text-foreground">
-                      {item.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{item.sku}</p>
-                  </td>
-                  <td className={`${CELL} text-center font-semibold`}>
-                    {item.stockQuantity}
-                  </td>
-                  <td className={`${CELL} text-center`}>
-                    {item.reservedQuantity}
-                  </td>
-                  <td className={`${CELL} text-center font-semibold`}>
-                    {item.availableQuantity}
-                  </td>
-                  <td className={`${CELL} text-center`}>
-                    <Badge
-                      className={cn('h-7 px-3 text-[0.65rem]', level.style)}
+                    </td>
+                    <td data-label="Variant" className={CELL}>
+                      <p className="text-sm font-medium text-foreground">
+                        {item.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.sku}
+                      </p>
+                    </td>
+                    <td
+                      data-label="Stock"
+                      className={`${NARROW_CELL} font-semibold`}
                     >
-                      {level.label}
-                    </Badge>
-                  </td>
-                  <td className={CELL}>
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="w-auto"
-                        aria-label={`Restock ${item.sku}`}
-                        onClick={() => setDialog({ kind: 'restock', item })}
+                      {item.stockQuantity}
+                    </td>
+                    <td data-label="Reserved" className={NARROW_CELL}>
+                      {item.reservedQuantity}
+                    </td>
+                    <td
+                      data-label="Available"
+                      className={`${NARROW_CELL} font-semibold`}
+                    >
+                      {item.availableQuantity}
+                    </td>
+                    <td data-label="Level" className={NARROW_CELL}>
+                      <Badge
+                        className={cn('h-7 px-3 text-[0.65rem]', level.style)}
                       >
-                        <PackagePlus className="size-4" aria-hidden />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="w-auto"
-                        aria-label={`Adjust ${item.sku}`}
-                        onClick={() => setDialog({ kind: 'adjust', item })}
-                      >
-                        <SlidersHorizontal className="size-4" aria-hidden />
-                      </Button>
-                      <Link
-                        href={dashboardInventoryHistoryPath(item.id)}
-                        aria-label={`History of ${item.sku}`}
-                        className={cn(
-                          buttonVariants({ variant: 'ghost', size: 'icon-sm' }),
-                          'w-auto',
-                        )}
-                      >
-                        <History className="size-4" aria-hidden />
-                      </Link>
-                    </div>
-                  </td>
-                </>
-              )
-            }}
-            emptyMessage={
-              isLowStockOnly
-                ? 'No variants are running low.'
-                : 'No variants found.'
-            }
-          />
+                        {level.label}
+                      </Badge>
+                    </td>
+                    <td data-label="Actions" className={CELL}>
+                      <div className="flex justify-end gap-1">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="w-auto"
+                                aria-label={`Restock ${item.sku}`}
+                                onClick={() =>
+                                  setDialog({ kind: 'restock', item })
+                                }
+                              />
+                            }
+                          >
+                            <PackagePlus className="size-4" aria-hidden />
+                          </TooltipTrigger>
+                          <TooltipContent>Restock</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="w-auto"
+                                aria-label={`Adjust ${item.sku}`}
+                                onClick={() =>
+                                  setDialog({ kind: 'adjust', item })
+                                }
+                              />
+                            }
+                          >
+                            <SlidersHorizontal className="size-4" aria-hidden />
+                          </TooltipTrigger>
+                          <TooltipContent>Adjust stock</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Link
+                                href={dashboardInventoryHistoryPath(item.id)}
+                                aria-label={`History of ${item.sku}`}
+                                className={cn(
+                                  buttonVariants({
+                                    variant: 'ghost',
+                                    size: 'icon-sm',
+                                  }),
+                                  'w-auto',
+                                )}
+                              />
+                            }
+                          >
+                            <History className="size-4" aria-hidden />
+                          </TooltipTrigger>
+                          <TooltipContent>View history</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </td>
+                  </>
+                )
+              }}
+              emptyMessage={
+                isLowStockOnly
+                  ? 'No variants are running low.'
+                  : 'No variants found.'
+              }
+            />
+          </div>
         </ListBody>
 
         <footer className="border-t border-outline-variant/30 px-6 py-4">

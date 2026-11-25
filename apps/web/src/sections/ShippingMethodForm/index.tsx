@@ -184,6 +184,7 @@ const ShippingMethodForm = ({
               name="status"
               render={({ field }) => (
                 <Select
+                  variant="form"
                   label="Status"
                   ariaLabel="Status"
                   selected={field.value}

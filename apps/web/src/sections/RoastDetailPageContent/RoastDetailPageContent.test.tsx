@@ -10,6 +10,7 @@ import {
   ProductUnit,
   RoastLevel,
 } from '@repo/constants'
+import { LOW_STOCK_LABEL, OUT_OF_STOCK_LABEL } from '@/constants/order'
 import { type Product } from '@/types/product'
 
 jest.mock('next/navigation', () => ({
@@ -217,5 +218,37 @@ describe('RoastDetailPageContent', () => {
 
     expect(screen.getByText('$18.00')).toBeInTheDocument()
     expect(screen.getByRole('deletion')).toHaveTextContent('$24.00')
+  })
+
+  it('shows the Low Stock badge on the image when stock is below the threshold', () => {
+    mockUseProductById.mockReturnValue({
+      product: {
+        ...productFixture,
+        variants: [{ ...productFixture.variants[0], stockQuantity: 3 }],
+      },
+      isLoading: false,
+      isError: false,
+      errorMessage: null,
+      refetch: jest.fn(),
+    })
+
+    render(<RoastDetailPageContent />)
+
+    expect(screen.getByText(LOW_STOCK_LABEL)).toBeInTheDocument()
+  })
+
+  it('shows no stock badge when stock is plentiful', () => {
+    mockUseProductById.mockReturnValue({
+      product: productFixture,
+      isLoading: false,
+      isError: false,
+      errorMessage: null,
+      refetch: jest.fn(),
+    })
+
+    render(<RoastDetailPageContent />)
+
+    expect(screen.queryByText(LOW_STOCK_LABEL)).not.toBeInTheDocument()
+    expect(screen.queryByText(OUT_OF_STOCK_LABEL)).not.toBeInTheDocument()
   })
 })

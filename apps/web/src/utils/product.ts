@@ -1,5 +1,5 @@
 import type { UploadImageGalleryItem } from '@/components/UploadImage/Gallery'
-import { OUT_OF_STOCK_LABEL } from '@/constants/order'
+import { LOW_STOCK_LABEL, OUT_OF_STOCK_LABEL } from '@/constants/order'
 import { type RoastCollection } from '@/constants/roast'
 import type { EditProductFormValues } from '@/schemas/product'
 import {
@@ -84,24 +84,27 @@ export function getProductPrimaryImageUrl(product: Product): string | null {
   return url || null
 }
 
+/** The image badge for the first variant's stock: out of stock, low, or none. */
+export function getStockBadgeLabel(product: Product): string | undefined {
+  const quantity = getPrimaryVariantQuantity(product)
+  if (quantity <= 0) return OUT_OF_STOCK_LABEL
+  if (quantity < LOW_STOCK_THRESHOLD) return LOW_STOCK_LABEL
+  return undefined
+}
+
 export function mapProductToRoastCollection(
   product: Product,
   placeholderImageUrl: string,
 ): RoastCollection {
-  const price = getProductListPrice(product)
+  const { listPrice: price, salePrice } = getProductPricing(product)
   const imageUrl = getProductPrimaryImageUrl(product) ?? placeholderImageUrl
-  const quantity = getPrimaryVariantQuantity(product)
-  let badgeLabel: string | undefined
-  if (quantity <= 0) {
-    badgeLabel = OUT_OF_STOCK_LABEL
-  } else if (quantity < LOW_STOCK_THRESHOLD) {
-    badgeLabel = 'Low Stock'
-  }
+  const badgeLabel = getStockBadgeLabel(product)
 
   return {
     id: product.id,
     name: product.name,
     price,
+    salePrice,
     flavorNotes: productFlavorLine(product),
     roastMeta: formatProductRoastMeta(product),
     roastLevel: product.roastLevel,
