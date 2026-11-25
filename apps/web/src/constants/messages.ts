@@ -233,6 +233,9 @@ export const DIALOG_MESSAGES = {
       DESCRIPTION: (orderNumber: string) =>
         `Order ${orderNumber} will be cancelled and its items go back into stock. This cannot be undone.`,
       WILL_BE_REFUNDED: 'The payment will be refunded.',
+      CAN_CANCEL:
+        'You can cancel until the order ships. Its items go back into stock.',
+      SHIPPED: 'Cannot be cancelled: the order has already shipped.',
     },
     REFUND: {
       TITLE: 'Refund this order?',

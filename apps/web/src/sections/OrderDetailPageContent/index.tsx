@@ -44,6 +44,7 @@ import {
   getOrderStatusPresentation,
   getPaymentStatusPresentation,
   getShippingStatusPresentation,
+  refundableOf,
 } from '@/utils/order'
 
 // Components
@@ -431,18 +432,21 @@ function ShipToPanel({ order }: { order: OrderDetail }) {
   )
 }
 
-/** Cancels a PENDING order after a confirm; other statuses get a line of text. */
 function CancelPanel({ order }: { order: OrderDetail }) {
   const [confirming, setConfirming] = useState<OrderDetail | null>(null)
   const { mutate, isPending } = useCancelOrder()
+  const notShipped = order.shippingStatus === ShippingStatus.PENDING
+  const canCancel =
+    notShipped &&
+    (order.status === OrderStatus.PENDING ||
+      order.status === OrderStatus.CONFIRMED)
 
   return (
     <Panel title="Cancel order">
-      {order.status === OrderStatus.PENDING ? (
+      {canCancel ? (
         <>
           <p className="text-sm text-on-surface-variant">
-            You can cancel while the order is still pending. Its items go back
-            into stock.
+            {DIALOG_MESSAGES.ORDER.CANCEL.CAN_CANCEL}
           </p>
           <Button
             type="button"
@@ -456,6 +460,10 @@ function CancelPanel({ order }: { order: OrderDetail }) {
       ) : order.status === OrderStatus.CANCELLED ? (
         <p className="text-sm text-on-surface-variant">
           This order has been cancelled.
+        </p>
+      ) : !notShipped ? (
+        <p className="text-sm text-on-surface-variant">
+          {DIALOG_MESSAGES.ORDER.CANCEL.SHIPPED}
         </p>
       ) : (
         <p className="text-sm text-on-surface-variant">
@@ -471,11 +479,14 @@ function CancelPanel({ order }: { order: OrderDetail }) {
         isPending={isPending}
         successMessage={SUCCESS_MESSAGES.ORDER_CANCELLED}
         title={DIALOG_MESSAGES.ORDER.CANCEL.TITLE}
-        renderDescription={(current) =>
-          DIALOG_MESSAGES.ORDER.CANCEL.DESCRIPTION(
+        renderDescription={(current) => {
+          const description = DIALOG_MESSAGES.ORDER.CANCEL.DESCRIPTION(
             current?.orderNumber ?? order.orderNumber,
           )
-        }
+          return refundableOf(order) > 0
+            ? `${description} ${DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED}`
+            : description
+        }}
         textAction={DIALOG_MESSAGES.ORDER.CANCEL.ACTION}
         textCancel={DIALOG_MESSAGES.ORDER.CANCEL.KEEP}
         actionVariant="destructive"

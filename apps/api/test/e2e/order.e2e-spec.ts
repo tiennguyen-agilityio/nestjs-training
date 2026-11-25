@@ -851,18 +851,19 @@ describe('OrderController (e2e)', () => {
       ]);
     });
 
-    it('POST /orders/:idOrOrderNumber/cancel of a CONFIRMED order returns 409 statusNotAllowed and it stays CONFIRMED (AC2)', async () => {
+    it('POST /orders/:idOrOrderNumber/cancel of a CONFIRMED order that has shipped returns 409 (AC3)', async () => {
       const user = await createUser();
       const { order, variantId } = await placeWith(user.clerkId);
-      await execute(`update orders set status = 'CONFIRMED' where id = ?`, [
-        order.id,
-      ]);
+      await execute(
+        `update orders set status = 'CONFIRMED', shipping_status = 'SHIPPING' where id = ?`,
+        [order.id],
+      );
 
       const response = await cancel(order.id).expect(409);
 
       expect((response.body as ErrorBody).errors[0]).toMatchObject({
         errCode: 'statusNotAllowed',
-        field: 'status',
+        field: 'shippingStatus',
       });
       const [row] = await execute<{ status: string }[]>(
         'select status from orders where id = ?',
@@ -871,6 +872,24 @@ describe('OrderController (e2e)', () => {
       expect(row.status).toBe('CONFIRMED');
       expect((await variantRow(variantId)).reserved_quantity).toBe(2);
       expect(await releaseRows(order.id)).toEqual([]);
+    });
+
+    it('POST /orders/:id/cancel of a CONFIRMED COD order cancels it with no refund (AC5)', async () => {
+      const user = await createUser();
+      const { order, variantId } = await placeWith(user.clerkId);
+      await execute(`update orders set status = 'CONFIRMED' where id = ?`, [
+        order.id,
+      ]);
+
+      const response = await cancel(order.id).expect(200);
+
+      expect(orderOf(response).status).toBe('CANCELLED');
+      expect((await variantRow(variantId)).reserved_quantity).toBe(0);
+      const refunds = await execute<{ id: string }[]>(
+        `select id from payments where order_id = ? and type = 'REFUND'`,
+        [order.id],
+      );
+      expect(refunds).toEqual([]);
     });
 
     it('two concurrent cancels of one order: one 200, one 409, the stock released once', async () => {

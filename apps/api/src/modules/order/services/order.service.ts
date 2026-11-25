@@ -60,6 +60,11 @@ import {
   ERROR_MESSAGES,
 } from '../../../common/constants/message.constant.js';
 
+const SHOPPER_CANCELLABLE: ReadonlySet<OrderStatus> = new Set([
+  OrderStatus.PENDING,
+  OrderStatus.CONFIRMED,
+]);
+
 const ORDER_NUMBER_ATTEMPTS = 5;
 const CANCELLED_REASON = 'Cancelled';
 const EXPIRING_METHODS = new Set([PaymentMethod.CARD, PaymentMethod.PAYPAL]);
@@ -164,9 +169,10 @@ export class OrderService {
   }
 
   /**
-   * Cancels one of the caller's PENDING, unpaid orders in one transaction:
-   * releases each item's held stock (RELEASE), fails the PENDING charges,
-   * and queues the expiry of any open checkout session.
+   * Cancels one of the caller's PENDING or CONFIRMED orders that has not
+   * shipped, in one transaction: releases each item's held stock (RELEASE),
+   * fails the PENDING charges, queues the expiry of any open checkout session
+   * and starts the refund of a PAID card or PayPal charge.
    */
   cancel(userId: string, idOrOrderNumber: string): Promise<ResponseOrderDto> {
     return this.orderRepository.transactionalWithOutbox(
@@ -378,7 +384,7 @@ export class OrderService {
   }
 
   private assertCancellable(order: Order): void {
-    if ((order.status as OrderStatus) !== OrderStatus.PENDING) {
+    if (!SHOPPER_CANCELLABLE.has(order.status)) {
       throw new InvalidStateException({
         errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
         field: 'status',
@@ -400,18 +406,6 @@ export class OrderService {
       .filter(
         (payment) => (payment.type as PaymentType) === PaymentType.CHARGE,
       );
-    if (
-      charges.some(
-        (payment) => (payment.status as PaymentStatus) === PaymentStatus.PAID,
-      )
-    ) {
-      throw new InvalidStateException({
-        errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
-        field: 'paymentStatus',
-        message: ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('paid'),
-        description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_PAID,
-      });
-    }
     // A pending charge with a transaction id is money the gateway holds for review.
     if (
       charges.some(

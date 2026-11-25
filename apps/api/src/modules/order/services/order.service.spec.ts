@@ -760,10 +760,10 @@ describe('OrderService', () => {
       });
     });
 
-    it('cancel rejects a non-PENDING order with statusNotAllowed on status and saves nothing', async () => {
+    it('cancel rejects a COMPLETED order with statusNotAllowed on status and saves nothing', async () => {
       orderRepository.lockMineForCancel.mockResolvedValue(
-        orderWith(OrderStatus.CONFIRMED, [
-          charge({ method: PaymentMethod.CARD, checkoutSessionId: 'cs_1' }),
+        orderWith(OrderStatus.COMPLETED, [
+          charge({ method: PaymentMethod.CARD, status: PaymentStatus.PAID }),
         ]),
       );
 
@@ -774,36 +774,58 @@ describe('OrderService', () => {
       expect(error.getErrors()[0]).toMatchObject({
         errCode: 'statusNotAllowed',
         field: 'status',
-        message: 'Order cannot be cancelled: it is confirmed',
+        message: 'Order cannot be cancelled: it is completed',
       });
       expect(productVariantService.release).not.toHaveBeenCalled();
       expect(orderRepository.saveCancelled).not.toHaveBeenCalled();
-      expect(enqueueCheckoutExpire).not.toHaveBeenCalled();
+      expect(refundService.startLocked).not.toHaveBeenCalled();
     });
 
-    it('cancel rejects an order with a PAID charge with statusNotAllowed on paymentStatus', async () => {
-      const paid = [
-        charge({ method: PaymentMethod.CARD, status: PaymentStatus.PAID }),
-      ];
-      orderRepository.lockMineForCancel.mockResolvedValueOnce(
-        orderWith(OrderStatus.PENDING, paid),
-      );
-
-      const error = await errorOf(service.cancel(USER_ID, ORDER_ID));
-
-      expect(error).toBeInstanceOf(InvalidStateException);
-      expect(error.getErrors()[0]).toMatchObject({
-        errCode: 'statusNotAllowed',
-        field: 'paymentStatus',
-        message: 'Order cannot be cancelled: it is paid',
+    it('cancel of a CONFIRMED paid card order cancels it and starts a refund of the rest', async () => {
+      const paid = charge({
+        method: PaymentMethod.CARD,
+        status: PaymentStatus.PAID,
+        checkoutSessionId: 'cs_1',
+        transactionId: 'pi_1',
       });
-      expect(orderRepository.saveCancelled).not.toHaveBeenCalled();
+      const order = orderWith(OrderStatus.CONFIRMED, [paid]);
+      orderRepository.lockMineForCancel.mockResolvedValue(order);
 
-      orderRepository.lockMineForCancel.mockResolvedValueOnce(
-        orderWith(OrderStatus.CONFIRMED, paid),
+      await service.cancel(USER_ID, ORDER_ID);
+
+      expect(order.status).toBe(OrderStatus.CANCELLED);
+      expect(paid.status).toBe(PaymentStatus.PAID);
+      expect(productVariantService.release).toHaveBeenCalledTimes(2);
+      expect(orderRepository.saveCancelled).toHaveBeenCalledWith(
+        order,
+        USER_ID,
       );
-      const confirmed = await errorOf(service.cancel(USER_ID, ORDER_ID));
-      expect(confirmed.getErrors()[0]).toMatchObject({ field: 'status' });
+      expect(refundService.startLocked).toHaveBeenCalledWith(
+        order,
+        'rest',
+        USER_ID,
+        enqueueRefund,
+      );
+    });
+
+    it('cancel of a CONFIRMED PayPal order refunds through PayPal', async () => {
+      const paid = charge({
+        method: PaymentMethod.PAYPAL,
+        status: PaymentStatus.PAID,
+        transactionId: 'CAPTURE-1',
+      });
+      const order = orderWith(OrderStatus.CONFIRMED, [paid]);
+      orderRepository.lockMineForCancel.mockResolvedValue(order);
+
+      await service.cancel(USER_ID, ORDER_ID);
+
+      expect(order.status).toBe(OrderStatus.CANCELLED);
+      expect(refundService.startLocked).toHaveBeenCalledWith(
+        order,
+        'rest',
+        USER_ID,
+        enqueueRefund,
+      );
     });
 
     it('cancel rejects an order whose charge the gateway holds for review', async () => {

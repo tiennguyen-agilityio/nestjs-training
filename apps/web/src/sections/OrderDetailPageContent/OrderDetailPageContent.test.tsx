@@ -81,6 +81,13 @@ const charge: OrderPayment = {
   updatedAt: '2026-11-17T09:00:00.000Z',
 }
 
+const PAID_CHARGE: OrderPayment = {
+  ...charge,
+  method: PaymentMethod.CARD,
+  status: PaymentStatus.PAID,
+  transactionId: 'pi_1',
+}
+
 const order: OrderDetail = {
   id: 'order-1',
   orderNumber: 'CH-261117-0001',
@@ -322,14 +329,12 @@ describe('OrderDetailPageContent', () => {
     expect(within(shipTo).getByText(/Ring twice/)).toBeInTheDocument()
   })
 
-  it('shows an enabled Cancel order button only for a PENDING order (AC3)', () => {
+  it('shows Cancel order for a PENDING or CONFIRMED order that has not shipped', () => {
     const { rerender } = render(<OrderDetailPageContent />)
 
     const cancel = section('Cancel order')
     expect(
-      within(cancel).getByText(
-        'You can cancel while the order is still pending. Its items go back into stock.',
-      ),
+      within(cancel).getByText(DIALOG_MESSAGES.ORDER.CANCEL.CAN_CANCEL),
     ).toBeInTheDocument()
     expect(
       within(cancel).getByRole('button', { name: 'Cancel order' }),
@@ -340,11 +345,10 @@ describe('OrderDetailPageContent', () => {
     )
     rerender(<OrderDetailPageContent />)
     expect(
-      within(section('Cancel order')).getByText(
-        'Cannot be cancelled: the order is confirmed.',
-      ),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull()
+      within(section('Cancel order')).getByRole('button', {
+        name: 'Cancel order',
+      }),
+    ).toBeEnabled()
 
     mockUseOrderDetail.mockReturnValue(
       state({ order: { ...order, status: OrderStatus.CANCELLED } }),
@@ -356,6 +360,142 @@ describe('OrderDetailPageContent', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull()
+  })
+
+  it('says the order has already shipped and offers no Cancel order', () => {
+    mockUseOrderDetail.mockReturnValue(
+      state({
+        order: {
+          ...order,
+          status: OrderStatus.CONFIRMED,
+          shippingStatus: ShippingStatus.SHIPPING,
+        },
+      }),
+    )
+    render(<OrderDetailPageContent />)
+
+    expect(
+      within(section('Cancel order')).getByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.SHIPPED,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull()
+  })
+
+  it('the cancel confirmation says the payment will be refunded for a paid online order', async () => {
+    const user = userEvent.setup()
+    mockUseOrderDetail.mockReturnValue(
+      state({
+        order: {
+          ...order,
+          status: OrderStatus.CONFIRMED,
+          payments: [PAID_CHARGE],
+        },
+      }),
+    )
+    render(<OrderDetailPageContent />)
+
+    await user.click(
+      within(section('Cancel order')).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).getByText(DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED, {
+        exact: false,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('the cancel confirmation adds the refund sentence when the order is paid while it is open', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<OrderDetailPageContent />)
+
+    await user.click(
+      within(section('Cancel order')).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).queryByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
+        {
+          exact: false,
+        },
+      ),
+    ).toBeNull()
+
+    mockUseOrderDetail.mockReturnValue(
+      state({
+        order: {
+          ...order,
+          status: OrderStatus.CONFIRMED,
+          payments: [PAID_CHARGE],
+        },
+      }),
+    )
+    rerender(<OrderDetailPageContent />)
+
+    expect(
+      within(screen.getByRole('alertdialog')).getByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
+        { exact: false },
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('the cancel confirmation of a cash on delivery order says nothing about a refund', async () => {
+    const user = userEvent.setup()
+    render(<OrderDetailPageContent />)
+
+    await user.click(
+      within(section('Cancel order')).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).queryByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
+        {
+          exact: false,
+        },
+      ),
+    ).toBeNull()
+  })
+
+  it('cancels a CONFIRMED paid order and refetches the order', async () => {
+    const user = userEvent.setup()
+    mutate.mockImplementation(
+      (_id: string, { onSuccess }: { onSuccess: () => void }) => onSuccess(),
+    )
+    mockUseOrderDetail.mockReturnValue(
+      state({
+        order: {
+          ...order,
+          status: OrderStatus.CONFIRMED,
+          payments: [PAID_CHARGE],
+        },
+      }),
+    )
+    render(<OrderDetailPageContent />)
+
+    await user.click(
+      within(section('Cancel order')).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    )
+
+    expect(mutate).toHaveBeenCalledWith(order.id, expect.any(Object))
+    expect(toast.success).toHaveBeenCalledWith(SUCCESS_MESSAGES.ORDER_CANCELLED)
   })
 
   it('cancels a PENDING order after the confirm and toasts Order cancelled', async () => {
@@ -440,17 +580,17 @@ describe('OrderDetailPageContent', () => {
     expect(toast.success).not.toHaveBeenCalled()
   })
 
-  it('keeps the dialog and its message when the refetch after a 409 shows the order confirmed', async () => {
+  it('keeps the dialog and its message when the refetch after a 409 shows the order shipped', async () => {
     const user = userEvent.setup()
     mutate.mockImplementation(
       (_id: string, { onError }: { onError: (error: unknown) => void }) =>
         onError(
-          new ServiceError('Order cannot be cancelled: it is confirmed', [
+          new ServiceError('Order cannot be cancelled: it is shipped', [
             {
               errCode: 'statusNotAllowed',
-              field: 'status',
-              message: 'Order cannot be cancelled: it is confirmed',
-              description: 'Contact the shop to cancel a confirmed order.',
+              field: 'shippingStatus',
+              message: 'Order cannot be cancelled: it is shipped',
+              description: 'The order has left the shop.',
             },
           ]),
         ),
@@ -469,7 +609,13 @@ describe('OrderDetailPageContent', () => {
       }),
     )
     mockUseOrderDetail.mockReturnValue(
-      state({ order: { ...order, status: OrderStatus.CONFIRMED } }),
+      state({
+        order: {
+          ...order,
+          status: OrderStatus.CONFIRMED,
+          shippingStatus: ShippingStatus.SHIPPING,
+        },
+      }),
     )
     rerender(<OrderDetailPageContent />)
 
@@ -484,7 +630,7 @@ describe('OrderDetailPageContent', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(
       within(section('Cancel order')).getByText(
-        'Cannot be cancelled: the order is confirmed.',
+        DIALOG_MESSAGES.ORDER.CANCEL.SHIPPED,
       ),
     ).toBeInTheDocument()
   })

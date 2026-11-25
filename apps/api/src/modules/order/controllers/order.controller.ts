@@ -198,9 +198,9 @@ export class OrderController {
   @HttpCode(HttpStatus.OK)
   @ApiAuthErrors()
   @ApiOperation({
-    summary: "Cancel one of the signed-in user's PENDING orders",
+    summary: "Cancel one of the signed-in user's orders before it ships",
     description:
-      "A UUID looks up by id, anything else by orderNumber. In one transaction the order becomes CANCELLED, each item's held stock is released (RELEASE) and its PENDING charge becomes FAILED; an open checkout session is expired through the outbox. Another user's order returns 404; a non-PENDING or paid order, one that has shipped, or one whose payment the gateway holds for review, returns 409.",
+      "A UUID looks up by id, anything else by orderNumber. A PENDING or CONFIRMED order whose shipping is still PENDING can be cancelled, paid or not. In one transaction the order becomes CANCELLED, each item's held stock is released (RELEASE), its PENDING charge becomes FAILED and an open checkout session is expired through the outbox; a PAID card or PayPal charge is refunded in full through the outbox (a PENDING REFUND). Another user's order returns 404; any other status, an order that has shipped, or one whose payment the gateway holds for review, returns 409.",
   })
   @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
   @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.ORDER.NOT_FOUND, {
@@ -210,7 +210,7 @@ export class OrderController {
   })
   @ApiErrorResponse(
     HttpStatus.CONFLICT,
-    ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('confirmed'),
+    ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('completed'),
     {
       errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
       field: 'status',
