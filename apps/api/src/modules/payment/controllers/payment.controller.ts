@@ -39,7 +39,7 @@ export class PaymentController {
   @ApiOperation({
     summary: 'Start the online payment of one of my orders',
     description:
-      'Opens a Stripe Checkout Session for a CARD order, or a PayPal order for a PAYPAL order, and returns its id and URL; calling it again while that checkout is open returns the same one.',
+      "Opens a Stripe Checkout Session for a CARD order, or a PayPal order for a PAYPAL order, and returns its id and URL; calling it again while that checkout is open returns the same one. A FAILED payment whose checkout ended unpaid gets a new checkout on the same payment record (a retry), ending at the order's deadline.",
   })
   @ApiDataResponse(HttpStatus.OK, ResponsePaymentCheckoutDto)
   @ApiErrorResponse(

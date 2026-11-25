@@ -69,7 +69,11 @@ export class StripePaymentGateway extends PaymentGateway {
           success_url: request.successUrl,
           cancel_url: request.cancelUrl,
         },
-        { idempotencyKey: `checkout-${request.paymentId}-${expiresAt}` },
+        {
+          idempotencyKey: request.replacesCheckoutId
+            ? `checkout-${request.paymentId}-after-${request.replacesCheckoutId}`
+            : `checkout-${request.paymentId}-${expiresAt}`,
+        },
       );
       return this.toSession(session);
     } catch (error) {
@@ -197,6 +201,7 @@ export class StripePaymentGateway extends PaymentGateway {
       id: session.id,
       url: session.url ?? '',
       open: session.status === 'open',
+      endedUnpaid: session.status === 'expired',
       expiresAt: new Date(session.expires_at * 1000),
     };
   }

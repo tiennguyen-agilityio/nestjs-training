@@ -7,11 +7,13 @@ import {
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
+  VALIDATION_RULES,
 } from '@repo/constants';
 import { PaymentRepository } from '../repositories/payment.repository.js';
 import { OrderRepository } from '../../order/repositories/order.repository.js';
 import { PaymentGateways } from '../gateways/payment-gateways.js';
 import type {
+  CheckoutRequest,
   CheckoutSession,
   ApprovedCheckout,
   CaptureOutcome,
@@ -86,20 +88,12 @@ export class PaymentService {
       }
       if (this.isExpired(order)) throw this.orderExpired();
       if (payment.checkoutSessionId) {
-        return this.reuse(gateway, payment, order);
+        return this.reuseOrRetry(gateway, payment, order, userId);
       }
 
-      const session = await gateway.createCheckout({
-        paymentId: payment.id,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        amountCents: centsOf(order.totalAmount),
-        currency: CURRENCY,
-        customerEmail: order.user.email,
-        expiresAt: this.sessionExpiryOf(order),
-        successUrl: `${this.successUrlOf(order)}&session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: this.successUrlOf(order),
-      });
+      const session = await gateway.createCheckout(
+        this.checkoutRequestOf(payment, order, this.sessionExpiryOf(order)),
+      );
       payment.checkoutSessionId = session.id;
       order.expiresAt = session.expiresAt;
       await this.paymentRepository.save(payment, userId);
@@ -367,20 +361,94 @@ export class PaymentService {
     });
   }
 
-  private async reuse(
+  /**
+   * A payment with a checkout: the open one is returned again; a FAILED
+   * payment whose checkout ended unpaid (or is unknown to the gateway) is
+   * retried; anything else may still hold money and is not payable.
+   */
+  private async reuseOrRetry(
     gateway: PaymentGateway,
     payment: Payment,
     order: Order,
+    userId: string,
   ): Promise<ResponsePaymentCheckoutDto> {
-    const session: CheckoutSession | null = await gateway.findCheckout(
-      payment.checkoutSessionId as string,
+    const replaced = payment.checkoutSessionId as string;
+    const session: CheckoutSession | null =
+      await gateway.findCheckout(replaced);
+    if (session?.open) {
+      // The order's expiry is the checkout's: a PayPal order carries none.
+      return ResponsePaymentCheckoutDto.fromEntity(payment, {
+        ...session,
+        expiresAt: order.expiresAt ?? session.expiresAt,
+      });
+    }
+    if (
+      (payment.status as PaymentStatus) !== PaymentStatus.FAILED ||
+      (session && !session.endedUnpaid)
+    ) {
+      throw this.notPayable();
+    }
+    return this.retry(gateway, payment, order, userId, replaced);
+  }
+
+  /**
+   * A new attempt on the same payment row. The order's deadline never moves;
+   * an order with none (a held PayPal capture that was denied) gets a new one.
+   */
+  private async retry(
+    gateway: PaymentGateway,
+    payment: Payment,
+    order: Order,
+    userId: string,
+    replacesCheckoutId: string,
+  ): Promise<ResponsePaymentCheckoutDto> {
+    const deadline =
+      order.expiresAt ??
+      toWholeSecond(
+        Date.now() + VALIDATION_RULES.ORDER.PAYMENT_EXPIRY_MINUTES * MINUTE_MS,
+      );
+    // Stripe cannot open a session that ends sooner than this.
+    if (
+      payment.method === PaymentMethod.CARD &&
+      deadline.getTime() - Date.now() < MIN_SESSION_MS
+    ) {
+      throw this.notPayable();
+    }
+    const session = await gateway.createCheckout(
+      this.checkoutRequestOf(
+        payment,
+        order,
+        toWholeSecond(deadline.getTime()),
+        replacesCheckoutId,
+      ),
     );
-    if (!session?.open) throw this.notPayable();
-    // The order's expiry is the checkout's: a PayPal order carries none.
+    order.expiresAt = deadline;
+    payment.checkoutSessionId = session.id;
+    await this.paymentRepository.save(payment, userId);
     return ResponsePaymentCheckoutDto.fromEntity(payment, {
       ...session,
-      expiresAt: order.expiresAt ?? session.expiresAt,
+      expiresAt: deadline,
     });
+  }
+
+  private checkoutRequestOf(
+    payment: Payment,
+    order: Order,
+    expiresAt: Date,
+    replacesCheckoutId: string | null = null,
+  ): CheckoutRequest {
+    return {
+      paymentId: payment.id,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      amountCents: centsOf(order.totalAmount),
+      currency: CURRENCY,
+      customerEmail: order.user.email,
+      expiresAt,
+      successUrl: `${this.successUrlOf(order)}&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: this.successUrlOf(order),
+      replacesCheckoutId,
+    };
   }
 
   private sessionExpiryOf(order: Order): Date {

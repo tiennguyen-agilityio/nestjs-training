@@ -56,6 +56,8 @@ describe('PayPal payments (e2e)', () => {
   let paypal: Mock;
   let calls: PayPalCall[];
   let captureAnswer: { status: number; body: unknown };
+  let orderAnswers: Record<string, { status: number; body: unknown }>;
+  let createHeaders: (Record<string, string> | undefined)[];
   let verification: string;
 
   const ORDERS = `${API_BASE_PATH}/orders`;
@@ -202,38 +204,51 @@ describe('PayPal payments (e2e)', () => {
   beforeEach(() => {
     signIn(null);
     calls = [];
+    orderAnswers = {};
+    createHeaders = [];
     verification = 'SUCCESS';
     captureAnswer = completedCapture(`CAPTURE-${suffix()}`);
     const client = app.get(PayPalHttpClient);
     paypal = vi
       .spyOn(client, 'request')
-      .mockImplementation((method: string, path: string) => {
-        calls.push({ method, path });
-        if (path === '/v1/notifications/verify-webhook-signature') {
-          return Promise.resolve({
-            status: 200,
-            body: { verification_status: verification },
-          });
-        }
-        if (path.endsWith('/capture')) return Promise.resolve(captureAnswer);
-        if (method === 'POST' && path === '/v2/checkout/orders') {
-          const id = `PP-E2E-${suffix()}`;
-          return Promise.resolve({
-            status: 201,
-            body: {
-              id,
-              status: 'CREATED',
-              links: [
-                {
-                  rel: 'approve',
-                  href: `https://www.sandbox.paypal.com/checkoutnow?token=${id}`,
-                },
-              ],
-            },
-          });
-        }
-        return Promise.resolve({ status: 404, body: {} });
-      });
+      .mockImplementation(
+        (
+          method: string,
+          path: string,
+          options?: { headers?: Record<string, string> },
+        ) => {
+          calls.push({ method, path });
+          if (method === 'POST' && path === '/v2/checkout/orders') {
+            createHeaders.push(options?.headers);
+          }
+          const orderAnswer = method === 'GET' ? orderAnswers[path] : undefined;
+          if (orderAnswer) return Promise.resolve(orderAnswer);
+          if (path === '/v1/notifications/verify-webhook-signature') {
+            return Promise.resolve({
+              status: 200,
+              body: { verification_status: verification },
+            });
+          }
+          if (path.endsWith('/capture')) return Promise.resolve(captureAnswer);
+          if (method === 'POST' && path === '/v2/checkout/orders') {
+            const id = `PP-E2E-${suffix()}`;
+            return Promise.resolve({
+              status: 201,
+              body: {
+                id,
+                status: 'CREATED',
+                links: [
+                  {
+                    rel: 'approve',
+                    href: `https://www.sandbox.paypal.com/checkoutnow?token=${id}`,
+                  },
+                ],
+              },
+            });
+          }
+          return Promise.resolve({ status: 404, body: {} });
+        },
+      );
   });
 
   afterEach(() => {
@@ -500,5 +515,71 @@ describe('PayPal payments (e2e)', () => {
     expect(await webhookEvents(eventId)).toEqual([
       { provider: 'PAYPAL', status: 'IGNORED' },
     ]);
+  });
+
+  describe('retry', () => {
+    const declinedOrder = (id: string) => ({
+      status: 200,
+      body: {
+        id,
+        status: 'COMPLETED',
+        links: [],
+        purchase_units: [
+          { payments: { captures: [{ id: 'C1', status: 'DECLINED' }] } },
+        ],
+      },
+    });
+
+    const seedFailed = async (userId: string) => {
+      const oldId = `PP-OLD-${suffix()}`;
+      const seeded = await seedOrder(userId, oldId);
+      await execute(
+        `update payments set status = 'FAILED', failure_reason = 'Declined' where id = ?`,
+        [seeded.paymentId],
+      );
+      orderAnswers[`/v2/checkout/orders/${oldId}`] = declinedOrder(oldId);
+      return { ...seeded, oldId };
+    };
+
+    const start = (orderId: string) =>
+      request(app.getHttpServer()).post(`${ORDERS}/${orderId}/payments`);
+
+    it('retries a FAILED PayPal payment whose PayPal order closed with a new PayPal order on the same row (retry AC1)', async () => {
+      const user = await createUser();
+      const { orderId, paymentId, oldId } = await seedFailed(user.id);
+      signIn(user.clerkId);
+
+      const response = await start(orderId).expect(200);
+
+      const { checkoutId } = (response.body as { data: { checkoutId: string } })
+        .data;
+      expect(checkoutId).toMatch(/^PP-E2E-/);
+      expect(createHeaders).toEqual([
+        { 'PayPal-Request-Id': `create-${paymentId}-after-${oldId}` },
+      ]);
+      const row = await paymentRow(paymentId);
+      expect(row.status).toBe('FAILED');
+      expect(row.checkout_session_id).toBe(checkoutId);
+    });
+
+    it('a retry of a PayPal order with no deadline sets one 24 h ahead', async () => {
+      const user = await createUser();
+      const { orderId } = await seedFailed(user.id);
+      await execute('update orders set expires_at = null where id = ?', [
+        orderId,
+      ]);
+      signIn(user.clerkId);
+
+      await start(orderId).expect(200);
+
+      const [{ expires_at }] = await execute<{ expires_at: Date }[]>(
+        'select expires_at from orders where id = ?',
+        [orderId],
+      );
+      const expected = Date.now() + 24 * 60 * 60 * 1000;
+      expect(Math.abs(new Date(expires_at).getTime() - expected)).toBeLessThan(
+        60_000,
+      );
+    });
   });
 });
