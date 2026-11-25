@@ -129,7 +129,11 @@ export interface OrderSummary {
  * `GET /orders/{idOrOrderNumber}`: the `ResponseOrderDto` of `POST /orders`
  * plus the customer.
  */
-export type OrderDetail = PlacedOrder & { customer: OrderCustomer }
+export type OrderDetail = PlacedOrder & {
+  customer: OrderCustomer
+  allowedStatuses?: OrderStatus[]
+  allowedShippingStatuses?: ShippingStatus[]
+}
 export type OrderDetailItem = PlacedOrderItem
 export type OrderPayment = PlacedOrderPayment
 

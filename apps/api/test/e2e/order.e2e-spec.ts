@@ -1206,14 +1206,161 @@ describe('OrderController (e2e)', () => {
       expect((await orderRow(order.id)).status).toBe('COMPLETED');
     });
 
-    it('PATCH /orders/:id/shipping-status sets SHIPPING (AC3)', async () => {
+    const setRow = (orderId: string, status: string, shipping = 'PENDING') =>
+      execute(
+        'update orders set status = ?, shipping_status = ? where id = ?',
+        [status, shipping, orderId],
+      );
+
+    const refused = (response: { body: unknown }, field: string): void => {
+      expect((response.body as ErrorBody).errors[0]).toMatchObject({
+        errCode: 'statusNotAllowed',
+        field,
+      });
+    };
+
+    it('refuses SHIPPING on a PENDING order (AC1)', async () => {
       const { order } = await customerOrder();
+      signIn((await createAdmin()).clerkId);
+
+      refused(
+        await setShipping(order.id, 'SHIPPING').expect(409),
+        'shippingStatus',
+      );
+      expect(await orderRow(order.id)).toEqual({
+        status: 'PENDING',
+        shipping_status: 'PENDING',
+      });
+    });
+
+    it('refuses CANCELLED on a SHIPPING order (AC2)', async () => {
+      const { order, variantId } = await customerOrder(2);
+      await setRow(order.id, 'CONFIRMED', 'SHIPPING');
+      signIn((await createAdmin()).clerkId);
+
+      refused(await setStatus(order.id, 'CANCELLED').expect(409), 'status');
+      expect((await orderRow(order.id)).status).toBe('CONFIRMED');
+      expect((await variantRow(variantId)).reserved_quantity).toBe(2);
+    });
+
+    it('refuses COMPLETED before DELIVERED, then allows it (AC3)', async () => {
+      const { order } = await customerOrder();
+      await setRow(order.id, 'CONFIRMED', 'SHIPPING');
+      signIn((await createAdmin()).clerkId);
+
+      refused(await setStatus(order.id, 'COMPLETED').expect(409), 'status');
+      expect((await orderRow(order.id)).status).toBe('CONFIRMED');
+
+      await setRow(order.id, 'CONFIRMED', 'DELIVERED');
+      await setStatus(order.id, 'COMPLETED').expect(200);
+      expect((await orderRow(order.id)).status).toBe('COMPLETED');
+    });
+
+    it('refuses CONFIRMED on an unpaid card order (AC6)', async () => {
+      const { order } = await customerOrder();
+      await execute(
+        `update payments set method = 'CARD', checkout_session_id = ? where order_id = ? and type = 'CHARGE'`,
+        [`cs_${randomUUID()}`, order.id],
+      );
+      signIn((await createAdmin()).clerkId);
+
+      refused(await setStatus(order.id, 'CONFIRMED').expect(409), 'status');
+      expect((await orderRow(order.id)).status).toBe('PENDING');
+    });
+
+    it('refuses CANCELLED while the payment is held (AC7)', async () => {
+      const { order } = await customerOrder();
+      await execute(
+        `update payments set method = 'CARD', checkout_session_id = ?, transaction_id = ? where order_id = ? and type = 'CHARGE'`,
+        [`cs_${randomUUID()}`, `pi_${randomUUID()}`, order.id],
+      );
+      signIn((await createAdmin()).clerkId);
+
+      refused(await setStatus(order.id, 'CANCELLED').expect(409), 'status');
+      expect((await orderRow(order.id)).status).toBe('PENDING');
+      expect(await chargeStatus(order.id)).toBe('PENDING');
+    });
+
+    it('GET returns allowedStatuses to an admin only', async () => {
+      const { order, customerId } = await customerOrder();
+      await setRow(order.id, 'CONFIRMED', 'SHIPPING');
+      const read = () =>
+        request(app.getHttpServer()).get(
+          `${ORDERS}/${encodeURIComponent(order.id)}`,
+        );
+
+      signIn((await createAdmin()).clerkId);
+      const admin = (await read().expect(200)).body as {
+        data: Record<string, unknown>;
+      };
+      expect(admin.data.allowedStatuses).toEqual([]);
+      expect(admin.data.allowedShippingStatuses).toEqual([
+        'DELIVERED',
+        'RETURNED',
+      ]);
+
+      const [{ clerk_id: customerClerkId }] = await execute<
+        { clerk_id: string }[]
+      >('select clerk_id from users where id = ?', [customerId]);
+      signIn(customerClerkId);
+      const owner = (await read().expect(200)).body as {
+        data: Record<string, unknown>;
+      };
+      expect(owner.data).not.toHaveProperty('allowedStatuses');
+      expect(owner.data).not.toHaveProperty('allowedShippingStatuses');
+    });
+
+    it('DELIVERED sells the stock and marks the COD charge PAID (AC4)', async () => {
+      const { order, variantId } = await customerOrder(2);
+      await setRow(order.id, 'CONFIRMED', 'SHIPPING');
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setShipping(order.id, 'DELIVERED').expect(200);
+
+      expect(orderOf(response).shippingStatus).toBe('DELIVERED');
+      expect(await variantRow(variantId)).toEqual({
+        stock_quantity: 3,
+        reserved_quantity: 0,
+      });
+      expect(
+        await execute<{ quantity: number }[]>(
+          `select quantity from inventory_movements where order_id = ? and type = 'SALE'`,
+          [order.id],
+        ),
+      ).toEqual([{ quantity: 2 }]);
+      expect(await chargeStatus(order.id)).toBe('PAID');
+      expect(orderOf(response).paymentStatus).toBe('PAID');
+    });
+
+    it('RETURNED releases the stock and cancels the order (AC5)', async () => {
+      const { order, variantId } = await customerOrder(2);
+      await setRow(order.id, 'CONFIRMED', 'SHIPPING');
+      signIn((await createAdmin()).clerkId);
+
+      const response = await setShipping(order.id, 'RETURNED').expect(200);
+
+      expect(orderOf(response).status).toBe('CANCELLED');
+      expect(orderOf(response).shippingStatus).toBe('RETURNED');
+      expect(await orderRow(order.id)).toEqual({
+        status: 'CANCELLED',
+        shipping_status: 'RETURNED',
+      });
+      expect(await variantRow(variantId)).toEqual({
+        stock_quantity: 5,
+        reserved_quantity: 0,
+      });
+      expect(await releases(order.id)).toEqual([{ quantity: 2 }]);
+    });
+
+    it('PATCH /orders/:id/shipping-status sets SHIPPING on a CONFIRMED order', async () => {
+      const { order } = await customerOrder();
+      await setRow(order.id, 'CONFIRMED');
       signIn((await createAdmin()).clerkId);
 
       const response = await setShipping(order.id, 'SHIPPING').expect(200);
 
       expect(orderOf(response).shippingStatus).toBe('SHIPPING');
-      expect(orderOf(response).status).toBe('PENDING');
+      expect(orderOf(response).status).toBe('CONFIRMED');
       expect((await orderRow(order.id)).shipping_status).toBe('SHIPPING');
     });
 
@@ -1300,6 +1447,7 @@ describe('OrderController (e2e)', () => {
         'update shipping_methods set deleted_at = now() where id = ?',
         [methodId],
       );
+      await setRow(order.id, 'CONFIRMED');
       signIn((await createAdmin()).clerkId);
 
       await setShipping(order.id, 'SHIPPING').expect(200);

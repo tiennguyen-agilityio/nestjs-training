@@ -31,6 +31,8 @@ const baseOrder = {
   status: OrderStatus.PENDING,
   shippingStatus: ShippingStatus.PENDING,
   paymentStatus: OrderPaymentStatus.UNPAID,
+  allowedStatuses: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  allowedShippingStatuses: [] as ShippingStatus[],
 } as OrderDetail
 
 const conflict = {
@@ -79,6 +81,21 @@ const choose = async (
 
 const updateButton = () => screen.getByRole('button', { name: 'Update status' })
 
+const optionsOf = (group: string) =>
+  within(screen.getByRole('group', { name: group }))
+    .getAllByRole('option')
+    .map((option) => ({
+      label: option.textContent,
+      disabled: option.getAttribute('aria-disabled') === 'true',
+    }))
+
+const shippingOrder = {
+  status: OrderStatus.CONFIRMED,
+  shippingStatus: ShippingStatus.SHIPPING,
+  allowedStatuses: [],
+  allowedShippingStatuses: [ShippingStatus.DELIVERED, ShippingStatus.RETURNED],
+}
+
 describe('OrderStatusPanel', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({
@@ -92,47 +109,114 @@ describe('OrderStatusPanel', () => {
     jest.clearAllMocks()
   })
 
-  it('OrderStatusPanel offers only the next steps', async () => {
+  it('OrderStatusPanel lists every other status and disables the ones not allowed (AC8)', async () => {
+    const { user } = renderPanel(shippingOrder)
+
+    await openSelect(user)
+
+    expect(optionsOf('Order')).toEqual([
+      { label: 'Order → Pending', disabled: true },
+      { label: 'Order → Completed', disabled: true },
+      { label: 'Order → Cancelled', disabled: true },
+    ])
+    expect(optionsOf('Shipping')).toEqual([
+      { label: 'Shipping → Pending', disabled: true },
+      { label: 'Shipping → Delivered', disabled: false },
+      { label: 'Shipping → Returned', disabled: false },
+    ])
+  })
+
+  it('OrderStatusPanel enables the allowed order steps', async () => {
     const { user } = renderPanel()
 
     await openSelect(user)
 
-    expect(
-      screen.getAllByRole('option').map((option) => option.textContent),
-    ).toEqual(['Order → Confirmed', 'Order → Cancelled', 'Shipping → Shipping'])
-    expect(
-      within(screen.getByRole('group', { name: 'Order' }))
-        .getAllByRole('option')
-        .map((option) => option.textContent),
-    ).toEqual(['Order → Confirmed', 'Order → Cancelled'])
-    expect(
-      within(screen.getByRole('group', { name: 'Shipping' }))
-        .getAllByRole('option')
-        .map((option) => option.textContent),
-    ).toEqual(['Shipping → Shipping'])
+    expect(optionsOf('Order')).toEqual([
+      { label: 'Order → Confirmed', disabled: false },
+      { label: 'Order → Completed', disabled: true },
+      { label: 'Order → Cancelled', disabled: false },
+    ])
+    expect(optionsOf('Shipping').every((option) => option.disabled)).toBe(true)
   })
 
-  it('OrderStatusPanel offers shipping steps on a cancelled order', async () => {
-    const { user } = renderPanel({ status: OrderStatus.CANCELLED })
-
-    await openSelect(user)
-
-    expect(
-      screen.getAllByRole('option').map((option) => option.textContent),
-    ).toEqual(['Shipping → Shipping'])
-    expect(screen.queryByRole('group', { name: 'Order' })).toBeNull()
-  })
-
-  it('OrderStatusPanel shows no further changes on a closed order', () => {
+  it('OrderStatusPanel shows no further changes when nothing is allowed', () => {
     renderPanel({
-      status: OrderStatus.COMPLETED,
-      shippingStatus: ShippingStatus.DELIVERED,
+      status: OrderStatus.CANCELLED,
+      shippingStatus: ShippingStatus.SHIPPING,
+      allowedStatuses: [],
+      allowedShippingStatuses: [],
     })
 
     expect(
       screen.getByText('This order is closed. No further changes.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'Next status' })).toBeNull()
+  })
+
+  it('OrderStatusPanel keeps an open order with no allowed move out of the closed state', async () => {
+    const { user } = renderPanel({
+      allowedStatuses: [],
+      allowedShippingStatuses: [],
+    })
+
+    expect(
+      screen.queryByText('This order is closed. No further changes.'),
+    ).toBeNull()
+    await openSelect(user)
+    expect(
+      [...optionsOf('Order'), ...optionsOf('Shipping')].every(
+        (option) => option.disabled,
+      ),
+    ).toBe(true)
+  })
+
+  it('OrderStatusPanel says the payment is not refunded when a paid order is returned', async () => {
+    const { user } = renderPanel({
+      ...shippingOrder,
+      paymentStatus: OrderPaymentStatus.PAID,
+    })
+
+    await choose(user, 'Shipping → Returned')
+    await user.click(updateButton())
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).getByText(DIALOG_MESSAGES.ORDER.CANCEL.NOT_REFUNDED, {
+        exact: false,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('OrderStatusPanel asks before marking the order returned', async () => {
+    const { user } = renderPanel(shippingOrder)
+
+    await choose(user, 'Shipping → Returned')
+    await user.click(updateButton())
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).getByText(DIALOG_MESSAGES.ORDER.RETURN.TITLE),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        DIALOG_MESSAGES.ORDER.RETURN.DESCRIPTION('CH-1'),
+      ),
+    ).toBeInTheDocument()
+    expect(mockUpdateOrderShippingStatus).not.toHaveBeenCalled()
+
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.RETURN.ACTION,
+      }),
+    )
+
+    await waitFor(() =>
+      expect(mockUpdateOrderShippingStatus).toHaveBeenCalledWith(
+        'o-1',
+        ShippingStatus.RETURNED,
+        { getToken: expect.any(Function) },
+      ),
+    )
   })
 
   it('OrderStatusPanel disables Update status until a step is chosen', async () => {
@@ -165,7 +249,11 @@ describe('OrderStatusPanel', () => {
   })
 
   it('OrderStatusPanel moves the shipping to SHIPPING', async () => {
-    const { user } = renderPanel()
+    const { user } = renderPanel({
+      status: OrderStatus.CONFIRMED,
+      allowedStatuses: [OrderStatus.CANCELLED],
+      allowedShippingStatuses: [ShippingStatus.SHIPPING],
+    })
 
     await choose(user, 'Shipping → Shipping')
     await user.click(updateButton())

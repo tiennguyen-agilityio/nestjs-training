@@ -62,6 +62,11 @@ export const ERROR_MESSAGES = {
       `Cannot move order from ${from} to ${to}`,
     SHIPPING_STATUS_NOT_ALLOWED: (from: string, to: string) =>
       `Cannot move shipping from ${from} to ${to}`,
+    NOT_CONFIRMABLE_UNPAID: 'Order cannot be confirmed: it is not paid',
+    NOT_COMPLETABLE_UNDELIVERED:
+      'Order cannot be completed: it is not delivered',
+    SHIPPING_NEEDS_CONFIRMED:
+      'Shipping cannot start: the order is not confirmed',
   },
   PAYMENT: {
     METHOD_NOT_ONLINE: 'This order is paid on delivery, not online',
@@ -193,6 +198,16 @@ export const ERROR_DESCRIPTIONS = {
     NOT_CANCELLABLE_PAYMENT_HELD:
       'The payment is being reviewed. Contact the shop to cancel the order.',
     STATUS_NOT_ALLOWED: 'Not allowed. Pick one of the next statuses.',
+    NOT_CANCELLABLE_SHIPPED:
+      'The order has left the shop and can no longer be cancelled.',
+    PAYMENT_HELD_ADMIN:
+      'The payment is being reviewed. Wait for it to settle before changing the order.',
+    NOT_CANCELLABLE_SHIPPED_SHOPPER:
+      'The order has shipped. Contact the shop to return it.',
+    NOT_CONFIRMABLE_UNPAID:
+      'An online order is confirmed by its payment. Wait for the payment.',
+    NOT_COMPLETABLE_UNDELIVERED: 'Set the shipping status to Delivered first.',
+    SHIPPING_NEEDS_CONFIRMED: 'Confirm the order first.',
   },
   PAYMENT: {
     METHOD_NOT_ONLINE: 'Only CARD and PAYPAL orders are paid online.',

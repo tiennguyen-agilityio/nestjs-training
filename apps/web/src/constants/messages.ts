@@ -227,6 +227,13 @@ export const DIALOG_MESSAGES = {
         `Order ${orderNumber} will be cancelled and its items go back into stock. This cannot be undone.`,
       NOT_REFUNDED: 'The payment is not refunded.',
     },
+    RETURN: {
+      TITLE: 'Mark this order as returned?',
+      ACTION: 'Mark as returned',
+      KEEP: 'Keep shipping',
+      DESCRIPTION: (orderNumber: string) =>
+        `Order ${orderNumber} will be cancelled and its items go back into stock. This cannot be undone.`,
+    },
     DELETE: {
       ACTION: 'Delete order',
       DESCRIPTION: (orderLabel: string) =>

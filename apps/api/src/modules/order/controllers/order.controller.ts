@@ -83,6 +83,20 @@ const ApiStatusChangeErrors = (
     }),
   );
 
+const ApiOrderRuleErrors = (
+  field: 'status' | 'shippingStatus',
+  refusals: [string, string][],
+): MethodDecorator =>
+  applyDecorators(
+    ...refusals.map(([message, description]) =>
+      ApiErrorResponse(HttpStatus.CONFLICT, message, {
+        errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
+        field,
+        description,
+      }),
+    ),
+  );
+
 const ApiAuthErrors = (): MethodDecorator =>
   applyDecorators(
     ApiErrorResponse(
@@ -181,7 +195,7 @@ export class OrderController {
   @ApiOperation({
     summary: "Cancel one of the signed-in user's PENDING orders",
     description:
-      "A UUID looks up by id, anything else by orderNumber. In one transaction the order becomes CANCELLED, each item's held stock is released (RELEASE) and its PENDING charge becomes FAILED; an open checkout session is expired through the outbox. Another user's order returns 404; a non-PENDING or paid order, or one whose payment the gateway holds for review, returns 409.",
+      "A UUID looks up by id, anything else by orderNumber. In one transaction the order becomes CANCELLED, each item's held stock is released (RELEASE) and its PENDING charge becomes FAILED; an open checkout session is expired through the outbox. Another user's order returns 404; a non-PENDING or paid order, one that has shipped, or one whose payment the gateway holds for review, returns 409.",
   })
   @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
   @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.ORDER.NOT_FOUND, {
@@ -207,6 +221,15 @@ export class OrderController {
       description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_PAYMENT_HELD,
     },
   )
+  @ApiErrorResponse(
+    HttpStatus.CONFLICT,
+    ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('shipped'),
+    {
+      errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
+      field: 'shippingStatus',
+      description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_SHIPPED_SHOPPER,
+    },
+  )
   cancel(
     @AuthUser() user: User,
     @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
@@ -219,13 +242,31 @@ export class OrderController {
   @ApiOperation({
     summary: "Change any order's status (admin)",
     description:
-      "Allowed: PENDING → CONFIRMED or CANCELLED; CONFIRMED → COMPLETED or CANCELLED. Any other move returns 409 and saves nothing. CANCELLED does the shopper cancel's steps in one transaction: each item's held stock is released (RELEASE), PENDING charges become FAILED and an open checkout session is expired through the outbox; a PAID charge stays PAID (no refund). A UUID looks up by id, anything else by orderNumber.",
+      "Allowed: PENDING → CONFIRMED or CANCELLED; CONFIRMED → COMPLETED or CANCELLED. CONFIRMED needs a cash on delivery order or a PAID charge; CANCELLED needs shipping PENDING and no charge held for review; COMPLETED needs shipping DELIVERED. Any other move returns 409 and saves nothing. CANCELLED does the shopper cancel's steps in one transaction: each item's held stock is released (RELEASE), PENDING charges become FAILED and an open checkout session is expired through the outbox; a PAID charge stays PAID (no refund). A UUID looks up by id, anything else by orderNumber.",
   })
   @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
   @ApiStatusChangeErrors(
     'status',
     ERROR_MESSAGES.ORDER.STATUS_NOT_ALLOWED('PENDING', 'COMPLETED'),
   )
+  @ApiOrderRuleErrors('status', [
+    [
+      ERROR_MESSAGES.ORDER.NOT_CONFIRMABLE_UNPAID,
+      ERROR_DESCRIPTIONS.ORDER.NOT_CONFIRMABLE_UNPAID,
+    ],
+    [
+      ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('shipped'),
+      ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_SHIPPED,
+    ],
+    [
+      ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('under payment review'),
+      ERROR_DESCRIPTIONS.ORDER.PAYMENT_HELD_ADMIN,
+    ],
+    [
+      ERROR_MESSAGES.ORDER.NOT_COMPLETABLE_UNDELIVERED,
+      ERROR_DESCRIPTIONS.ORDER.NOT_COMPLETABLE_UNDELIVERED,
+    ],
+  ])
   updateStatus(
     @AuthUser() user: User,
     @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
@@ -240,13 +281,23 @@ export class OrderController {
   @ApiOperation({
     summary: "Change any order's shipping status (admin)",
     description:
-      'Allowed: PENDING → SHIPPING; SHIPPING → DELIVERED or RETURNED. Any other move returns 409 and saves nothing. No stock or payment change. A UUID looks up by id, anything else by orderNumber.',
+      'Allowed: PENDING → SHIPPING; SHIPPING → DELIVERED or RETURNED, only while the order is CONFIRMED; RETURNED also needs no charge held for review. Any other move returns 409 and saves nothing. DELIVERED records a SALE per item (stock and held stock both drop) and marks a cash on delivery charge PAID. RETURNED runs the cancel steps and makes the order CANCELLED; a PAID charge stays PAID. A UUID looks up by id, anything else by orderNumber.',
   })
   @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
   @ApiStatusChangeErrors(
     'shippingStatus',
     ERROR_MESSAGES.ORDER.SHIPPING_STATUS_NOT_ALLOWED('PENDING', 'DELIVERED'),
   )
+  @ApiOrderRuleErrors('shippingStatus', [
+    [
+      ERROR_MESSAGES.ORDER.SHIPPING_NEEDS_CONFIRMED,
+      ERROR_DESCRIPTIONS.ORDER.SHIPPING_NEEDS_CONFIRMED,
+    ],
+    [
+      ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('under payment review'),
+      ERROR_DESCRIPTIONS.ORDER.PAYMENT_HELD_ADMIN,
+    ],
+  ])
   updateShippingStatus(
     @AuthUser() user: User,
     @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,

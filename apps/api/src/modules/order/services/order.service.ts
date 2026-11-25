@@ -33,8 +33,13 @@ import { pricingOf } from '../../cart/utils/cart-pricing.util.js';
 import { orderTotalsOf } from '../utils/order-pricing.util.js';
 import { generateOrderNumber } from '../utils/order-number.util.js';
 import {
-  canMoveOrderStatus,
-  canMoveShippingStatus,
+  allowedShippingStatusesOf,
+  allowedStatusesOf,
+  orderMoveBlockOf,
+  shippingMoveBlockOf,
+  type OrderMoveBlock,
+  type ShippingMoveBlock,
+  type StatusFacts,
 } from '../utils/order-status.util.js';
 import type { ActorId } from '../../../common/utils/audit.util.js';
 import {
@@ -67,6 +72,19 @@ const primaryImageOf = (variant: ProductVariant): string | undefined =>
   variant.product.images
     .getItems()
     .find((image) => image.isPrimary && !image.deletedAt)?.url;
+
+const statusFactsOf = (order: Order): StatusFacts => ({
+  status: order.status,
+  shippingStatus: order.shippingStatus,
+  charges: order.payments
+    .getItems()
+    .filter((payment) => (payment.type as PaymentType) === PaymentType.CHARGE)
+    .map((payment) => ({
+      method: payment.method,
+      status: payment.status,
+      transactionId: payment.transactionId,
+    })),
+});
 
 @Injectable()
 export class OrderService {
@@ -131,7 +149,11 @@ export class OrderService {
     );
     if (!order) throw this.orderNotFound();
 
-    return ResponseOrderDetailDto.fromEntity(order);
+    const facts = statusFactsOf(order);
+    return ResponseOrderDetailDto.fromEntity(order, {
+      statuses: allowedStatusesOf(facts),
+      shippingStatuses: allowedShippingStatusesOf(facts),
+    });
   }
 
   /**
@@ -169,12 +191,8 @@ export class OrderService {
       async (enqueueCheckoutExpire) => {
         const order = await this.lockForStatusChange(idOrOrderNumber);
         const from = order.status as OrderStatus;
-        if (!canMoveOrderStatus(from, status)) {
-          throw this.statusNotAllowed(
-            'status',
-            ERROR_MESSAGES.ORDER.STATUS_NOT_ALLOWED(from, status),
-          );
-        }
+        const block = orderMoveBlockOf(statusFactsOf(order), status);
+        if (block) throw this.orderMoveRefused(block, from, status);
 
         if (status === OrderStatus.CANCELLED) {
           await this.cancelLocked(order, actorId, enqueueCheckoutExpire);
@@ -194,23 +212,25 @@ export class OrderService {
     shippingStatus: ShippingStatus,
     actorId: ActorId,
   ): Promise<ResponseOrderDto> {
-    return this.orderRepository.transactionalWithOutbox(async () => {
-      const order = await this.lockForStatusChange(idOrOrderNumber);
-      const from = order.shippingStatus as ShippingStatus;
-      if (!canMoveShippingStatus(from, shippingStatus)) {
-        throw this.statusNotAllowed(
-          'shippingStatus',
-          ERROR_MESSAGES.ORDER.SHIPPING_STATUS_NOT_ALLOWED(
-            from,
-            shippingStatus,
-          ),
-        );
-      }
-      order.shippingStatus = shippingStatus;
-      await this.orderRepository.save(order, actorId);
+    return this.orderRepository.transactionalWithOutbox(
+      async (enqueueCheckoutExpire) => {
+        const order = await this.lockForStatusChange(idOrOrderNumber);
+        const from = order.shippingStatus as ShippingStatus;
+        const block = shippingMoveBlockOf(statusFactsOf(order), shippingStatus);
+        if (block) throw this.shippingMoveRefused(block, from, shippingStatus);
+        order.shippingStatus = shippingStatus;
 
-      return ResponseOrderDto.fromEntity(order);
-    });
+        if (shippingStatus === ShippingStatus.RETURNED) {
+          await this.cancelLocked(order, actorId, enqueueCheckoutExpire);
+        } else if (shippingStatus === ShippingStatus.DELIVERED) {
+          await this.deliverLocked(order, actorId);
+        } else {
+          await this.orderRepository.save(order, actorId);
+        }
+
+        return ResponseOrderDto.fromEntity(order);
+      },
+    );
   }
 
   place(userId: string, input: PlaceOrderInput): Promise<ResponseOrderDto> {
@@ -305,6 +325,13 @@ export class OrderService {
         ),
         description: ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE,
       });
+    }
+    if ((order.shippingStatus as ShippingStatus) !== ShippingStatus.PENDING) {
+      throw this.statusNotAllowed(
+        'shippingStatus',
+        ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('shipped'),
+        ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_SHIPPED_SHOPPER,
+      );
     }
     const charges = order.payments
       .getItems()
@@ -401,16 +428,100 @@ export class OrderService {
     }
   }
 
+  private async deliverLocked(order: Order, actorId: ActorId): Promise<void> {
+    const items = [...order.items.getItems()].sort((a, b) =>
+      a.productVariant.id.localeCompare(b.productVariant.id),
+    );
+    for (const item of items) {
+      const sold = await this.productVariantService.sell(
+        item.productVariant.id,
+        item.quantity,
+        actorId,
+      );
+      if (!sold) {
+        throw new Error(
+          `Order ${order.id} holds no reservation of ${item.quantity} for variant ${item.productVariant.id}`,
+        );
+      }
+    }
+
+    for (const payment of order.payments.getItems()) {
+      if (
+        (payment.type as PaymentType) === PaymentType.CHARGE &&
+        payment.method === PaymentMethod.COD &&
+        (payment.status as PaymentStatus) === PaymentStatus.PENDING
+      ) {
+        payment.status = PaymentStatus.PAID;
+        payment.completedAt = new Date();
+      }
+    }
+    await this.orderRepository.saveDelivered(order, actorId);
+  }
+
   private statusNotAllowed(
     field: 'status' | 'shippingStatus',
     message: string,
+    description: string = ERROR_DESCRIPTIONS.ORDER.STATUS_NOT_ALLOWED,
   ): InvalidStateException {
     return new InvalidStateException({
       errCode: ERROR_CODES.ORDER.STATUS_NOT_ALLOWED,
       field,
       message,
-      description: ERROR_DESCRIPTIONS.ORDER.STATUS_NOT_ALLOWED,
+      description,
     });
+  }
+
+  private orderMoveRefused(
+    block: OrderMoveBlock,
+    from: OrderStatus,
+    to: OrderStatus,
+  ): InvalidStateException {
+    const { ORDER } = ERROR_MESSAGES;
+    const refusals: Record<OrderMoveBlock, [string, string]> = {
+      notAMove: [
+        ORDER.STATUS_NOT_ALLOWED(from, to),
+        ERROR_DESCRIPTIONS.ORDER.STATUS_NOT_ALLOWED,
+      ],
+      unpaidOnline: [
+        ORDER.NOT_CONFIRMABLE_UNPAID,
+        ERROR_DESCRIPTIONS.ORDER.NOT_CONFIRMABLE_UNPAID,
+      ],
+      shipped: [
+        ORDER.NOT_CANCELLABLE('shipped'),
+        ERROR_DESCRIPTIONS.ORDER.NOT_CANCELLABLE_SHIPPED,
+      ],
+      paymentHeld: [
+        ORDER.NOT_CANCELLABLE('under payment review'),
+        ERROR_DESCRIPTIONS.ORDER.PAYMENT_HELD_ADMIN,
+      ],
+      notDelivered: [
+        ORDER.NOT_COMPLETABLE_UNDELIVERED,
+        ERROR_DESCRIPTIONS.ORDER.NOT_COMPLETABLE_UNDELIVERED,
+      ],
+    };
+    return this.statusNotAllowed('status', ...refusals[block]);
+  }
+
+  private shippingMoveRefused(
+    block: ShippingMoveBlock,
+    from: ShippingStatus,
+    to: ShippingStatus,
+  ): InvalidStateException {
+    const refusals: Record<ShippingMoveBlock, [string, string]> = {
+      notAMove: [
+        ERROR_MESSAGES.ORDER.SHIPPING_STATUS_NOT_ALLOWED(from, to),
+        ERROR_DESCRIPTIONS.ORDER.STATUS_NOT_ALLOWED,
+      ],
+      notConfirmed: [
+        ERROR_MESSAGES.ORDER.SHIPPING_NEEDS_CONFIRMED,
+        ERROR_DESCRIPTIONS.ORDER.SHIPPING_NEEDS_CONFIRMED,
+      ],
+      paymentHeld: [
+        ERROR_MESSAGES.ORDER.NOT_CANCELLABLE('under payment review'),
+        ERROR_DESCRIPTIONS.ORDER.PAYMENT_HELD_ADMIN,
+      ],
+    };
+    return this.statusNotAllowed('shippingStatus', ...refusals[block]);
   }
 
   private orderNotFound(): ItemNotFoundException {
