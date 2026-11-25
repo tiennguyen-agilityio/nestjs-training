@@ -19,6 +19,7 @@ import type { Payment } from '../../order/entities/payment.entity.js';
 import type { Order } from '../../order/entities/order.entity.js';
 import {
   DependencyUnavailableException,
+  InvalidRequestException,
   InvalidStateException,
   ItemNotFoundException,
   ValidationException,
@@ -34,13 +35,21 @@ const WEB_APP_URL = 'http://localhost:3101';
 describe('PaymentService', () => {
   let service: PaymentService;
   let paymentRepository: Record<
-    'findNewestChargeOf' | 'lockById' | 'save' | 'transactional',
+    | 'findNewestChargeOf'
+    | 'findByCheckoutSessionId'
+    | 'lockById'
+    | 'save'
+    | 'transactional',
     Mock
   >;
   let orderRepository: Record<'reload' | 'findById', Mock>;
   let gateways: Record<'for', Mock>;
   let gateway: Record<
-    'createCheckout' | 'findCheckout' | 'expireCheckout' | 'parseWebhook',
+    | 'createCheckout'
+    | 'findCheckout'
+    | 'expireCheckout'
+    | 'parseWebhook'
+    | 'capture',
     Mock
   >;
   let order: Order;
@@ -101,6 +110,7 @@ describe('PaymentService', () => {
     payment = buildPayment();
     paymentRepository = {
       findNewestChargeOf: vi.fn(),
+      findByCheckoutSessionId: vi.fn(),
       lockById: vi.fn(),
       save: vi.fn().mockResolvedValue(undefined),
       transactional: vi.fn((work: () => Promise<unknown>) => work()),
@@ -111,6 +121,7 @@ describe('PaymentService', () => {
       findCheckout: vi.fn(),
       expireCheckout: vi.fn().mockResolvedValue(undefined),
       parseWebhook: vi.fn(),
+      capture: vi.fn(),
     };
     gateways = { for: vi.fn().mockReturnValue(gateway) };
     const config = {
@@ -155,7 +166,7 @@ describe('PaymentService', () => {
       expect(gateway.createCheckout).not.toHaveBeenCalled();
     });
 
-    it('start rejects a PAYPAL payment with METHOD_UNAVAILABLE', async () => {
+    it('start rejects a method with no registered gateway with METHOD_UNAVAILABLE', async () => {
       withCharge(buildPayment({ method: PaymentMethod.PAYPAL }));
       gateways.for.mockReturnValue(null);
 
@@ -195,6 +206,7 @@ describe('PaymentService', () => {
 
       await expect(service.start(USER_ID, ORDER_ID)).resolves.toEqual({
         paymentId: PAYMENT_ID,
+        checkoutId: 'cs_test_1',
         checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_1',
         expiresAt: new Date('2026-11-25T09:00:00Z'),
       });
@@ -240,6 +252,7 @@ describe('PaymentService', () => {
       expect(paymentRepository.transactional).toHaveBeenCalledTimes(1);
       expect(result).toEqual({
         paymentId: PAYMENT_ID,
+        checkoutId: 'cs_test_1',
         checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_1',
         expiresAt: new Date('2026-11-25T08:59:59Z'),
       });
@@ -496,16 +509,480 @@ describe('PaymentService', () => {
     });
   });
 
+  describe('start (PayPal)', () => {
+    const PAYPAL_ORDER = '5O190127TN364715T';
+    const approveUrl = `https://www.sandbox.paypal.com/checkoutnow?token=${PAYPAL_ORDER}`;
+
+    it('start returns checkoutId and checkoutUrl for a PAYPAL order', async () => {
+      withCharge(buildPayment({ method: PaymentMethod.PAYPAL }));
+      gateway.createCheckout.mockResolvedValue(
+        session({ id: PAYPAL_ORDER, url: approveUrl }),
+      );
+
+      await expect(service.start(USER_ID, ORDER_ID)).resolves.toMatchObject({
+        paymentId: PAYMENT_ID,
+        checkoutId: PAYPAL_ORDER,
+        checkoutUrl: approveUrl,
+      });
+      expect(gateways.for).toHaveBeenCalledWith(PaymentMethod.PAYPAL);
+    });
+
+    it("start reuses an open PayPal order with the order's expiry", async () => {
+      withCharge(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          checkoutSessionId: PAYPAL_ORDER,
+        }),
+      );
+      // The locked payment holds only a reference to its order.
+      paymentRepository.lockById.mockResolvedValue(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          checkoutSessionId: PAYPAL_ORDER,
+          order: { id: ORDER_ID } as Order,
+        }),
+      );
+      // PayPal orders carry no expiry: the gateway reports "now".
+      gateway.findCheckout.mockResolvedValue(
+        session({ id: PAYPAL_ORDER, url: approveUrl, expiresAt: NOW }),
+      );
+
+      await expect(service.start(USER_ID, ORDER_ID)).resolves.toMatchObject({
+        expiresAt: order.expiresAt,
+      });
+    });
+
+    it('start reuses an open PayPal order', async () => {
+      withCharge(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          status: PaymentStatus.FAILED,
+          checkoutSessionId: PAYPAL_ORDER,
+        }),
+      );
+      gateway.findCheckout.mockResolvedValue(
+        session({ id: PAYPAL_ORDER, url: approveUrl }),
+      );
+
+      await expect(service.start(USER_ID, ORDER_ID)).resolves.toMatchObject({
+        checkoutId: PAYPAL_ORDER,
+      });
+      expect(gateway.createCheckout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('capture', () => {
+    const PAYPAL_ORDER = '5O190127TN364715T';
+    const PAID_AT = new Date('2026-11-24T10:05:00Z');
+
+    const paypalCharge = (overrides: Partial<Payment> = {}): Payment =>
+      buildPayment({
+        method: PaymentMethod.PAYPAL,
+        checkoutSessionId: PAYPAL_ORDER,
+        ...overrides,
+      });
+
+    const withPayPalCharge = (charge: Payment): void => {
+      paymentRepository.findNewestChargeOf.mockResolvedValue(charge);
+      paymentRepository.lockById.mockResolvedValue(charge);
+      orderRepository.findById.mockResolvedValue(charge.order);
+    };
+
+    it("capture throws ItemNotFoundException for another user's order", async () => {
+      paymentRepository.findNewestChargeOf.mockResolvedValue(null);
+
+      await expect(service.capture(USER_ID, ORDER_ID)).rejects.toBeInstanceOf(
+        ItemNotFoundException,
+      );
+      expect(gateway.capture).not.toHaveBeenCalled();
+    });
+
+    it('capture rejects COD with METHOD_NOT_ONLINE', async () => {
+      withPayPalCharge(paypalCharge({ method: PaymentMethod.COD }));
+
+      expect(await errCodeOf(service.capture(USER_ID, ORDER_ID))).toBe(
+        ERROR_CODES.PAYMENT.METHOD_NOT_ONLINE,
+      );
+    });
+
+    it('capture rejects CARD with CAPTURE_UNSUPPORTED', async () => {
+      withPayPalCharge(paypalCharge({ method: PaymentMethod.CARD }));
+      gateway.capture.mockResolvedValue(null);
+
+      expect(await errCodeOf(service.capture(USER_ID, ORDER_ID))).toBe(
+        ERROR_CODES.PAYMENT.CAPTURE_UNSUPPORTED,
+      );
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('capture answers PAID without calling PayPal when already PAID', async () => {
+      withPayPalCharge(paypalCharge({ status: PaymentStatus.PAID }));
+
+      await expect(service.capture(USER_ID, ORDER_ID)).resolves.toEqual({
+        paymentId: PAYMENT_ID,
+        paymentStatus: 'PAID',
+        failureReason: null,
+        retryable: false,
+      });
+      expect(gateway.capture).not.toHaveBeenCalled();
+    });
+
+    it('capture rejects an order that is not PENDING with NOT_PAYABLE', async () => {
+      order = buildOrder({ status: OrderStatus.CANCELLED });
+      withPayPalCharge(paypalCharge());
+
+      expect(await errCodeOf(service.capture(USER_ID, ORDER_ID))).toBe(
+        ERROR_CODES.PAYMENT.NOT_PAYABLE,
+      );
+      expect(gateway.capture).not.toHaveBeenCalled();
+    });
+
+    it('capture rejects an order past expires_at with ORDER_EXPIRED, PayPal not called', async () => {
+      order = buildOrder({ expiresAt: new Date('2026-11-24T09:59:00Z') });
+      withPayPalCharge(paypalCharge());
+
+      expect(await errCodeOf(service.capture(USER_ID, ORDER_ID))).toBe(
+        ERROR_CODES.PAYMENT.ORDER_EXPIRED,
+      );
+      expect(gateway.capture).not.toHaveBeenCalled();
+    });
+
+    it('capture rejects a payment without a PayPal order, or one not approved yet, with NOT_PAYABLE', async () => {
+      withPayPalCharge(paypalCharge({ checkoutSessionId: null }));
+      expect(await errCodeOf(service.capture(USER_ID, ORDER_ID))).toBe(
+        ERROR_CODES.PAYMENT.NOT_PAYABLE,
+      );
+      expect(gateway.capture).not.toHaveBeenCalled();
+
+      withPayPalCharge(paypalCharge());
+      gateway.capture.mockResolvedValue({ kind: 'not_approved' });
+      expect(await errCodeOf(service.capture(USER_ID, ORDER_ID))).toBe(
+        ERROR_CODES.PAYMENT.NOT_PAYABLE,
+      );
+    });
+
+    it('capture applies a COMPLETED capture as PAID', async () => {
+      payment = paypalCharge();
+      withPayPalCharge(payment);
+      const calls: string[] = [];
+      gateway.capture.mockImplementation(() => {
+        calls.push('capture');
+        return Promise.resolve({
+          kind: 'succeeded',
+          transactionId: 'CAPTURE-1',
+          paidAt: PAID_AT,
+        });
+      });
+      paymentRepository.transactional.mockImplementation(
+        (work: () => Promise<unknown>) => {
+          calls.push('transaction');
+          return work();
+        },
+      );
+
+      await expect(service.capture(USER_ID, ORDER_ID)).resolves.toEqual({
+        paymentId: PAYMENT_ID,
+        paymentStatus: 'PAID',
+        failureReason: null,
+        retryable: false,
+      });
+      expect(gateway.capture).toHaveBeenCalledWith(PAYPAL_ORDER);
+      expect(calls).toEqual(['capture', 'transaction']);
+      expect(payment.status).toBe(PaymentStatus.PAID);
+      expect(payment.transactionId).toBe('CAPTURE-1');
+      expect(payment.completedAt).toEqual(PAID_AT);
+      expect(order.status).toBe(OrderStatus.CONFIRMED);
+      expect(order.expiresAt).toBeNull();
+      expect(paymentRepository.save).toHaveBeenCalledWith(payment, USER_ID);
+    });
+
+    it('capture maps INSTRUMENT_DECLINED to a retryable failure', async () => {
+      payment = paypalCharge();
+      withPayPalCharge(payment);
+      gateway.capture.mockResolvedValue({
+        kind: 'failed',
+        retryable: true,
+        reason: 'The instrument presented was declined.',
+      });
+
+      await expect(service.capture(USER_ID, ORDER_ID)).resolves.toEqual({
+        paymentId: PAYMENT_ID,
+        paymentStatus: 'FAILED',
+        failureReason: 'The instrument presented was declined.',
+        retryable: true,
+      });
+      expect(payment.status).toBe(PaymentStatus.FAILED);
+      expect(order.status).toBe(OrderStatus.PENDING);
+    });
+
+    it('capture maps a DECLINED capture to a final failure', async () => {
+      withPayPalCharge(paypalCharge());
+      gateway.capture.mockResolvedValue({
+        kind: 'failed',
+        retryable: false,
+        reason: 'PayPal denied the payment',
+      });
+
+      await expect(service.capture(USER_ID, ORDER_ID)).resolves.toMatchObject({
+        paymentStatus: 'FAILED',
+        retryable: false,
+      });
+    });
+
+    it('capture answers PENDING on a pending capture and resets a FAILED payment', async () => {
+      payment = paypalCharge({
+        status: PaymentStatus.FAILED,
+        failureReason: 'Declined',
+      });
+      withPayPalCharge(payment);
+      gateway.capture.mockResolvedValue({
+        kind: 'pending',
+        transactionId: 'CAPTURE-1',
+      });
+
+      await expect(service.capture(USER_ID, ORDER_ID)).resolves.toEqual({
+        paymentId: PAYMENT_ID,
+        paymentStatus: 'PENDING',
+        failureReason: null,
+        retryable: false,
+      });
+      expect(payment.status).toBe(PaymentStatus.PENDING);
+      expect(payment.transactionId).toBe('CAPTURE-1');
+    });
+
+    it('capture reads back ORDER_ALREADY_CAPTURED as the existing capture', async () => {
+      payment = paypalCharge();
+      withPayPalCharge(payment);
+      // The webhook recorded the capture while PayPal answered this call.
+      gateway.capture.mockImplementation(() => {
+        payment.status = PaymentStatus.PAID;
+        return Promise.resolve({
+          kind: 'succeeded',
+          transactionId: 'CAPTURE-1',
+          paidAt: PAID_AT,
+        });
+      });
+
+      await expect(service.capture(USER_ID, ORDER_ID)).resolves.toMatchObject({
+        paymentStatus: 'PAID',
+      });
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handle', () => {
+    const PAYPAL_ORDER = '5O190127TN364715T';
+
+    const withApproved = (found: Payment | null): void => {
+      paymentRepository.findByCheckoutSessionId.mockResolvedValue(found);
+      paymentRepository.lockById.mockResolvedValue(found);
+      orderRepository.findById.mockResolvedValue(found?.order ?? null);
+    };
+
+    const approved = {
+      kind: 'approved' as const,
+      checkoutSessionId: PAYPAL_ORDER,
+    };
+
+    it('handle approved captures by checkout id as a system write', async () => {
+      payment = buildPayment({
+        method: PaymentMethod.PAYPAL,
+        checkoutSessionId: PAYPAL_ORDER,
+      });
+      withApproved(payment);
+      gateway.capture.mockResolvedValue({
+        kind: 'succeeded',
+        transactionId: 'CAPTURE-1',
+        paidAt: new Date('2026-11-24T10:05:00Z'),
+      });
+
+      await expect(service.handle(approved)).resolves.toBe(true);
+
+      expect(paymentRepository.findByCheckoutSessionId).toHaveBeenCalledWith(
+        PAYPAL_ORDER,
+      );
+      expect(gateway.capture).toHaveBeenCalledWith(PAYPAL_ORDER);
+      expect(payment.status).toBe(PaymentStatus.PAID);
+      expect(paymentRepository.save).toHaveBeenCalledWith(payment, null);
+    });
+
+    it('handle approved skips a PAID payment, a non-PENDING or expired order, and an unknown checkout id', async () => {
+      withApproved(null);
+      await expect(service.handle(approved)).resolves.toBe(false);
+
+      withApproved(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          status: PaymentStatus.PAID,
+          checkoutSessionId: PAYPAL_ORDER,
+        }),
+      );
+      await expect(service.handle(approved)).resolves.toBe(false);
+
+      order = buildOrder({ status: OrderStatus.CANCELLED });
+      withApproved(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          checkoutSessionId: PAYPAL_ORDER,
+        }),
+      );
+      await expect(service.handle(approved)).resolves.toBe(false);
+
+      order = buildOrder({ expiresAt: new Date('2026-11-24T09:00:00Z') });
+      withApproved(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          checkoutSessionId: PAYPAL_ORDER,
+        }),
+      );
+      await expect(service.handle(approved)).resolves.toBe(false);
+
+      expect(gateway.capture).not.toHaveBeenCalled();
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it("handle approved ignores a gateway refusal: PayPal's COMPLETED event still records a capture", async () => {
+      withApproved(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          checkoutSessionId: PAYPAL_ORDER,
+        }),
+      );
+      gateway.capture.mockRejectedValue(
+        new InvalidRequestException({
+          errCode: ERROR_CODES.PAYMENT.GATEWAY_REJECTED,
+          field: 'payment',
+          message: 'refused',
+          description: 'refused',
+        }),
+      );
+
+      await expect(service.handle(approved)).resolves.toBe(false);
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('handle approved lets an outage propagate, so PayPal sends the event again', async () => {
+      withApproved(
+        buildPayment({
+          method: PaymentMethod.PAYPAL,
+          checkoutSessionId: PAYPAL_ORDER,
+        }),
+      );
+      gateway.capture.mockRejectedValue(
+        new DependencyUnavailableException({
+          errCode: ERROR_CODES.PAYMENT.GATEWAY_UNAVAILABLE,
+          field: '',
+          message: 'down',
+          description: 'down',
+        }),
+      );
+
+      await expect(service.handle(approved)).rejects.toBeInstanceOf(
+        DependencyUnavailableException,
+      );
+    });
+
+    it('handle passes other events to apply', async () => {
+      const apply = vi.spyOn(service, 'apply').mockResolvedValue(true);
+      const event: GatewayEvent = {
+        kind: 'failed',
+        paymentId: PAYMENT_ID,
+        reason: 'x',
+      };
+
+      await expect(service.handle(event)).resolves.toBe(true);
+      expect(apply).toHaveBeenCalledWith(event);
+    });
+  });
+
+  describe('apply pending', () => {
+    const pending: GatewayEvent = {
+      kind: 'pending',
+      paymentId: PAYMENT_ID,
+      transactionId: 'CAPTURE-1',
+    };
+
+    const lockReturns = (locked: Payment): void => {
+      paymentRepository.lockById.mockResolvedValue(locked);
+      orderRepository.findById.mockResolvedValue(locked.order);
+    };
+
+    it('apply pending moves FAILED to PENDING and clears the reason', async () => {
+      payment = buildPayment({
+        status: PaymentStatus.FAILED,
+        failureReason: 'Declined',
+      });
+      lockReturns(payment);
+
+      await expect(service.apply(pending)).resolves.toBe(true);
+
+      expect(payment.status).toBe(PaymentStatus.PENDING);
+      expect(payment.failureReason).toBeNull();
+      expect(payment.transactionId).toBe('CAPTURE-1');
+      expect(paymentRepository.save).toHaveBeenCalledWith(payment, null);
+      expect(order.status).toBe(OrderStatus.PENDING);
+      expect(order.expiresAt).toBeNull();
+    });
+
+    it('apply pending keeps the FAILED charge of a cancelled order and logs it', async () => {
+      order = buildOrder({ status: OrderStatus.CANCELLED });
+      payment = buildPayment({
+        status: PaymentStatus.FAILED,
+        failureReason: 'Cancelled',
+      });
+      lockReturns(payment);
+      const warn = vi
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      await expect(service.apply(pending)).resolves.toBe(false);
+
+      expect(payment.status).toBe(PaymentStatus.FAILED);
+      expect(payment.transactionId).not.toBe('CAPTURE-1');
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('apply pending records the held capture on a PENDING payment', async () => {
+      lockReturns(payment);
+
+      await expect(service.apply(pending)).resolves.toBe(true);
+
+      expect(payment.transactionId).toBe('CAPTURE-1');
+      expect(paymentRepository.save).toHaveBeenCalledWith(payment, null);
+    });
+
+    it('apply pending leaves a PENDING payment holding that capture unchanged', async () => {
+      payment = buildPayment({ transactionId: 'CAPTURE-1' });
+      lockReturns(payment);
+
+      await expect(service.apply(pending)).resolves.toBe(false);
+
+      expect(payment.status).toBe(PaymentStatus.PENDING);
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('apply pending never touches PAID', async () => {
+      payment = buildPayment({ status: PaymentStatus.PAID });
+      lockReturns(payment);
+
+      await expect(service.apply(pending)).resolves.toBe(false);
+
+      expect(payment.status).toBe(PaymentStatus.PAID);
+      expect(paymentRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
   describe('verify', () => {
-    it('verify uses the gateway registered for the method', () => {
+    it('verify resolves the webhook of the gateway registered for the method', async () => {
       const rawBody = Buffer.from('{}');
       const headers = { 'stripe-signature': 't=1,v1=abc' };
       const verified = { id: 'evt_1', type: 'customer.created', event: null };
-      gateway.parseWebhook.mockReturnValue(verified);
+      gateway.parseWebhook.mockResolvedValue(verified);
 
-      expect(service.verify(PaymentMethod.CARD, rawBody, headers)).toBe(
-        verified,
-      );
+      await expect(
+        service.verify(PaymentMethod.CARD, rawBody, headers),
+      ).resolves.toBe(verified);
       expect(gateways.for).toHaveBeenCalledWith(PaymentMethod.CARD);
       expect(gateway.parseWebhook).toHaveBeenCalledWith(rawBody, headers);
     });

@@ -17,7 +17,38 @@ const base: Record<string, unknown> = {
   STRIPE_SECRET_KEY: 'sk_test_unit',
   STRIPE_WEBHOOK_SECRET: 'whsec_test_unit',
   WEB_APP_URL: 'http://localhost:3101',
+  PAYPAL_CLIENT_ID: 'paypal-client',
+  PAYPAL_CLIENT_SECRET: 'paypal-secret',
+  PAYPAL_WEBHOOK_ID: 'WH-ID',
+  PAYPAL_API_URL: 'https://api-m.sandbox.paypal.com',
 };
+
+describe('validate (PayPal)', () => {
+  it.each([
+    'PAYPAL_CLIENT_ID',
+    'PAYPAL_CLIENT_SECRET',
+    'PAYPAL_WEBHOOK_ID',
+    'PAYPAL_API_URL',
+  ])('env validation requires %s', (name) => {
+    const env = { ...base };
+    delete env[name];
+
+    expect(() => validate(env)).toThrow(new RegExp(name));
+  });
+
+  it('env validation rejects a PAYPAL_API_URL that is not a URL', () => {
+    expect(() => validate({ ...base, PAYPAL_API_URL: 'not a url' })).toThrow(
+      /PAYPAL_API_URL/,
+    );
+  });
+
+  it('env validation keeps the PayPal values', () => {
+    const env = validate(base);
+
+    expect(env.PAYPAL_CLIENT_ID).toBe('paypal-client');
+    expect(env.PAYPAL_API_URL).toBe('https://api-m.sandbox.paypal.com');
+  });
+});
 
 describe('validate (Stripe)', () => {
   it.each(['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'WEB_APP_URL'])(

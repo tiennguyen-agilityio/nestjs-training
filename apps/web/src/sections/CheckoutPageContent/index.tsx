@@ -3,6 +3,7 @@
 // import { Lock } from 'lucide-react'
 import { useAuth as useClerkAuth } from '@clerk/nextjs'
 import { useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   useEffect,
@@ -16,6 +17,7 @@ import { toast } from 'sonner'
 
 import { CheckoutOrderSummary } from '@/components/CheckoutOrderSummary'
 import { CheckoutPaymentMethod } from '@/components/CheckoutPaymentMethod'
+import PayPalCheckoutButton from '@/components/PayPalCheckoutButton'
 import CheckoutShippingMethods from '@/components/CheckoutShippingMethods'
 import { Input } from '@/components/Input'
 import { Button } from '@/components/ui/button'
@@ -26,10 +28,11 @@ import {
   SUCCESS_MESSAGES,
 } from '@/constants/messages'
 import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
-import { orderSuccessPath, ROUTES } from '@/constants/routes'
+import { orderSuccessPath, profileOrderPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart } from '@/hooks/useCart'
 import { useCreateOrder } from '@/hooks/useOrder'
+import { usePayPalCheckout } from '@/hooks/usePayPalCheckout'
 import { useStartPayment } from '@/hooks/usePayment'
 import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
 import { parseCheckoutValues } from '@/schemas/checkout'
@@ -41,6 +44,7 @@ import {
 import { useCartStore } from '@/store/useCartStore'
 import type { ApiErrorResponse, ErrorDetail } from '@/types/api'
 import type { CartItem, CartTotals } from '@/types/cart'
+import type { PlacedOrder } from '@/types/order'
 import {
   PAYMENT_METHOD,
   type CheckoutFormValues,
@@ -55,6 +59,8 @@ import {
   omitSubmitErrorsForRemovedLine,
   paymentErrorMessage,
   PLACE_ORDER_ERR_CODES,
+  placedOrderToCartItems,
+  placedOrderTotals,
   tagItemErrorsWithLineRefs,
 } from '@/utils/order'
 import { ServiceError } from '@/utils/query'
@@ -399,8 +405,11 @@ const CheckoutPageContent = () => {
     }
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  /**
+   * Validates the form and places the order; `null` when the form is invalid
+   * or the API refused it (its errors are already shown).
+   */
+  const placeOrder = async (): Promise<PlacedOrder | null> => {
     setSubmitErrors(null)
 
     const result = parseCheckoutValues(values)
@@ -415,11 +424,11 @@ const CheckoutPageContent = () => {
         nextErrors[fieldName] ??= issue.message
       })
       setFieldErrors(nextErrors)
-      return
+      return null
     }
 
     if (isSubmitting || !selectedShippingMethod) {
-      return
+      return null
     }
 
     setFieldErrors({})
@@ -434,23 +443,9 @@ const CheckoutPageContent = () => {
         body: buildPlaceOrderPayload(result.data, selectedShippingMethod.id),
         getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
       })
-      setItemSnapshots(order)
-      if (result.data.paymentMethod === PAYMENT_METHOD.STRIPE) {
-        setHasPlacedOrder(true)
-        void queryClient.invalidateQueries({ queryKey: cartQueryKeys.root })
-        await payPlacedOrder(order.id)
-        return
-      }
-      toast.success(SUCCESS_MESSAGES.ORDER_PLACED, {
-        description: SUCCESS_MESSAGES.ORDER_TOTAL(
-          formatCurrency(order.totalAmount),
-        ),
-      })
-      // Keeps the empty-cart state from flashing while the route changes.
-      setHasPlacedOrder(true)
-      router.push(ROUTES.ORDER_SUCCESS)
       // The API emptied the server cart: read it again (header count → 0).
       void queryClient.invalidateQueries({ queryKey: cartQueryKeys.root })
+      return order
     } catch (error) {
       const errors = error instanceof ServiceError ? error.errors : []
       const errCodes = new Set(errors.map((detail) => detail.errCode))
@@ -503,8 +498,39 @@ const CheckoutPageContent = () => {
         void refetchShippingMethods()
       }
       setIsSubmitting(false)
+      return null
     }
   }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const order = await placeOrder()
+    if (!order) return
+    setItemSnapshots(order)
+    // Keeps the empty-cart state from flashing while the route changes.
+    setHasPlacedOrder(true)
+    if (values.paymentMethod === PAYMENT_METHOD.STRIPE) {
+      await payPlacedOrder(order.id)
+      return
+    }
+    toast.success(SUCCESS_MESSAGES.ORDER_PLACED, {
+      description: SUCCESS_MESSAGES.ORDER_TOTAL(
+        formatCurrency(order.totalAmount),
+      ),
+    })
+    router.push(ROUTES.ORDER_SUCCESS)
+  }
+
+  // PayPal places the order once, then keeps it on Checkout across cancels.
+  const paypal = usePayPalCheckout({
+    placeOrder: async () => {
+      const order = await placeOrder()
+      if (order) setIsSubmitting(false)
+      return order
+    },
+  })
+  const placedPayPalOrder = paypal.placedOrder
+  const isFormLocked = isSubmitting || Boolean(placedPayPalOrder)
 
   const submitLineRefs = useMemo(
     () => items.map((item) => ({ id: item.id, productId: item.productId })),
@@ -552,6 +578,27 @@ const CheckoutPageContent = () => {
   }
 
   // One banner for the whole reply; the cart-changed notice shows once.
+  const isPayPal = values.paymentMethod === PAYMENT_METHOD.PAYPAL
+  const paypalAction = !isPayPal ? undefined : placedPayPalOrder &&
+    !paypal.canRetry ? (
+    <Link
+      href={profileOrderPath(placedPayPalOrder.orderNumber)}
+      className="flex h-14 items-center justify-center rounded-full border border-outline-variant text-base font-medium text-on-surface"
+    >
+      View order details
+    </Link>
+  ) : (
+    <PayPalCheckoutButton
+      disabled={
+        !placedPayPalOrder && (isPlaceOrderDisabled || hasBlockingItemErrors)
+      }
+      createOrder={paypal.createPayPalOrder}
+      onApprove={paypal.onApprove}
+      onCancel={paypal.onCancel}
+      onError={paypal.onError}
+    />
+  )
+
   const submissionMessage =
     [
       ...new Set([
@@ -562,7 +609,7 @@ const CheckoutPageContent = () => {
     ].join(' ') || null
 
   // After a placed order the emptied cart shows the loader until the route changes.
-  if (isLoading || (hasPlacedOrder && !hasItems)) {
+  if (!placedPayPalOrder && (isLoading || (hasPlacedOrder && !hasItems))) {
     return (
       <div
         className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-12"
@@ -573,7 +620,7 @@ const CheckoutPageContent = () => {
     )
   }
 
-  if (isError) {
+  if (isError && !placedPayPalOrder) {
     return (
       <div
         className="mx-auto max-w-4xl px-4 py-16 text-center md:px-6"
@@ -601,7 +648,7 @@ const CheckoutPageContent = () => {
     )
   }
 
-  if (!hasItems) {
+  if (!hasItems && !placedPayPalOrder) {
     return (
       <div
         className="mx-auto max-w-4xl px-4 py-16 text-center md:px-6"
@@ -665,7 +712,7 @@ const CheckoutPageContent = () => {
                 onChange={handleInputChange('firstName')}
                 errorMessage={fieldErrors.firstName}
                 placeholder="Enter your first name"
-                disabled={isSubmitting}
+                disabled={isFormLocked}
               />
               <Input
                 label="Last Name"
@@ -673,7 +720,7 @@ const CheckoutPageContent = () => {
                 onChange={handleInputChange('lastName')}
                 errorMessage={fieldErrors.lastName}
                 placeholder="Enter your last name"
-                disabled={isSubmitting}
+                disabled={isFormLocked}
               />
             </div>
 
@@ -685,7 +732,7 @@ const CheckoutPageContent = () => {
                 onChange={handleInputChange('phoneNumber')}
                 errorMessage={fieldErrors.phoneNumber}
                 placeholder="Enter your phone number"
-                disabled={isSubmitting}
+                disabled={isFormLocked}
                 inputMode="numeric"
               />
               <div className="relative">
@@ -697,7 +744,7 @@ const CheckoutPageContent = () => {
                   onBlur={() => setIsAddressInputFocused(false)}
                   errorMessage={fieldErrors.addressLine}
                   placeholder="Enter your delivery address"
-                  disabled={isSubmitting}
+                  disabled={isFormLocked}
                 />
                 {isAddressInputFocused && isAddressSuggestionsOpen && (
                   <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-2xl border border-outline-variant bg-surface shadow-lg">
@@ -746,7 +793,7 @@ const CheckoutPageContent = () => {
                 onChange={handleInputChange('city')}
                 errorMessage={fieldErrors.city}
                 placeholder="Enter your city"
-                disabled={isSubmitting}
+                disabled={isFormLocked}
               />
               <Input
                 label="District"
@@ -754,7 +801,7 @@ const CheckoutPageContent = () => {
                 onChange={handleInputChange('district')}
                 errorMessage={fieldErrors.district}
                 placeholder="Enter your district"
-                disabled={isSubmitting}
+                disabled={isFormLocked}
               />
             </div>
 
@@ -765,7 +812,7 @@ const CheckoutPageContent = () => {
                 onChange={handleInputChange('ward')}
                 errorMessage={fieldErrors.ward}
                 placeholder="Enter your ward"
-                disabled={isSubmitting}
+                disabled={isFormLocked}
               />
               <Input
                 label="Postal Code"
@@ -773,7 +820,7 @@ const CheckoutPageContent = () => {
                 onChange={handleInputChange('postalCode')}
                 errorMessage={fieldErrors.postalCode}
                 placeholder="Enter your postal code"
-                disabled={isSubmitting}
+                disabled={isFormLocked}
               />
             </div>
           </section>
@@ -791,7 +838,7 @@ const CheckoutPageContent = () => {
               <CheckoutPaymentMethod
                 value={values.paymentMethod}
                 onChange={handlePaymentMethodChange}
-                disabled={isSubmitting}
+                disabled={isFormLocked}
               />
             </div>
 
@@ -804,7 +851,7 @@ const CheckoutPageContent = () => {
                   errorMessage={fieldErrors.cardNumber}
                   placeholder="0000 0000 0000 0000"
                   endIcon={<Lock className="size-4" aria-hidden />}
-                  disabled={isSubmitting}
+                  disabled={isFormLocked}
                 />
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <Input
@@ -813,7 +860,7 @@ const CheckoutPageContent = () => {
                     onChange={handleInputChange('expiryDate')}
                     errorMessage={fieldErrors.expiryDate}
                     placeholder="MM/YY"
-                    disabled={isSubmitting}
+                    disabled={isFormLocked}
                   />
                   <Input
                     label="CVC"
@@ -821,7 +868,7 @@ const CheckoutPageContent = () => {
                     onChange={handleInputChange('cvc')}
                     errorMessage={fieldErrors.cvc}
                     placeholder="123"
-                    disabled={isSubmitting}
+                    disabled={isFormLocked}
                   />
                 </div>
               </div>
@@ -836,14 +883,26 @@ const CheckoutPageContent = () => {
             isError={isShippingMethodsError}
             errorMessage={shippingMethodsErrorMessage}
             onRetry={() => void refetchShippingMethods()}
-            disabled={isSubmitting}
+            disabled={isFormLocked}
           />
         </form>
 
         <CheckoutOrderSummary
-          items={items}
-          totals={checkoutTotals}
-          onRemoveItem={handleRemoveCheckoutLine}
+          items={
+            placedPayPalOrder
+              ? placedOrderToCartItems(placedPayPalOrder)
+              : items
+          }
+          totals={
+            placedPayPalOrder
+              ? placedOrderTotals(placedPayPalOrder)
+              : checkoutTotals
+          }
+          onRemoveItem={
+            placedPayPalOrder ? undefined : handleRemoveCheckoutLine
+          }
+          notice={paypal.notice}
+          placeOrderAction={paypalAction}
           submissionErrorMessage={submissionMessage}
           itemQuantityErrors={itemQuantityErrors}
           hasBlockingItemErrors={hasBlockingItemErrors}

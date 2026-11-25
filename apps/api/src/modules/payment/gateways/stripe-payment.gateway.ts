@@ -93,6 +93,10 @@ export class StripePaymentGateway extends PaymentGateway {
     }
   }
 
+  capture(): Promise<null> {
+    return Promise.resolve(null);
+  }
+
   async expireCheckout(sessionId: string): Promise<void> {
     if (!(await this.findCheckout(sessionId))?.open) return;
     try {
@@ -111,6 +115,13 @@ export class StripePaymentGateway extends PaymentGateway {
   }
 
   parseWebhook(
+    rawBody: Buffer | undefined,
+    headers: IncomingHttpHeaders,
+  ): Promise<VerifiedWebhook> {
+    return Promise.resolve().then(() => this.verify(rawBody, headers));
+  }
+
+  private verify(
     rawBody: Buffer | undefined,
     headers: IncomingHttpHeaders,
   ): VerifiedWebhook {

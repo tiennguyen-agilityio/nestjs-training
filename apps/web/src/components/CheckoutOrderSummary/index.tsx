@@ -1,12 +1,14 @@
 'use client'
 
 import Image from 'next/image'
+import type { ReactNode } from 'react'
 import { AlertTriangle, ShoppingBag, Trash2 } from 'lucide-react'
 
 import SalePrice from '@/components/SalePrice'
 import { Button } from '@/components/ui/button'
 import { OUT_OF_STOCK_LABEL } from '@/constants/order'
 import type { CartItem, CartTotals } from '@/types/cart'
+import type { PayPalNotice } from '@/types/checkout'
 import { formatCurrency } from '@/utils/cart'
 import { isCartItemOutOfStock } from '@/utils/inventory'
 import { cn } from '@/utils/styles'
@@ -21,6 +23,10 @@ export interface CheckoutOrderSummaryProps {
   hasBlockingItemErrors?: boolean
   isPlacingOrder?: boolean
   isPlaceOrderDisabled?: boolean
+  /** Rendered instead of the Place Order button (PayPal's own button). */
+  placeOrderAction?: ReactNode
+  /** A note above the button: info as status, error as alert. */
+  notice?: PayPalNotice | null
   className?: string
 }
 
@@ -34,6 +40,8 @@ export const CheckoutOrderSummary = ({
   hasBlockingItemErrors = false,
   isPlacingOrder = false,
   isPlaceOrderDisabled = false,
+  placeOrderAction,
+  notice,
   className,
 }: CheckoutOrderSummaryProps) => {
   const hasItemErrors = items.some((item) =>
@@ -165,17 +173,35 @@ export const CheckoutOrderSummary = ({
         </p>
       )}
 
-      <Button
-        type="button"
-        loading={isPlacingOrder}
-        disabled={isPlaceOrderDisabled || hasBlockingItemErrors}
-        title="Ordering is temporarily unavailable."
-        className="mt-4 h-14 rounded-full text-base"
-        onClick={onPlaceOrder}
-      >
-        Place Order
-        <ShoppingBag className="size-4" aria-hidden />
-      </Button>
+      {notice && (
+        <p
+          className={cn(
+            'mt-6 rounded-2xl border px-4 py-3 text-sm',
+            notice.tone === 'error'
+              ? 'border-destructive/40 bg-destructive/10 text-destructive'
+              : 'border-outline-variant bg-surface-container text-on-surface-variant',
+          )}
+          role={notice.tone === 'error' ? 'alert' : 'status'}
+        >
+          {notice.message}
+        </p>
+      )}
+
+      {placeOrderAction ? (
+        <div className="mt-4">{placeOrderAction}</div>
+      ) : (
+        <Button
+          type="button"
+          loading={isPlacingOrder}
+          disabled={isPlaceOrderDisabled || hasBlockingItemErrors}
+          title="Ordering is temporarily unavailable."
+          className="mt-4 h-14 rounded-full text-base"
+          onClick={onPlaceOrder}
+        >
+          Place Order
+          <ShoppingBag className="size-4" aria-hidden />
+        </Button>
+      )}
       {hasItemErrors && (
         <p className="mt-3 text-center text-xs text-destructive">
           Remove highlighted items or update your cart, then try again.

@@ -556,6 +556,7 @@ describe('OrderService', () => {
       status?: PaymentStatus;
       checkoutSessionId?: string | null;
       type?: PaymentType;
+      transactionId?: string | null;
     }
 
     const charge = ({
@@ -563,12 +564,14 @@ describe('OrderService', () => {
       status = PaymentStatus.PENDING,
       checkoutSessionId = null,
       type = PaymentType.CHARGE,
+      transactionId = null,
     }: ChargeOptions = {}) => ({
       id: `payment-${paymentMethod}-${status}`,
       type,
       method: paymentMethod,
       status,
       checkoutSessionId,
+      transactionId,
       failureReason: null as string | null,
     });
 
@@ -692,6 +695,27 @@ describe('OrderService', () => {
       );
       const confirmed = await errorOf(service.cancel(USER_ID, ORDER_ID));
       expect(confirmed.getErrors()[0]).toMatchObject({ field: 'status' });
+    });
+
+    it('cancel rejects an order whose charge the gateway holds for review', async () => {
+      orderRepository.lockMineForCancel.mockResolvedValueOnce(
+        orderWith(OrderStatus.PENDING, [
+          charge({
+            method: PaymentMethod.PAYPAL,
+            status: PaymentStatus.PENDING,
+            transactionId: 'CAPTURE-1',
+          }),
+        ]),
+      );
+
+      const error = await errorOf(service.cancel(USER_ID, ORDER_ID));
+
+      expect(error.getErrors()[0]).toMatchObject({
+        errCode: 'statusNotAllowed',
+        field: 'paymentStatus',
+        message: 'Order cannot be cancelled: it is under payment review',
+      });
+      expect(orderRepository.saveCancelled).not.toHaveBeenCalled();
     });
 
     it('cancel throws and saves nothing when a release changes no row', async () => {

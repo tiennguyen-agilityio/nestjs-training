@@ -6,7 +6,7 @@ import { User } from '../../user/entities/user.entity.js';
 
 describe('PaymentController', () => {
   let controller: PaymentController;
-  let paymentService: Record<'start', Mock>;
+  let paymentService: Record<'start' | 'capture', Mock>;
   const user = { id: 'user-1' } as User;
   const checkout = {
     paymentId: 'payment-1',
@@ -14,8 +14,18 @@ describe('PaymentController', () => {
     expiresAt: new Date('2026-11-25T09:00:00Z'),
   };
 
+  const captured = {
+    paymentId: 'payment-1',
+    paymentStatus: 'PAID',
+    failureReason: null,
+    retryable: false,
+  };
+
   beforeEach(async () => {
-    paymentService = { start: vi.fn().mockResolvedValue(checkout) };
+    paymentService = {
+      start: vi.fn().mockResolvedValue(checkout),
+      capture: vi.fn().mockResolvedValue(captured),
+    };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PaymentController],
       providers: [{ provide: PaymentService, useValue: paymentService }],
@@ -28,5 +38,12 @@ describe('PaymentController', () => {
       checkout,
     );
     expect(paymentService.start).toHaveBeenCalledWith('user-1', 'order-1');
+  });
+
+  it('capture passes the user id and the order id to PaymentService.capture', async () => {
+    await expect(controller.capture(user, { id: 'order-1' })).resolves.toBe(
+      captured,
+    );
+    expect(paymentService.capture).toHaveBeenCalledWith('user-1', 'order-1');
   });
 });

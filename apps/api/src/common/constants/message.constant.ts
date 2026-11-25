@@ -67,6 +67,7 @@ export const ERROR_MESSAGES = {
     GATEWAY_UNAVAILABLE: 'The payment provider cannot be reached',
     GATEWAY_REJECTED: 'The payment provider refused this payment',
     INVALID_SIGNATURE: 'Webhook signature is invalid',
+    CAPTURE_UNSUPPORTED: 'This payment method has no capture step',
   },
   SHIPPING_METHOD: {
     NOT_FOUND: 'Shipping method not found',
@@ -183,6 +184,8 @@ export const ERROR_DESCRIPTIONS = {
       'Only a pending order can be cancelled. Contact the shop to cancel a confirmed order.',
     NOT_CANCELLABLE_PAID:
       'The order is already paid. Contact the shop to cancel it.',
+    NOT_CANCELLABLE_PAYMENT_HELD:
+      'The payment is being reviewed. Contact the shop to cancel the order.',
   },
   PAYMENT: {
     METHOD_NOT_ONLINE: 'Only CARD and PAYPAL orders are paid online.',
@@ -191,8 +194,10 @@ export const ERROR_DESCRIPTIONS = {
       'The order is already paid, no longer pending, or its payment session has closed.',
     ORDER_EXPIRED: 'Place a new order.',
     GATEWAY_UNAVAILABLE: 'Try again in a moment.',
-    GATEWAY_REJECTED: 'Check the order total: Stripe charges at least $0.50.',
-    INVALID_SIGNATURE: 'The request was not signed with the endpoint secret.',
+    GATEWAY_REJECTED:
+      'The payment provider refused the request: start the payment again, or check the order total and currency (Stripe charges at least $0.50).',
+    INVALID_SIGNATURE: 'The request was not signed by the payment provider.',
+    CAPTURE_UNSUPPORTED: 'Only PAYPAL payments are captured by the shop.',
   },
   SHIPPING_METHOD: {
     NOT_FOUND:

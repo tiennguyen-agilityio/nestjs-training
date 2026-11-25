@@ -49,19 +49,40 @@ export class WebhookController {
   @Post('stripe')
   @SkipThrottle()
   @HttpCode(HttpStatus.OK)
-  async handleStripeWebhook(
+  handleStripeWebhook(
     @Req() req: RawBodyRequest<Request>,
   ): Promise<{ received: true }> {
-    const verified = this.paymentService.verify(
-      PaymentMethod.CARD,
+    return this.receivePayment(WebhookProvider.STRIPE, PaymentMethod.CARD, req);
+  }
+
+  @Post('paypal')
+  @SkipThrottle()
+  @HttpCode(HttpStatus.OK)
+  handlePayPalWebhook(
+    @Req() req: RawBodyRequest<Request>,
+  ): Promise<{ received: true }> {
+    return this.receivePayment(
+      WebhookProvider.PAYPAL,
+      PaymentMethod.PAYPAL,
+      req,
+    );
+  }
+
+  private async receivePayment(
+    provider: WebhookProvider,
+    method: PaymentMethod,
+    req: RawBodyRequest<Request>,
+  ): Promise<{ received: true }> {
+    const verified = await this.paymentService.verify(
+      method,
       req.rawBody,
       req.headers,
     );
     await this.webhookEventService.handleOnce(
-      WebhookProvider.STRIPE,
+      provider,
       verified.id,
       verified.type,
-      () => this.paymentService.apply(verified.event),
+      () => this.paymentService.handle(verified.event),
     );
 
     return { received: true };

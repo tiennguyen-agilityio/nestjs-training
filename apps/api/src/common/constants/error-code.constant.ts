@@ -63,6 +63,7 @@ export const ERROR_CODES = {
     GATEWAY_UNAVAILABLE: 'paymentGatewayUnavailable',
     GATEWAY_REJECTED: 'paymentGatewayRejected',
     INVALID_SIGNATURE: 'invalidWebhookSignature',
+    CAPTURE_UNSUPPORTED: 'paymentCaptureUnsupported',
   },
   SHIPPING_METHOD: {
     NOT_FOUND: 'shippingMethodNotFound',

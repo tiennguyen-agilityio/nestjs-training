@@ -11,7 +11,7 @@ import { WebhookProvider } from '../enums/webhook-provider.enum.js';
 describe('WebhookController', () => {
   let controller: WebhookController;
   let clerkWebhookService: { verifyAndParse: Mock; handleEvent: Mock };
-  let paymentService: { verify: Mock; apply: Mock };
+  let paymentService: { verify: Mock; handle: Mock };
   let webhookEventService: { handleOnce: Mock };
   let processed: unknown[];
 
@@ -23,7 +23,7 @@ describe('WebhookController', () => {
     };
     paymentService = {
       verify: vi.fn(),
-      apply: vi.fn().mockResolvedValue(true),
+      handle: vi.fn().mockResolvedValue(true),
     };
     webhookEventService = {
       handleOnce: vi.fn(
@@ -98,7 +98,7 @@ describe('WebhookController', () => {
   });
 
   describe('handleStripeWebhook', () => {
-    it('handleStripeWebhook records the event under STRIPE and applies it', async () => {
+    it('handleStripeWebhook awaits verify, then records the event under STRIPE and applies it', async () => {
       const rawBody = Buffer.from('{"type":"checkout.session.completed"}');
       const headers = { 'stripe-signature': 't=1,v1=abc' };
       const event = {
@@ -106,7 +106,7 @@ describe('WebhookController', () => {
         paymentId: 'payment-1',
         reason: 'Payment failed',
       };
-      paymentService.verify.mockReturnValue({
+      paymentService.verify.mockResolvedValue({
         id: 'evt_1',
         type: 'payment_intent.payment_failed',
         event,
@@ -128,8 +128,41 @@ describe('WebhookController', () => {
         'payment_intent.payment_failed',
         expect.any(Function),
       );
-      expect(paymentService.apply).toHaveBeenCalledWith(event);
+      expect(paymentService.handle).toHaveBeenCalledWith(event);
       expect(processed).toEqual([true]);
+      expect(result).toEqual({ received: true });
+    });
+  });
+
+  describe('handlePayPalWebhook', () => {
+    it('handlePayPalWebhook verifies, then handles the event once under PAYPAL', async () => {
+      const rawBody = Buffer.from('{"id":"WH-1"}');
+      const headers = { 'paypal-transmission-id': 'tx-1' };
+      const event = { kind: 'approved', checkoutSessionId: 'PP-1' };
+      paymentService.verify.mockResolvedValue({
+        id: 'WH-1',
+        type: 'CHECKOUT.ORDER.APPROVED',
+        event,
+      });
+      paymentService.handle.mockResolvedValue(true);
+
+      const result = await controller.handlePayPalWebhook({
+        rawBody,
+        headers,
+      } as never);
+
+      expect(paymentService.verify).toHaveBeenCalledWith(
+        PaymentMethod.PAYPAL,
+        rawBody,
+        headers,
+      );
+      expect(webhookEventService.handleOnce).toHaveBeenCalledWith(
+        WebhookProvider.PAYPAL,
+        'WH-1',
+        'CHECKOUT.ORDER.APPROVED',
+        expect.any(Function),
+      );
+      expect(paymentService.handle).toHaveBeenCalledWith(event);
       expect(result).toEqual({ received: true });
     });
   });
