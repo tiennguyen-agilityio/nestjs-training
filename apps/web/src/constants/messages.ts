@@ -16,6 +16,7 @@ export const ERROR_MESSAGES = {
   PASSWORD_MIN_LENGTH: 'Password must be at least 8 characters',
   FIRST_NAME_REQUIRED: 'Enter your first name',
   LAST_NAME_REQUIRED: 'Enter your last name',
+  RECIPIENT_NAME_TOO_LONG: `First name and last name must be at most ${VALIDATION_RULES.NAME.MAX_LENGTH} characters together`,
   SOMETHING_WENT_WRONG: 'Something went wrong',
   SIGN_OUT_FAILED: 'Logout failed. Something went wrong.',
   UNEXPECTED_PROFILE_RESPONSE: 'Unexpected profile response',

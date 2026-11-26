@@ -10,7 +10,6 @@ import Table from '@/components/Table'
 import { PaginationBar } from '@/components/Pagination'
 import { SearchInput } from '@/components/SearchInput'
 import { Select } from '@/components/Select'
-import StatsCards from '@/components/StatsCards'
 import { Button } from '@/components/ui/button'
 import { SUCCESS_MESSAGES } from '@/constants/messages'
 import {
@@ -33,7 +32,6 @@ import { useUrlState } from '@/hooks/useUrlState'
 import { useDebouncedUrlSearch } from '@/hooks/useDebouncedUrlSearch'
 import { usePageClamp } from '@/hooks/usePageClamp'
 import { OrderTableRow } from '@/sections/OrderTableRow'
-import { buildOrderDashboardStats } from '@/utils/order'
 import { ordersUrlSchema } from '@/utils/url'
 import { getErrorMessage } from '@/utils/form'
 import ListBody from '@/components/ListBody'
@@ -156,7 +154,6 @@ export default function OrdersPageContent() {
     )
   }
 
-  const statsItems = buildOrderDashboardStats(orders, meta)
   const pendingOrderNumber = pendingDelete?.orderNumber?.trim()
   const pendingOrderLabelRaw =
     pendingOrderNumber && pendingOrderNumber.length > 0
@@ -195,8 +192,6 @@ export default function OrdersPageContent() {
         title="Orders"
         description="Track fulfillment, payments, and customer deliveries."
       />
-
-      <StatsCards items={statsItems} />
 
       <section className="overflow-hidden rounded-3xl border border-outline-variant/40 bg-card">
         <div className="flex min-w-0 flex-col gap-3 border-b border-outline-variant/30 p-4 md:flex-row md:flex-wrap md:items-center md:gap-3 lg:justify-between">

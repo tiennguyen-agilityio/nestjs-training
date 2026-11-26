@@ -1,10 +1,8 @@
 import { PaymentMethod, PaymentStatus, PaymentType } from '@repo/constants'
 import type { PlaceOrderPayload } from '@repo/schemas'
-import { Banknote, Package, Truck } from 'lucide-react'
 
-import type { StatCardItem } from '@/components/StatsCards'
 import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
-import type { ApiErrorResponse, ErrorDetail, ResponseMeta } from '@/types/api'
+import type { ApiErrorResponse, ErrorDetail } from '@/types/api'
 import type { CartItem, CartTotals } from '@/types/cart'
 import {
   PAYMENT_METHOD,
@@ -22,10 +20,9 @@ import {
 import {
   OrderPaymentStatus,
   OrderStatus,
-  ShippingStatus,
+  type ShippingStatus,
 } from '@repo/constants'
 
-import { formatPrice } from './common'
 import { getErrorMessage } from './form'
 import { ServiceError } from './query'
 
@@ -175,63 +172,6 @@ export function getPaymentStatusPresentation(status: OrderPaymentStatus): {
   badgeClassName: string
 } {
   return PAYMENT_STATUS_PRESENTATION[status]
-}
-
-export function buildOrderDashboardStats(
-  orders: OrderSummary[],
-  meta: ResponseMeta | null,
-): StatCardItem[] {
-  const totalCount = meta?.totalCount ?? orders.length
-  const pageIsPartial =
-    meta != null && orders.length > 0 && meta.totalCount > orders.length
-
-  const processing = orders.filter(
-    (o) => o.status === OrderStatus.PENDING,
-  ).length
-  const shipped = orders.filter(
-    (o) => o.shippingStatus === ShippingStatus.SHIPPING,
-  ).length
-  const revenueSum = orders.reduce(
-    (sum, o) => sum + (Number.isFinite(o.totalAmount) ? o.totalAmount : 0),
-    0,
-  )
-
-  const partialNote = pageIsPartial ? 'Based on orders on this page' : undefined
-
-  return [
-    {
-      id: 'total-orders',
-      label: 'Total orders',
-      value: totalCount,
-      footnote: partialNote,
-      footnoteTone: 'muted',
-    },
-    {
-      id: 'processing',
-      label: 'Processing',
-      value: processing,
-      footnote: partialNote ?? 'Current active batches',
-      footnoteIcon: Package,
-      footnoteTone: partialNote ? 'muted' : 'muted',
-    },
-    {
-      id: 'shipped',
-      label: 'Shipped',
-      value: shipped,
-      footnote: partialNote ?? 'In transit to customers',
-      footnoteIcon: Truck,
-      footnoteTone: 'muted',
-    },
-    {
-      id: 'revenue',
-      label: 'Revenue',
-      value: formatPrice(revenueSum),
-      footnote: partialNote ?? 'Net earnings (current page)',
-      variant: 'accent',
-      icon: Banknote,
-      footnoteTone: 'muted',
-    },
-  ]
 }
 
 // --- Place-order API: payload and line errors keyed to cart rows (checkout) ---
