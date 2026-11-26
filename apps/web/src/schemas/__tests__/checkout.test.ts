@@ -1,6 +1,6 @@
-import { VALIDATION_MESSAGES } from '@repo/constants'
+import { VALIDATION_MESSAGES, VALIDATION_RULES } from '@repo/constants'
 
-import { ERROR_MESSAGES } from '@/constants/messages'
+import { ERROR_MESSAGES, FORM_MESSAGES } from '@/constants/messages'
 import { parseCheckoutValues, validateCheckoutField } from '@/schemas/checkout'
 import { PAYMENT_METHOD, type CheckoutFormValues } from '@/types/checkout'
 
@@ -32,6 +32,87 @@ describe('parseCheckoutValues', () => {
 
   it('accepts a 10-digit phone', () => {
     expect(parseCheckoutValues(values('0912345678')).success).toBe(true)
+  })
+})
+
+describe('parseCheckoutValues length limits', () => {
+  const { ADDRESS_MAX_LENGTH, POSTAL_CODE_MAX_LENGTH } = VALIDATION_RULES.ORDER
+  const { MAX_LENGTH: NAME_MAX_LENGTH } = VALIDATION_RULES.NAME
+  const issueOf = (
+    input: CheckoutFormValues,
+    field: keyof CheckoutFormValues,
+  ) =>
+    parseCheckoutValues(input).error?.issues.find(
+      (issue) => issue.path[0] === field,
+    )?.message
+
+  it.each([
+    ['addressLine', 'Address'],
+    ['city', 'City'],
+    ['district', 'District'],
+    ['ward', 'Ward'],
+  ] as const)('rejects a %s longer than the API allows', (field, label) => {
+    const atLimit = {
+      ...values('0912345678'),
+      [field]: 'a'.repeat(ADDRESS_MAX_LENGTH),
+    }
+    const overLimit = {
+      ...values('0912345678'),
+      [field]: 'a'.repeat(ADDRESS_MAX_LENGTH + 1),
+    }
+
+    expect(parseCheckoutValues(atLimit).success).toBe(true)
+    expect(issueOf(overLimit, field)).toBe(
+      FORM_MESSAGES.maxLength(label, ADDRESS_MAX_LENGTH),
+    )
+  })
+
+  it('rejects a postal code longer than the API allows', () => {
+    const atLimit = {
+      ...values('0912345678'),
+      postalCode: '1'.repeat(POSTAL_CODE_MAX_LENGTH),
+    }
+    const overLimit = {
+      ...values('0912345678'),
+      postalCode: '1'.repeat(POSTAL_CODE_MAX_LENGTH + 1),
+    }
+
+    expect(parseCheckoutValues(atLimit).success).toBe(true)
+    expect(issueOf(overLimit, 'postalCode')).toBe(
+      FORM_MESSAGES.maxLength('Postal code', POSTAL_CODE_MAX_LENGTH),
+    )
+  })
+
+  it('rejects first and last names whose recipient name is too long', () => {
+    const lastName = 'b'.repeat(10)
+    const firstNameAtLimit = 'a'.repeat(NAME_MAX_LENGTH - lastName.length - 1)
+    const atLimit = {
+      ...values('0912345678'),
+      firstName: firstNameAtLimit,
+      lastName,
+    }
+    const overLimit = { ...atLimit, firstName: `${firstNameAtLimit}a` }
+
+    expect(parseCheckoutValues(atLimit).success).toBe(true)
+    expect(issueOf(overLimit, 'firstName')).toBe(
+      ERROR_MESSAGES.RECIPIENT_NAME_TOO_LONG,
+    )
+    expect(issueOf(overLimit, 'lastName')).toBe(
+      ERROR_MESSAGES.RECIPIENT_NAME_TOO_LONG,
+    )
+  })
+
+  it('counts the trimmed names, as the order payload does', () => {
+    const lastName = 'b'.repeat(10)
+    const firstName = 'a'.repeat(NAME_MAX_LENGTH - lastName.length - 1)
+
+    expect(
+      parseCheckoutValues({
+        ...values('0912345678'),
+        firstName: `  ${firstName}  `,
+        lastName: `  ${lastName}  `,
+      }).success,
+    ).toBe(true)
   })
 })
 
