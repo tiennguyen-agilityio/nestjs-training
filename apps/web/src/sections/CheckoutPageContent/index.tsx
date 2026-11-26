@@ -709,7 +709,7 @@ const CheckoutPageContent = () => {
         </div>
       ) : null}
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <form
           ref={formRef}
           className="space-y-8"

@@ -110,6 +110,14 @@ describe('CartPageContent', () => {
     expect(screen.getAllByText('$169.00')).toHaveLength(2)
   })
 
+  it('keeps the cart to one shrinkable column below lg so a long name cannot widen the page', () => {
+    render(<CartPageContent />)
+
+    expect(
+      screen.getByRole('region', { name: 'Cart line items' }).parentElement,
+    ).toHaveClass('grid-cols-1')
+  })
+
   it('shows loading state while cart is hydrating', () => {
     mockUseCart.mockReturnValue({
       ...baseUseCartResult,

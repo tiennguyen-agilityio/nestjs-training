@@ -88,6 +88,20 @@ describe('InventoryPageContent', () => {
     expect(row.getByRole('cell', { name: 'Low' })).toBeInTheDocument()
   })
 
+  it('fits every column, Actions included, in the 1280px dashboard without scrolling', () => {
+    render(<InventoryPageContent />)
+
+    expect(screen.getByRole('table')).toHaveClass('md:min-w-[54rem]')
+    const [header] = screen.getAllByRole('row')
+    if (!header) throw new Error('header row')
+    expect(
+      within(header).getByRole('columnheader', { name: 'Level' }),
+    ).toHaveClass('w-24')
+    expect(
+      within(header).getByRole('columnheader', { name: 'Actions' }),
+    ).toHaveClass('w-32')
+  })
+
   it('stacks each row as a labelled card on mobile', () => {
     render(<InventoryPageContent />)
 

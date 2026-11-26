@@ -32,6 +32,26 @@ const line = (overrides: Partial<CartItem> = {}): CartItem => ({
 })
 
 describe('CartLineItem', () => {
+  it('wraps the price and the Remove button onto the next line on a narrow phone', () => {
+    render(
+      <CartLineItem
+        item={line()}
+        onChangeQuantity={jest.fn()}
+        onRemove={jest.fn()}
+      />,
+    )
+
+    const name = screen.getByRole('heading', { name: 'Colombia Huila' })
+    expect(name.parentElement?.parentElement).toHaveClass(
+      'flex-wrap',
+      'md:flex-nowrap',
+    )
+    expect(
+      screen.getByRole('button', { name: 'Remove Colombia Huila' })
+        .parentElement,
+    ).toHaveClass('flex-wrap')
+  })
+
   it('lets a line above the stock be lowered', async () => {
     const user = userEvent.setup()
     const onChangeQuantity = jest.fn()
