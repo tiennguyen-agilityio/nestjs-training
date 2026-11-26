@@ -4,7 +4,12 @@ import { ProductUnit } from '@repo/constants'
 import { toast } from 'sonner'
 
 import PageContent from './PageContent'
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/constants/messages'
+import {
+  ERROR_MESSAGES,
+  FORM_MESSAGES,
+  SUCCESS_MESSAGES,
+} from '@/constants/messages'
+import { QUANTITY_MAX } from '@/constants/product'
 import { useCategories } from '@/hooks/useCategory'
 import { useCreateProduct } from '@/hooks/useProduct'
 import { uploadImageToImgBB } from '@/services/image'
@@ -258,13 +263,17 @@ describe('Add product API errors', () => {
     expect(payload.variants[0]?.discountValue).toBe(12.5)
   })
 
-  it('does not accept a stock above 500', async () => {
-    const user = userEvent.setup()
-    render(<PageContent />)
+  it('keeps a stock above 500 and shows the limit without sending', async () => {
+    const user = await fillValidForm(['Quantity'])
 
     await user.type(screen.getByLabelText('Quantity'), '501')
+    await clickPublish(user)
 
-    expect(screen.getByLabelText('Quantity')).toHaveValue('50')
+    expect(screen.getByLabelText('Quantity')).toHaveValue('501')
+    expect(
+      await screen.findByText(FORM_MESSAGES.max('Quantity', QUANTITY_MAX)),
+    ).toBeInTheDocument()
+    expect(mockMutate).not.toHaveBeenCalled()
   })
 })
 

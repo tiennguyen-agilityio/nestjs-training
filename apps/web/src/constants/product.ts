@@ -1,16 +1,7 @@
-import {
-  DiscountType,
-  ProductStatus,
-  ProductUnit,
-  VALIDATION_RULES,
-} from '@repo/constants'
+import { DiscountType, ProductStatus, ProductUnit } from '@repo/constants'
 import type { TableColumn } from '@/components/Table'
 
-// Web-only input limits. A percent discount must stay below PERCENT_MAX and
-// takes 2 decimals, so the input stops one cent below it. The Add form caps a
-// new variant's stock at 500 (the API has no maximum).
-export const PERCENT_DISCOUNT_INPUT_MAX =
-  VALIDATION_RULES.DISCOUNT.PERCENT_MAX - 0.01
+// The Add form caps a new variant's stock at 500 (the API has no maximum).
 export const QUANTITY_MAX = 500
 
 export const UNIT_OPTIONS: {
