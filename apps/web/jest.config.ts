@@ -19,6 +19,7 @@ const config: Config = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/'],
+  modulePathIgnorePatterns: ['<rootDir>/.next/'],
 }
 
 export default createJestConfig(config)
