@@ -113,9 +113,11 @@ export function mapProductToRoastCollection(
   }
 }
 
-export function parseTastingNotesString(notes = ''): string[] {
-  return notes
-    ?.split(',')
+export function parseTastingNotesString(
+  notes: string | null | undefined,
+): string[] {
+  return (notes ?? '')
+    .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
 }

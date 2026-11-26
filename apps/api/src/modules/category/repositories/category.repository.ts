@@ -12,8 +12,8 @@ import type { ActorId } from '../../../common/utils/audit.util.js';
 export class CategoryRepository extends BaseRepository<Category> {
   protected readonly entity = Category;
 
-  findByName(name: string, options?: FindOptions): Promise<Category | null> {
-    return this.findOneBy({ name }, options);
+  findBySlug(slug: string, options?: FindOptions): Promise<Category | null> {
+    return this.findOneBy({ slug }, options);
   }
 
   findAll(
