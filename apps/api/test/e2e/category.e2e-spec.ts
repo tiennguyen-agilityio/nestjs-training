@@ -332,6 +332,39 @@ describe('CategoryController (e2e)', () => {
         .expect(409);
     });
 
+    it('POST /categories responds 409 for a name that differs only in case or spaces', async () => {
+      const admin = await createTestUser(UserRole.ADMIN);
+      mockSessionFor(admin.clerkId);
+      const category = await createTestCategory(uniqueName('Case Dup E2E'));
+
+      for (const name of [
+        category.name.toUpperCase(),
+        `  ${category.name.replace(/ /g, '   ')} `,
+      ]) {
+        await request(app.getHttpServer())
+          .post(`${API_BASE_PATH}/categories`)
+          .set('Idempotency-Key', randomUUID())
+          .send({ name })
+          .expect(409);
+      }
+    });
+
+    it('POST /categories saves the name trimmed with single spaces', async () => {
+      const admin = await createTestUser(UserRole.ADMIN);
+      mockSessionFor(admin.clerkId);
+      const name = uniqueName('Spaced Name E2E');
+
+      const response = await request(app.getHttpServer())
+        .post(`${API_BASE_PATH}/categories`)
+        .set('Idempotency-Key', randomUUID())
+        .send({ name: `  ${name.replace(/ /g, '   ')}  ` })
+        .expect(201);
+
+      const body = response.body as { data: { id: string; name: string } };
+      createdCategoryIds.push(body.data.id);
+      expect(body.data.name).toBe(name);
+    });
+
     it('POST /categories twice with the same body and no Idempotency-Key: both respond 400, no row', async () => {
       const admin = await createTestUser(UserRole.ADMIN);
       mockSessionFor(admin.clerkId);

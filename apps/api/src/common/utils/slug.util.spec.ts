@@ -1,4 +1,4 @@
-import { slugFrom } from './slug.util.js';
+import { normalizeName, slugFrom } from './slug.util.js';
 
 describe('slugFrom', () => {
   it('converts a simple name to a lowercase, hyphenated slug', () => {
@@ -15,5 +15,15 @@ describe('slugFrom', () => {
 
   it('hyphenates multi-word names', () => {
     expect(slugFrom('Cold Brew Concentrate')).toBe('cold-brew-concentrate');
+  });
+});
+
+describe('normalizeName', () => {
+  it('trims the ends and collapses repeated whitespace', () => {
+    expect(normalizeName('  New \t 50%   pro ')).toBe('New 50% pro');
+  });
+
+  it('keeps the letter case', () => {
+    expect(normalizeName('NEW 50% PRO')).toBe('NEW 50% PRO');
   });
 });

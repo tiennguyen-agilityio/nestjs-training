@@ -13,7 +13,7 @@ import {
 import { ERROR_CODES } from '../../../common/constants/error-code.constant.js';
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import { QueryParams } from '../../../common/dto/query-params.dto.js';
-import { slugFrom } from '../../../common/utils/slug.util.js';
+import { normalizeName, slugFrom } from '../../../common/utils/slug.util.js';
 import type { ActorId } from '../../../common/utils/audit.util.js';
 import {
   DuplicateResourceException,
@@ -27,7 +27,9 @@ export class CategoryService {
   constructor(private readonly categoryRepository: CategoryRepository) {}
 
   async create(dto: CreateCategoryInput, actorId: ActorId): Promise<Category> {
-    const existing = await this.categoryRepository.findByName(dto.name, {
+    const name = normalizeName(dto.name);
+    const slug = slugFrom(name);
+    const existing = await this.categoryRepository.findBySlug(slug, {
       includeDeleted: true,
     });
     if (existing) {
@@ -39,10 +41,7 @@ export class CategoryService {
       });
     }
 
-    return this.categoryRepository.create(
-      { name: dto.name, slug: slugFrom(dto.name) },
-      actorId,
-    );
+    return this.categoryRepository.create({ name, slug }, actorId);
   }
 
   findAll(
@@ -73,8 +72,10 @@ export class CategoryService {
   ): Promise<Category> {
     const category = await this.findOne(id);
 
-    if (dto.name !== undefined && dto.name !== category.name) {
-      const existing = await this.categoryRepository.findByName(dto.name, {
+    const name = dto.name === undefined ? undefined : normalizeName(dto.name);
+    if (name !== undefined && name !== category.name) {
+      const slug = slugFrom(name);
+      const existing = await this.categoryRepository.findBySlug(slug, {
         includeDeleted: true,
       });
       if (existing && existing.id !== id) {
@@ -86,8 +87,8 @@ export class CategoryService {
         });
       }
 
-      category.name = dto.name;
-      category.slug = slugFrom(dto.name);
+      category.name = name;
+      category.slug = slug;
     }
 
     await this.categoryRepository.save(category, actorId);

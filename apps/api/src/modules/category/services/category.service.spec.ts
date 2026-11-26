@@ -17,7 +17,7 @@ describe('CategoryService', () => {
   let service: CategoryService;
   let categoryRepository: {
     findById: Mock;
-    findByName: Mock;
+    findBySlug: Mock;
     findAll: Mock;
     create: Mock;
     save: Mock;
@@ -42,7 +42,7 @@ describe('CategoryService', () => {
   beforeEach(async () => {
     categoryRepository = {
       findById: vi.fn(),
-      findByName: vi.fn(),
+      findBySlug: vi.fn(),
       findAll: vi.fn(),
       create: vi.fn(),
       save: vi.fn(),
@@ -67,13 +67,13 @@ describe('CategoryService', () => {
 
   describe('create', () => {
     it('creates and returns a category with a slug derived from the name', async () => {
-      categoryRepository.findByName.mockResolvedValue(null);
+      categoryRepository.findBySlug.mockResolvedValue(null);
       const created = buildCategory();
       categoryRepository.create.mockResolvedValue(created);
 
       const result = await service.create({ name: 'Espresso' }, ACTOR);
 
-      expect(categoryRepository.findByName).toHaveBeenCalledWith('Espresso', {
+      expect(categoryRepository.findBySlug).toHaveBeenCalledWith('espresso', {
         includeDeleted: true,
       });
       expect(categoryRepository.create).toHaveBeenCalledWith(
@@ -84,13 +84,45 @@ describe('CategoryService', () => {
     });
 
     it('throws DuplicateResourceException when the name already exists, including soft-deleted rows', async () => {
-      categoryRepository.findByName.mockResolvedValue(buildCategory());
+      categoryRepository.findBySlug.mockResolvedValue(buildCategory());
 
       await expect(
         service.create({ name: 'Espresso' }, ACTOR),
       ).rejects.toBeInstanceOf(DuplicateResourceException);
       expect(categoryRepository.create).not.toHaveBeenCalled();
     });
+  });
+
+  describe('create name normalization', () => {
+    it('trims the name and collapses repeated spaces before saving', async () => {
+      categoryRepository.findBySlug.mockResolvedValue(null);
+      categoryRepository.create.mockResolvedValue(buildCategory());
+
+      await service.create({ name: '  Cold   Brew ' }, ACTOR);
+
+      expect(categoryRepository.create).toHaveBeenCalledWith(
+        { name: 'Cold Brew', slug: 'cold-brew' },
+        ACTOR,
+      );
+    });
+
+    it.each(['NEW 50% PRO', 'New  50%  pro', ' new 50% pro '])(
+      'rejects %p when "New 50% pro" already exists',
+      async (name) => {
+        categoryRepository.findBySlug.mockResolvedValue(
+          buildCategory({ name: 'New 50% pro', slug: 'new-50percent-pro' }),
+        );
+
+        await expect(service.create({ name }, ACTOR)).rejects.toBeInstanceOf(
+          DuplicateResourceException,
+        );
+        expect(categoryRepository.findBySlug).toHaveBeenCalledWith(
+          'new-50percent-pro',
+          { includeDeleted: true },
+        );
+        expect(categoryRepository.create).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('findAll', () => {
@@ -141,7 +173,7 @@ describe('CategoryService', () => {
     it('regenerates the slug and re-checks uniqueness when the name changes', async () => {
       const category = buildCategory();
       categoryRepository.findById.mockResolvedValue(category);
-      categoryRepository.findByName.mockResolvedValue(null);
+      categoryRepository.findBySlug.mockResolvedValue(null);
 
       const result = await service.update(
         'category-id-1',
@@ -149,7 +181,7 @@ describe('CategoryService', () => {
         ACTOR,
       );
 
-      expect(categoryRepository.findByName).toHaveBeenCalledWith('Cold Brew', {
+      expect(categoryRepository.findBySlug).toHaveBeenCalledWith('cold-brew', {
         includeDeleted: true,
       });
       expect(category.name).toBe('Cold Brew');
@@ -164,14 +196,14 @@ describe('CategoryService', () => {
 
       await service.update('category-id-1', { name: 'Espresso' }, ACTOR);
 
-      expect(categoryRepository.findByName).not.toHaveBeenCalled();
+      expect(categoryRepository.findBySlug).not.toHaveBeenCalled();
       expect(category.slug).toBe('espresso');
     });
 
     it('throws DuplicateResourceException when the new name collides with another category', async () => {
       const category = buildCategory();
       categoryRepository.findById.mockResolvedValue(category);
-      categoryRepository.findByName.mockResolvedValue(
+      categoryRepository.findBySlug.mockResolvedValue(
         buildCategory({ id: 'other-category-id', name: 'Cold Brew' }),
       );
 
@@ -184,7 +216,7 @@ describe('CategoryService', () => {
     it('does not throw when the colliding row is the category being updated itself', async () => {
       const category = buildCategory();
       categoryRepository.findById.mockResolvedValue(category);
-      categoryRepository.findByName.mockResolvedValue(category);
+      categoryRepository.findBySlug.mockResolvedValue(category);
 
       const result = await service.update(
         'category-id-1',
@@ -194,6 +226,29 @@ describe('CategoryService', () => {
 
       expect(result).toBe(category);
       expect(categoryRepository.save).toHaveBeenCalledWith(category, ACTOR);
+    });
+
+    it('rejects a new name that differs from another category only in case or spaces', async () => {
+      const category = buildCategory();
+      categoryRepository.findById.mockResolvedValue(category);
+      categoryRepository.findBySlug.mockResolvedValue(
+        buildCategory({ id: 'other-category-id', name: 'Cold Brew' }),
+      );
+
+      await expect(
+        service.update('category-id-1', { name: 'COLD  brew' }, ACTOR),
+      ).rejects.toBeInstanceOf(DuplicateResourceException);
+      expect(categoryRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('treats a name that only gains outer or repeated spaces as unchanged', async () => {
+      const category = buildCategory();
+      categoryRepository.findById.mockResolvedValue(category);
+
+      await service.update('category-id-1', { name: '  Espresso ' }, ACTOR);
+
+      expect(categoryRepository.findBySlug).not.toHaveBeenCalled();
+      expect(category.name).toBe('Espresso');
     });
 
     it('update stamps updatedBy even when nothing changed', async () => {
