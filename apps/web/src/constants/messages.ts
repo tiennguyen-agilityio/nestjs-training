@@ -224,6 +224,11 @@ export const DIALOG_MESSAGES = {
       DESCRIPTION:
         'Are you sure you want to delete this product? This action cannot be undone.',
     },
+    DISCARD_CHANGES: {
+      TITLE: 'Discard your changes?',
+      DESCRIPTION: 'Everything you changed on this form will be lost.',
+      KEEP: 'Keep editing',
+    },
   },
   ORDER: {
     CANCEL: {

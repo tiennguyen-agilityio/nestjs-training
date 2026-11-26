@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import ProductForm, { type ProductFormProps, type ProductFormState } from '.'
 import {
+  DIALOG_MESSAGES,
   ERROR_MESSAGES,
   FORM_MESSAGES,
   SUCCESS_MESSAGES,
@@ -83,6 +84,18 @@ const renderForm = (props: Partial<ProductFormProps> = {}) =>
 const submitButton = () => screen.getByRole('button', { name: /submit/i })
 const resetButton = () => screen.getByRole('button', { name: /^reset$/i })
 
+const discardDialog = () =>
+  screen.getByRole('alertdialog', {
+    name: DIALOG_MESSAGES.PRODUCT.DISCARD_CHANGES.TITLE,
+  })
+
+const confirmDiscard = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(resetButton())
+  await user.click(
+    within(discardDialog()).getByRole('button', { name: /^reset$/i }),
+  )
+}
+
 const image = (name: string) => new File(['x'], name, { type: 'image/png' })
 
 describe('ProductForm', () => {
@@ -132,7 +145,7 @@ describe('ProductForm', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove Cocoa' }))
     expect(submitButton()).toBeEnabled()
-    await user.click(resetButton())
+    await confirmDiscard(user)
     expect(submitButton()).toBeDisabled()
 
     const storefront = screen.getByRole('switch', { name: 'Active Status' })
@@ -191,13 +204,36 @@ describe('ProductForm', () => {
       screen.queryByRole('button', { name: 'Remove Cocoa' }),
     ).not.toBeInTheDocument()
 
-    await user.click(resetButton())
+    await confirmDiscard(user)
 
     expect(screen.getByLabelText('Product Name')).toHaveValue('House Blend')
     expect(
       screen.getByRole('button', { name: 'Remove Cocoa' }),
     ).toBeInTheDocument()
     expect(toast.success).toHaveBeenCalledWith(SUCCESS_MESSAGES.DRAFT_DISCARDED)
+  })
+
+  it('asks before discarding changes and keeps them on Keep editing', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.type(screen.getByLabelText('Product Name'), ' Two')
+    await user.click(resetButton())
+
+    expect(
+      within(discardDialog()).getByText(
+        DIALOG_MESSAGES.PRODUCT.DISCARD_CHANGES.DESCRIPTION,
+      ),
+    ).toBeInTheDocument()
+    await user.click(
+      within(discardDialog()).getByRole('button', {
+        name: DIALOG_MESSAGES.PRODUCT.DISCARD_CHANGES.KEEP,
+      }),
+    )
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Product Name')).toHaveValue('House Blend Two')
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it('shows both image-required errors and does not submit without images', async () => {

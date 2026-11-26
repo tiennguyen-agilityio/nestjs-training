@@ -19,7 +19,11 @@ import { DiscountType, RoastLevel, VALIDATION_RULES } from '@repo/constants'
 
 // Constants
 import { CATEGORY_QUERY_OPTIONS } from '@/constants/category'
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/constants/messages'
+import {
+  DIALOG_MESSAGES,
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
+} from '@/constants/messages'
 import { DISCOUNT_TYPE_OPTIONS, UNIT_OPTIONS } from '@/constants/product'
 
 // Hooks
@@ -32,6 +36,7 @@ import {
 } from '@/schemas/product'
 
 // Components
+import AlertDialog from '@/components/AlertDialog'
 import { type BreadcrumbNavItem } from '@/components/Breadcrumb'
 import { Input } from '@/components/Input'
 import { ROUTES } from '@/constants/routes'
@@ -189,6 +194,7 @@ const ProductForm = ({
     useState<ImageValidationErrors>(NO_IMAGE_ERRORS)
   const [isUploadingImages, setIsUploadingImages] = useState(false)
   const [pendingNote, setPendingNote] = useState('')
+  const [isDiscardDialogOpen, setIsDiscardDialogOpen] = useState(false)
 
   const {
     control,
@@ -250,9 +256,15 @@ const ProductForm = ({
     ) => PathValue<ProductFormFields, K>,
   ) => setValue(name, next(getValues(name)), MARK_DIRTY)
 
-  const handleReset = () => {
+  const discardChanges = () => {
+    setIsDiscardDialogOpen(false)
     resetTo(initialState)
     toast.success(SUCCESS_MESSAGES.DRAFT_DISCARDED)
+  }
+
+  const handleReset = () => {
+    if (isDirty) setIsDiscardDialogOpen(true)
+    else discardChanges()
   }
 
   const handlePrimaryImageChange = (file: File | null) => {
@@ -869,6 +881,17 @@ const ProductForm = ({
           </div>
         </article>
       </form>
+      <AlertDialog
+        open={isDiscardDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) setIsDiscardDialogOpen(false)
+        }}
+        title={DIALOG_MESSAGES.PRODUCT.DISCARD_CHANGES.TITLE}
+        description={DIALOG_MESSAGES.PRODUCT.DISCARD_CHANGES.DESCRIPTION}
+        textCancel={DIALOG_MESSAGES.PRODUCT.DISCARD_CHANGES.KEEP}
+        textAction={resetLabel}
+        onClickAction={discardChanges}
+      />
     </div>
   )
 }
