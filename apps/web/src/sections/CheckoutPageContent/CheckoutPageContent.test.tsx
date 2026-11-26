@@ -434,6 +434,23 @@ describe('CheckoutPageContent', () => {
       expect(field('First Name').value).toBe('Ada')
     })
 
+    it('keeps district, ward and postal code while the shopper edits the address line', async () => {
+      const user = userEvent.setup()
+      profile({ addresses: [savedAddress] })
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      renderCheckout()
+      await user.type(field('Delivery Address'), 'A')
+
+      expect(field('Delivery Address').value).toBe('12 Roast StreetA')
+      expect(field('City').value).toBe('Ho Chi Minh')
+      expect(field('District').value).toBe('District 1')
+      expect(field('Ward').value).toBe('Ben Nghe')
+      expect(field('Postal Code').value).toBe('700000')
+    })
+
     it('a prefilled address does not look up suggestions', async () => {
       profile({ addresses: [savedAddress] })
       mockUseShippingMethods.mockReturnValue(

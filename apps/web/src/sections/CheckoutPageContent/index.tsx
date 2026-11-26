@@ -324,16 +324,10 @@ const CheckoutPageContent = () => {
     setValues((previousValues) => ({
       ...previousValues,
       addressLine: nextLine,
-      district: '',
-      ward: '',
-      postalCode: '',
     }))
     setFieldErrors((previousErrors) => ({
       ...previousErrors,
       addressLine: undefined,
-      district: undefined,
-      ward: undefined,
-      postalCode: undefined,
     }))
   }
 
