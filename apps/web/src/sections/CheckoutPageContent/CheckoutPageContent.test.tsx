@@ -532,6 +532,16 @@ describe('CheckoutPageContent', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('keeps checkout to one shrinkable column below lg so a long name cannot widen the page', () => {
+    renderCheckout()
+
+    expect(
+      screen
+        .getByRole('region', { name: 'Shipping Information' })
+        .closest('form')?.parentElement,
+    ).toHaveClass('grid-cols-1')
+  })
+
   it('preselects the first method the API returns', () => {
     mockUseShippingMethods.mockReturnValue(
       shippingResult({ shippingMethods: [express, standard] }),

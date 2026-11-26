@@ -47,7 +47,7 @@ export function CartLineItem({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-3">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 md:flex-nowrap">
           <div className="min-w-0">
             <h3 className="truncate text-lg font-semibold text-on-surface">
               {item.name}
@@ -86,7 +86,7 @@ export function CartLineItem({
           </p>
         </div>
 
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <Quantity
             value={item.quantity}
             min={1}

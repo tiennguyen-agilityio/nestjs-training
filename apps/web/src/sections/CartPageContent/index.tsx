@@ -201,7 +201,7 @@ export default function CartPageContent() {
           <div className="h-11 w-80 animate-pulse rounded-md bg-surface-container-high" />
           <div className="h-6 w-60 animate-pulse rounded-md bg-surface-container-high" />
         </div>
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-4">
             <div className="h-40 animate-pulse rounded-3xl bg-surface-container-high" />
             <div className="h-40 animate-pulse rounded-3xl bg-surface-container-high" />
@@ -318,7 +318,7 @@ export default function CartPageContent() {
           </Button>
         </section>
       ) : (
-        <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
           {actionError ? (
             <div
               className="lg:col-span-2 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
