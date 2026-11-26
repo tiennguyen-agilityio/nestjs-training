@@ -14,6 +14,7 @@ export interface MapboxGeocodingFeature {
   place_type?: string[]
   text: string
   place_name: string
+  address?: string
   properties?: Record<string, unknown>
   context?: MapboxContextItem[]
 }
@@ -72,8 +73,7 @@ function contextText(feature: MapboxGeocodingFeature, prefix: string): string {
 export function mapboxFeatureToCheckoutAddress(
   feature: MapboxGeocodingFeature,
 ): MapboxParsedAddress {
-  const props = feature.properties ?? {}
-  const number = normalizeString(props.address)
+  const number = normalizeString(feature.address)
   const street = normalizeString(feature.text)
   const addressLine =
     [number, street].filter(Boolean).join(' ').trim() ||
@@ -130,6 +130,22 @@ export function mapboxFeatureToCheckoutAddress(
     ward,
     postalCode: postcode,
   }
+}
+
+const TYPED_HOUSE_NUMBER = /^\s*(?:số\s+)?(\d[\p{L}\d/-]*)\s/iu
+
+export function suggestionAddressLine(
+  suggestion: MapboxAddressSuggestion,
+  typedLine: string,
+): string {
+  const street = suggestion.primaryText.trim()
+  const houseNumber =
+    normalizeString(suggestion.feature.address) ||
+    (TYPED_HOUSE_NUMBER.exec(typedLine)?.[1] ?? '')
+  if (!houseNumber || street.split(/\s+/).includes(houseNumber)) {
+    return street
+  }
+  return `${houseNumber} ${street}`
 }
 
 function mapFeatureToSuggestion(

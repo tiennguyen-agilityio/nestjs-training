@@ -123,10 +123,10 @@ jest.mock('@/hooks/useShippingMethod', () => ({
   useActiveShippingMethods: jest.fn(),
 }))
 jest.mock('@/services/mapboxGeocode', () => ({
+  ...jest.requireActual('@/services/mapboxGeocode'),
   findMapboxAddressSuggestions: jest
     .fn()
     .mockResolvedValue({ ok: true, suggestions: [] }),
-  mapboxFeatureToCheckoutAddress: jest.fn(),
 }))
 
 const mockUseRouter = jest.mocked(useRouter)
@@ -449,6 +449,48 @@ describe('CheckoutPageContent', () => {
       expect(field('District').value).toBe('District 1')
       expect(field('Ward').value).toBe('Ben Nghe')
       expect(field('Postal Code').value).toBe('700000')
+    })
+
+    it('keeps the typed house number when the shopper picks a street suggestion', async () => {
+      const user = userEvent.setup()
+      const placeName =
+        'Nguyễn Huệ, 56100, Phường 5, Tuy Hòa, Đắk Lắk, Việt Nam'
+      jest.mocked(findMapboxAddressSuggestions).mockResolvedValueOnce({
+        ok: true,
+        suggestions: [
+          {
+            id: 'address.1',
+            placeName,
+            primaryText: 'Nguyễn Huệ',
+            secondaryText: '56100, Phường 5, Tuy Hòa, Đắk Lắk, Việt Nam',
+            feature: {
+              id: 'address.1',
+              type: 'Feature',
+              place_type: ['address'],
+              text: 'Nguyễn Huệ',
+              place_name: placeName,
+              properties: { accuracy: 'street' },
+              context: [
+                { id: 'postcode.1', text: '56100' },
+                { id: 'place.1', text: 'Tuy Hòa' },
+              ],
+            },
+          },
+        ],
+      })
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      renderCheckout()
+      await user.type(field('Delivery Address'), '45 Nguyễn Huệ')
+      await user.click(
+        await screen.findByRole('button', { name: /^Nguyễn Huệ/ }),
+      )
+
+      expect(field('Delivery Address').value).toBe('45 Nguyễn Huệ')
+      expect(field('City').value).toBe('Tuy Hòa')
+      expect(field('Postal Code').value).toBe('56100')
     })
 
     it('a prefilled address does not look up suggestions', async () => {
