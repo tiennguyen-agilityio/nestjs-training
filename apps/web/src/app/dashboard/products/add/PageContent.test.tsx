@@ -1,10 +1,11 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ProductUnit } from '@repo/constants'
 import { toast } from 'sonner'
 
 import PageContent from './PageContent'
 import {
+  DIALOG_MESSAGES,
   ERROR_MESSAGES,
   FORM_MESSAGES,
   SUCCESS_MESSAGES,
@@ -386,6 +387,13 @@ describe('Add product shared form', () => {
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /discard draft/i }))
+    await user.click(
+      within(
+        screen.getByRole('alertdialog', {
+          name: DIALOG_MESSAGES.PRODUCT.DISCARD_CHANGES.TITLE,
+        }),
+      ).getByRole('button', { name: /discard draft/i }),
+    )
 
     expect(screen.getByLabelText('Product Name')).toHaveValue('')
     expect(

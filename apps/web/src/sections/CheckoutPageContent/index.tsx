@@ -39,6 +39,7 @@ import { parseCheckoutValues, validateCheckoutField } from '@/schemas/checkout'
 import {
   findMapboxAddressSuggestions,
   mapboxFeatureToCheckoutAddress,
+  suggestionAddressLine,
   type MapboxAddressSuggestion,
 } from '@/services/mapboxGeocode'
 import { useCartStore } from '@/store/useCartStore'
@@ -335,14 +336,9 @@ const CheckoutPageContent = () => {
     suggestion: MapboxAddressSuggestion,
   ) => {
     const parsed = mapboxFeatureToCheckoutAddress(suggestion.feature)
-    const props = suggestion.feature.properties ?? {}
-    const streetNumber =
-      typeof props.address === 'string' ? props.address.trim() : ''
-    const primary = suggestion.primaryText.trim()
     const nextAddressLine =
-      [streetNumber, primary].filter(Boolean).join(' ').trim() ||
-      parsed.addressLine.trim() ||
-      primary
+      suggestionAddressLine(suggestion, values.addressLine) ||
+      parsed.addressLine.trim()
     selectedSuggestionRef.current = nextAddressLine
     setIsAddressSuggestionsOpen(false)
     setAddressSuggestions([])
