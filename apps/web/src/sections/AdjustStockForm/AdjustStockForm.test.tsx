@@ -1,12 +1,16 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { StockLevel } from '@repo/constants'
+import { StockLevel, VALIDATION_RULES } from '@repo/constants'
 
 import AdjustStockForm from '@/sections/AdjustStockForm'
 import { useAdjustVariant, useInventoryItem } from '@/hooks/useInventory'
 import type { InventoryItem } from '@/types/inventory'
 import { ServiceError } from '@/utils/query'
-import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
+import {
+  API_FALLBACK_ERRORS,
+  ERROR_MESSAGES,
+  FORM_MESSAGES,
+} from '@/constants/messages'
 
 jest.mock('@/hooks/useInventory', () => ({
   useAdjustVariant: jest.fn(),
@@ -115,6 +119,32 @@ describe('AdjustStockForm', () => {
       { variantId: 'v-1', body: { quantity: -2, reason: 'Damaged bags' } },
       expect.any(Object),
     )
+  })
+
+  it('AdjustStockForm explains a negative count and a short reason without sending', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.type(
+      screen.getByRole('spinbutton', { name: 'Counted quantity' }),
+      '-1',
+    )
+    await user.type(screen.getByRole('textbox', { name: 'Reason' }), 'a')
+    await user.click(screen.getByRole('button', { name: 'Adjust' }))
+
+    expect(
+      await screen.findByText(FORM_MESSAGES.min('Counted quantity', 0)),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        FORM_MESSAGES.minLength(
+          'Reason',
+          VALIDATION_RULES.INVENTORY.REASON.MIN,
+        ),
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/^Change:/)).not.toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
   })
 
   it('AdjustStockForm disables Save when nothing changes', async () => {

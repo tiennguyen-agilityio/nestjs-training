@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { restockStockSchema, type RestockStockPayload } from '@repo/schemas'
 
 import AlertDialog from '@/components/AlertDialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SUCCESS_MESSAGES } from '@/constants/messages'
 import { useRestockVariant } from '@/hooks/useInventory'
+import { restockFormSchema, type RestockFormValues } from '@/schemas/inventory'
 import type { InventoryItem } from '@/types/inventory'
 import { mapServerErrors, setServerFieldErrors } from '@/utils/form'
 
@@ -38,8 +38,8 @@ export default function RestockStockForm({
     setError,
     setFocus,
     formState: { errors },
-  } = useForm<RestockStockPayload>({
-    resolver: zodResolver(restockStockSchema),
+  } = useForm<RestockFormValues>({
+    resolver: zodResolver(restockFormSchema),
   })
 
   useEffect(() => {
@@ -53,7 +53,7 @@ export default function RestockStockForm({
     onOpenChange(false)
   }
 
-  const onSubmit = (values: RestockStockPayload) => {
+  const onSubmit = (values: RestockFormValues) => {
     if (!item) return
     setFormError(null)
     mutate(
