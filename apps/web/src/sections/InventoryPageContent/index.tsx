@@ -49,11 +49,11 @@ const INVENTORY_TABLE_COLUMNS: TableColumn[] = [
     label: 'Available',
     className: `w-28 ${NARROW_CELL} ${HEADER}`,
   },
-  { key: 'level', label: 'Level', className: `w-36 ${NARROW_CELL} ${HEADER}` },
+  { key: 'level', label: 'Level', className: `w-24 ${NARROW_CELL} ${HEADER}` },
   {
     key: 'actions',
     label: 'Actions',
-    className: `w-36 ${CELL} ${HEADER} text-right`,
+    className: `w-32 ${CELL} ${HEADER} text-right`,
   },
 ]
 
@@ -153,7 +153,7 @@ export default function InventoryPageContent() {
               isStackedOnMobile
               // From md up the table keeps its columns and scrolls sideways
               // instead of squeezing them.
-              tableClassName="w-full table-fixed text-left md:min-w-[60rem]"
+              tableClassName="w-full table-fixed text-left md:min-w-[54rem]"
               getRowKey={(item) => item.id}
               renderRow={(item) => {
                 const level = STOCK_LEVEL_BADGES[item.stockLevel]
