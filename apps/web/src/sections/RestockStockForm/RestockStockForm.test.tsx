@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { StockLevel } from '@repo/constants'
 
 import RestockStockForm from '@/sections/RestockStockForm'
+import { FORM_MESSAGES } from '@/constants/messages'
 import { useRestockVariant } from '@/hooks/useInventory'
 import type { InventoryItem } from '@/types/inventory'
 
@@ -27,6 +28,22 @@ describe('RestockStockForm', () => {
       mutate,
       isPending: false,
     } as unknown as ReturnType<typeof useRestockVariant>)
+  })
+
+  it('RestockStockForm explains a fractional quantity without sending', async () => {
+    const user = userEvent.setup()
+    render(<RestockStockForm open item={item} onOpenChange={jest.fn()} />)
+
+    await user.type(
+      screen.getByRole('spinbutton', { name: 'Quantity to add' }),
+      '1.5',
+    )
+    await user.click(screen.getByRole('button', { name: 'Restock' }))
+
+    expect(
+      await screen.findByText(FORM_MESSAGES.isInt('Quantity')),
+    ).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
   })
 
   it('RestockStockForm sends the quantity', async () => {

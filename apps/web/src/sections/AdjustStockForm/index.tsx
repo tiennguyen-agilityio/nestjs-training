@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { z } from 'zod'
-import { adjustStockSchema, stockQuantityField } from '@repo/schemas'
 
 import AlertDialog from '@/components/AlertDialog'
 import { Input } from '@/components/ui/input'
@@ -16,6 +14,7 @@ import {
   SUCCESS_MESSAGES,
 } from '@/constants/messages'
 import { useAdjustVariant, useInventoryItem } from '@/hooks/useInventory'
+import { adjustFormSchema, type AdjustFormValues } from '@/schemas/inventory'
 import type { InventoryItem } from '@/types/inventory'
 import { mapServerErrors, setServerFieldErrors } from '@/utils/form'
 
@@ -24,14 +23,6 @@ export interface AdjustStockFormProps {
   onOpenChange: (open: boolean) => void
   item: InventoryItem | null
 }
-
-/** The counted quantity and the reason; the API takes the signed difference. */
-const adjustFormSchema = z.object({
-  counted: stockQuantityField,
-  reason: adjustStockSchema.shape.reason,
-})
-
-type AdjustFormValues = z.infer<typeof adjustFormSchema>
 
 // The API's `quantity` is the change, which the admin enters as the count.
 const adjustErrorField = (apiField: string) =>
@@ -169,7 +160,7 @@ export default function AdjustStockForm({
             disabled={isPending}
             {...register('counted', { valueAsNumber: true })}
           />
-          {change !== null && change !== 0 && (
+          {change !== null && change !== 0 && counted >= 0 && (
             <p className="mt-1 text-sm text-muted-foreground">
               Change: {formatChange(change)}
             </p>

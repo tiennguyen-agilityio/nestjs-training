@@ -4,7 +4,12 @@ import { DiscountType, ProductUnit, RoastLevel } from '@repo/constants'
 import { toast } from 'sonner'
 
 import ProductForm, { type ProductFormProps, type ProductFormState } from '.'
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/constants/messages'
+import {
+  ERROR_MESSAGES,
+  FORM_MESSAGES,
+  SUCCESS_MESSAGES,
+} from '@/constants/messages'
+import { QUANTITY_MAX } from '@/constants/product'
 import { ROUTES } from '@/constants/routes'
 import { useCategories } from '@/hooks/useCategory'
 import { uploadImageToImgBB } from '@/services/image'
@@ -263,6 +268,57 @@ describe('ProductForm', () => {
     expect(
       screen.getByRole('link', { name: 'Change stock in Inventory' }),
     ).toHaveAttribute('href', ROUTES.DASHBOARD_INVENTORY)
+  })
+
+  it('keeps a stock quantity above the limit and says so on submit', async () => {
+    const user = userEvent.setup()
+    const onSubmit = jest.fn()
+    renderForm({ mode: 'create', initialState: emptyState, onSubmit })
+    const quantity = screen.getByRole('textbox', { name: 'Quantity' })
+
+    await user.clear(quantity)
+    await user.type(quantity, '600')
+    await user.click(submitButton())
+
+    expect(quantity).toHaveValue('600')
+    expect(
+      await screen.findByText(FORM_MESSAGES.max('Quantity', QUANTITY_MAX)),
+    ).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('keeps a percent discount of 100 and says it must stay below 100%', async () => {
+    const user = userEvent.setup()
+    const onSubmit = jest.fn()
+    renderForm({ onSubmit })
+    const discount = screen.getByRole('textbox', { name: 'Discount (%)' })
+
+    await user.clear(discount)
+    await user.type(discount, '100')
+    await user.click(submitButton())
+
+    expect(discount).toHaveValue('100')
+    expect(
+      await screen.findByText(FORM_MESSAGES.DISCOUNT_PERCENT),
+    ).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('keeps a base price above the limit and says so on submit', async () => {
+    const user = userEvent.setup()
+    const onSubmit = jest.fn()
+    renderForm({ onSubmit })
+    const price = screen.getByRole('textbox', { name: 'Base Price' })
+
+    await user.clear(price)
+    await user.type(price, '100000000')
+    await user.click(submitButton())
+
+    expect(price).toHaveValue('100,000,000')
+    expect(
+      await screen.findByText(FORM_MESSAGES.max('Base price', '99,999,999.99')),
+    ).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('ProductForm in add mode keeps the stock field', () => {

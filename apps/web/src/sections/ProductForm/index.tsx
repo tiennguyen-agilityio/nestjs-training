@@ -20,12 +20,7 @@ import { DiscountType, RoastLevel, VALIDATION_RULES } from '@repo/constants'
 // Constants
 import { CATEGORY_QUERY_OPTIONS } from '@/constants/category'
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/constants/messages'
-import {
-  DISCOUNT_TYPE_OPTIONS,
-  PERCENT_DISCOUNT_INPUT_MAX,
-  QUANTITY_MAX,
-  UNIT_OPTIONS,
-} from '@/constants/product'
+import { DISCOUNT_TYPE_OPTIONS, UNIT_OPTIONS } from '@/constants/product'
 
 // Hooks
 import { useCategories } from '@/hooks/useCategory'
@@ -600,7 +595,6 @@ const ProductForm = ({
                       placeholder="e.g. 24.95"
                       startIcon={<DollarIcon className="size-4" />}
                       min={PRICE.MIN}
-                      max={PRICE.MAX}
                       maxDecimalPlaces={2}
                       disabled={isSubmitting}
                       errorMessage={errors.price?.message}
@@ -622,7 +616,6 @@ const ProductForm = ({
                         label="Quantity"
                         type="number"
                         min={0}
-                        max={isCreate ? QUANTITY_MAX : undefined}
                         step={1}
                         maxDecimalPlaces={0}
                         disabled={isSubmitting}
@@ -703,11 +696,6 @@ const ProductForm = ({
                       }
                       type="number"
                       min={0}
-                      max={
-                        isPercentDiscount
-                          ? PERCENT_DISCOUNT_INPUT_MAX
-                          : undefined
-                      }
                       step={0.01}
                       maxDecimalPlaces={2}
                       endIcon={

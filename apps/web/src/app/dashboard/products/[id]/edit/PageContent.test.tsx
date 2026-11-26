@@ -10,7 +10,7 @@ import type { UpdateProductPayload } from '@repo/schemas'
 import { toast } from 'sonner'
 
 import PageContent from './PageContent'
-import { NOTICE_MESSAGES } from '@/constants/messages'
+import { FORM_MESSAGES, NOTICE_MESSAGES } from '@/constants/messages'
 import { ROUTES } from '@/constants/routes'
 import { useCategories } from '@/hooks/useCategory'
 import { useProductById, useUpdateProduct } from '@/hooks/useProduct'
@@ -226,12 +226,17 @@ describe('EditProductForm pricing', () => {
     expect(field('Discount (%)')).toHaveValue('12.34')
   })
 
-  it('does not accept a percent discount above 99.99', async () => {
+  it('keeps a percent discount of 100 and blocks it without sending', async () => {
     renderPage()
 
     await replaceValue('Discount (%)', '100')
+    await save()
 
-    expect(field('Discount (%)')).toHaveValue('10')
+    expect(field('Discount (%)')).toHaveValue('100')
+    expect(
+      await screen.findByText(FORM_MESSAGES.DISCOUNT_PERCENT),
+    ).toBeInTheDocument()
+    expect(mockMutate).not.toHaveBeenCalled()
   })
 
   it('blocks a fixed discount equal to the price without sending', async () => {
@@ -376,12 +381,17 @@ describe('EditProductForm pricing', () => {
     await waitFor(() => expect(field('Product Name')).toHaveFocus())
   })
 
-  it('does not accept a base price above 99,999,999.99', async () => {
+  it('keeps a base price above 99,999,999.99 and blocks it without sending', async () => {
     renderPage()
 
     await replaceValue('Base Price', '100000000')
+    await save()
 
-    expect(field('Base Price')).toHaveValue('10,000,000')
+    expect(field('Base Price')).toHaveValue('100,000,000')
+    expect(
+      await screen.findByText(FORM_MESSAGES.max('Base price', '99,999,999.99')),
+    ).toBeInTheDocument()
+    expect(mockMutate).not.toHaveBeenCalled()
   })
 })
 
