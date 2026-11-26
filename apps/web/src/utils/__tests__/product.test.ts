@@ -14,6 +14,7 @@ import {
   createProductErrorTarget,
   formatVariantName,
   mapProductToEditFormValues,
+  parseTastingNotesString,
   resolveEditedProductStatus,
   toCreateVariantPayload,
   updateProductErrorTarget,
@@ -60,6 +61,16 @@ const formValues = (
 ): EditProductFormValues => ({
   ...mapProductToEditFormValues(product([variant()])),
   ...overrides,
+})
+
+describe('parseTastingNotesString', () => {
+  it('splits and trims the notes', () => {
+    expect(parseTastingNotesString(' Cocoa, Plum ,')).toEqual(['Cocoa', 'Plum'])
+  })
+
+  it.each([[null], [undefined], ['']])('returns [] for %p', (notes) => {
+    expect(parseTastingNotesString(notes)).toEqual([])
+  })
 })
 
 describe('mapProductToEditFormValues', () => {

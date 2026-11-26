@@ -134,6 +134,23 @@ describe('EditProductForm pricing', () => {
     } as unknown as ReturnType<typeof useUpdateProduct>)
   })
 
+  it('opens a product whose tasting notes are null', () => {
+    jest.mocked(useProductById).mockReturnValue({
+      product: { ...product(), tastingNotes: null },
+      isLoading: false,
+      isError: false,
+      errorMessage: null,
+      refetch: jest.fn(),
+    })
+
+    render(<PageContent />)
+
+    expect(field('Product Name')).toHaveValue('Single Origin')
+    expect(
+      screen.queryByRole('button', { name: /^Remove (?!image$)/ }),
+    ).not.toBeInTheDocument()
+  })
+
   it('prefills Base Price, Percent, Discount (%) and Quantity', () => {
     renderPage()
 

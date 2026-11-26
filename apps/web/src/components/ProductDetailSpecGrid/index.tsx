@@ -22,7 +22,7 @@ export function ProductDetailSpecGrid({
     )?.label?.replace(' Roast', '') ?? product.roastLevel
   const spectrum = ROAST_LEVEL_SPECTRUM_PERCENT[product.roastLevel]
   const notes =
-    product.tastingNotes?.trim() ||
+    (product.tastingNotes ?? '').trim() ||
     product.description?.trim().slice(0, 80) ||
     '—'
   const origin = product.origin?.trim() || '—'

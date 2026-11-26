@@ -48,7 +48,7 @@ export interface Product {
   isOrganic: boolean
   isFairTrade: boolean
   status: ProductStatus
-  tastingNotes: string
+  tastingNotes: string | null
   origin: string
   processingMethod: string
   variants: ProductVariantSummary[]
