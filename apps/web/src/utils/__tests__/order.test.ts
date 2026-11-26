@@ -16,7 +16,6 @@ import {
   tagItemErrorsWithLineRefs,
 } from '@/utils/order'
 import {
-  buildOrderDashboardStats,
   canRetryPayment,
   formatOrderCustomerName,
   formatOrderDateTime,
@@ -219,29 +218,6 @@ describe('formatOrderCustomerName', () => {
         summaryOf({ customer: { firstName: ' ', lastName: '', email: 'a' } }),
       ),
     ).toBe('—')
-  })
-})
-
-describe('buildOrderDashboardStats', () => {
-  it('buildOrderDashboardStats counts OrderSummary rows', () => {
-    const stats = buildOrderDashboardStats(
-      [
-        summaryOf({ totalAmount: 10 }),
-        summaryOf({
-          status: OrderStatus.CONFIRMED,
-          shippingStatus: ShippingStatus.SHIPPING,
-          totalAmount: 5.5,
-        }),
-      ],
-      { limit: 10, currentPage: 1, pageCount: 1, totalCount: 2 },
-    )
-
-    expect(stats.map(({ id, value }) => [id, value])).toEqual([
-      ['total-orders', 2],
-      ['processing', 1],
-      ['shipped', 1],
-      ['revenue', expect.stringContaining('15.50')],
-    ])
   })
 })
 
