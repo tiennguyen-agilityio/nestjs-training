@@ -114,7 +114,7 @@ describe('OrderTableRow', () => {
     ).toBeDisabled()
   })
 
-  it('renders number, date, customer name and email, status, shipping status and total', () => {
+  it('renders number with its date, customer name and email, status, shipping status and total', () => {
     render(
       <table>
         <tbody>
@@ -126,8 +126,9 @@ describe('OrderTableRow', () => {
     )
 
     const row = within(screen.getByRole('row'))
-    expect(row.getByRole('cell', { name: '#SB-9281' })).toBeInTheDocument()
-    expect(row.getByRole('cell', { name: 'Oct 24, 2023' })).toBeInTheDocument()
+    expect(row.getByRole('cell', { name: /^#SB-9281/ })).toHaveTextContent(
+      'Oct 24, 2023',
+    )
     expect(row.getByRole('cell', { name: /Elena Vance/ })).toHaveTextContent(
       'elena@example.com',
     )

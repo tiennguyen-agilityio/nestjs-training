@@ -54,39 +54,34 @@ export const SHIPPING_TRANSITIONS: Readonly<
 
 export const ORDERS_TABLE_COLUMNS: TableColumn[] = [
   {
-    key: 'orderId',
-    label: 'Order ID',
-    className: 'w-[18%] min-w-0 px-6 py-4',
-  },
-  {
-    key: 'date',
-    label: 'Date',
-    className: 'w-[11%] min-w-0 px-6 py-4',
+    key: 'order',
+    label: 'Order',
+    className: 'w-56 min-w-0 px-4 py-4',
   },
   {
     key: 'customer',
     label: 'Customer',
-    className: 'min-w-0 px-6 py-4',
+    className: 'min-w-0 px-4 py-4',
   },
   {
     key: 'status',
     label: 'Status',
-    className: 'w-[12%] min-w-[84px] text-center',
+    className: 'w-38 px-3 text-center',
   },
   {
     key: 'shippingStatus',
     label: 'Shipping status',
-    className: 'w-[12%] px-6 py-4 text-center',
+    className: 'w-32 px-3 text-center',
   },
   {
     key: 'total',
     label: 'Total',
-    className: 'w-[10%] text-center',
+    className: 'w-28 px-3 text-center',
   },
   {
     key: 'actions',
     label: 'Actions',
-    className: 'w-[10%] text-center',
+    className: 'w-28 px-3 text-center',
   },
 ]
 

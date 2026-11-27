@@ -106,12 +106,11 @@ describe('OrdersPageContent', () => {
     ).toHaveAttribute('href', dashboardOrderPath('OD-1001'))
   })
 
-  it('OrdersPageContent lists number, customer, date, total, status and shipping status', () => {
+  it('OrdersPageContent lists number with its date, customer, total, status and shipping status', () => {
     render(<OrdersPageContent />)
 
     for (const label of [
-      'Order ID',
-      'Date',
+      'Order',
       'Customer',
       'Status',
       'Shipping status',
@@ -122,11 +121,12 @@ describe('OrdersPageContent', () => {
       ).toBeInTheDocument()
     }
     const row = within(screen.getAllByRole('row')[1])
-    expect(row.getByRole('cell', { name: '#OD-1001' })).toBeInTheDocument()
+    expect(row.getByRole('cell', { name: /^#OD-1001/ })).toHaveTextContent(
+      'Apr 27, 2026',
+    )
     expect(row.getByRole('cell', { name: /John Doe/ })).toHaveTextContent(
       'john@example.com',
     )
-    expect(row.getByRole('cell', { name: 'Apr 27, 2026' })).toBeInTheDocument()
     expect(row.getByRole('cell', { name: '$115.00' })).toBeInTheDocument()
     expect(row.getByRole('cell', { name: /Pending/ })).toBeInTheDocument()
     expect(row.getByRole('cell', { name: 'Shipping' })).toBeInTheDocument()
