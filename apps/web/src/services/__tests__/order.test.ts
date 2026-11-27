@@ -319,6 +319,7 @@ describe('order service (admin)', () => {
       search: ' lan ',
       status: OrderStatus.PENDING,
       shippingStatus: ShippingStatus.SHIPPING,
+      paymentStatus: OrderPaymentStatus.PAID,
     })
 
     const url = new URL(fetchMock.mock.calls[0]?.[0] as string)
@@ -330,6 +331,7 @@ describe('order service (admin)', () => {
       search: 'lan',
       status: 'PENDING',
       shippingStatus: 'SHIPPING',
+      paymentStatus: 'PAID',
     })
     expect(requestInit(fetchMock).credentials).toBe('include')
     const headers = requestInit(fetchMock).headers as Headers
@@ -454,10 +456,11 @@ describe('refund services', () => {
       .mockResolvedValue(fetchResponse({ data: { id: 'refund-1' } }, 201))
     globalThis.fetch = fetchMock
 
-    const result = await createRefund('o-1', 12.5, {
-      getToken,
-      idempotencyKey: 'key-1',
-    })
+    const result = await createRefund(
+      'o-1',
+      { amount: 12.5 },
+      { getToken, idempotencyKey: 'key-1' },
+    )
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       `${API_ROUTES.ORDERS}/o-1/refunds`,
@@ -469,6 +472,23 @@ describe('refund services', () => {
     expect(headers.get(IDEMPOTENCY.HEADER)).toBe('key-1')
     expect(headers.get('Authorization')).toBe('Bearer tok')
     expect(result).toEqual({ ok: true })
+  })
+
+  it('createRefund sends amount and reason', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(fetchResponse({ data: { id: 'refund-1' } }, 201))
+    globalThis.fetch = fetchMock
+
+    await createRefund(
+      'o-1',
+      { amount: 40, reason: 'Cancellation fee' },
+      { getToken, idempotencyKey: 'key-1' },
+    )
+
+    expect(requestInit(fetchMock).body).toBe(
+      '{"amount":40,"reason":"Cancellation fee"}',
+    )
   })
 
   it('retryRefund POSTs /payments/:id/retry', async () => {
@@ -510,10 +530,11 @@ describe('refund services', () => {
       ),
     )
 
-    const result = await createRefund('o-1', 30, {
-      getToken,
-      idempotencyKey: 'key-3',
-    })
+    const result = await createRefund(
+      'o-1',
+      { amount: 30 },
+      { getToken, idempotencyKey: 'key-3' },
+    )
 
     expect(result.ok).toBe(false)
   })

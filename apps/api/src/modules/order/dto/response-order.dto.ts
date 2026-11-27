@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   OrderPaymentStatus,
   OrderStatus,
@@ -39,6 +39,11 @@ export class ResponseOrderItemDto {
   }
 }
 
+export interface PaymentDtoOptions {
+  /** Admin responses only: adds each payment's `refundReason`. */
+  withRefundReason?: boolean;
+}
+
 export class ResponsePaymentDto {
   id!: string;
   orderId!: string;
@@ -67,10 +72,21 @@ export class ResponsePaymentDto {
   @ApiProperty({ type: Date, nullable: true })
   retriedAt!: Date | null;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'Admin only: the reason the admin gave for a refund (required when it is less than was paid).',
+  })
+  refundReason?: string | null;
+
   createdAt!: Date;
   updatedAt!: Date;
 
-  static fromEntity(payment: Payment): ResponsePaymentDto {
+  static fromEntity(
+    payment: Payment,
+    options: PaymentDtoOptions = {},
+  ): ResponsePaymentDto {
     const dto = new ResponsePaymentDto();
     dto.id = payment.id;
     dto.orderId = payment.order.id;
@@ -83,6 +99,7 @@ export class ResponsePaymentDto {
     dto.completedAt = payment.completedAt;
     dto.failureReason = payment.failureReason;
     dto.retriedAt = payment.retriedAt;
+    if (options.withRefundReason) dto.refundReason = payment.refundReason;
     dto.createdAt = payment.createdAt;
     dto.updatedAt = payment.updatedAt;
     return dto;
@@ -132,7 +149,10 @@ export class ResponseOrderDto {
   createdAt!: Date;
   updatedAt!: Date;
 
-  static fromEntity(order: Order): ResponseOrderDto {
+  static fromEntity(
+    order: Order,
+    options: PaymentDtoOptions = {},
+  ): ResponseOrderDto {
     const payments = order.payments.getItems();
     const dto = new ResponseOrderDto();
     dto.id = order.id;
@@ -164,7 +184,7 @@ export class ResponseOrderDto {
         0,
       ) / 100;
     dto.payments = payments.map((payment) =>
-      ResponsePaymentDto.fromEntity(payment),
+      ResponsePaymentDto.fromEntity(payment, options),
     );
     dto.createdAt = order.createdAt;
     dto.updatedAt = order.updatedAt;

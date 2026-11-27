@@ -247,7 +247,7 @@ export class OrderController {
   @ApiOperation({
     summary: "Change any order's status (admin)",
     description:
-      "Allowed: PENDING → CONFIRMED or CANCELLED; CONFIRMED → COMPLETED or CANCELLED. CONFIRMED needs a cash on delivery order or a PAID charge; CANCELLED needs shipping PENDING and no charge held for review; COMPLETED needs shipping DELIVERED. Any other move returns 409 and saves nothing. CANCELLED does the shopper cancel's steps in one transaction: each item's held stock is released (RELEASE), PENDING charges become FAILED and an open checkout session is expired through the outbox; what is not refunded of a PAID CARD or PAYPAL charge is refunded through the outbox. A UUID looks up by id, anything else by orderNumber.",
+      "Allowed: PENDING → CONFIRMED or CANCELLED; CONFIRMED → COMPLETED or CANCELLED. CONFIRMED needs a cash on delivery order or a PAID charge; CANCELLED needs shipping PENDING and no charge held for review; COMPLETED needs shipping DELIVERED. Any other move returns 409 and saves nothing. CANCELLED does the cancel steps in one transaction: each item's held stock is released (RELEASE), PENDING charges become FAILED and an open checkout session is expired through the outbox. Nothing is refunded: a PAID CARD or PAYPAL charge stays PAID until the admin refunds the order with POST /orders/{idOrOrderNumber}/refunds. A UUID looks up by id, anything else by orderNumber.",
   })
   @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
   @ApiStatusChangeErrors(
@@ -286,7 +286,7 @@ export class OrderController {
   @ApiOperation({
     summary: "Change any order's shipping status (admin)",
     description:
-      'Allowed: PENDING → SHIPPING; SHIPPING → DELIVERED or RETURNED, only while the order is CONFIRMED; RETURNED also needs no charge held for review. Any other move returns 409 and saves nothing. DELIVERED records a SALE per item (stock and held stock both drop) and marks a cash on delivery charge PAID. RETURNED runs the cancel steps and makes the order CANCELLED; what is not refunded of a PAID CARD or PAYPAL charge is refunded through the outbox. A UUID looks up by id, anything else by orderNumber.',
+      'Allowed: PENDING → SHIPPING; SHIPPING → DELIVERED or RETURNED, only while the order is CONFIRMED and has no REFUND line (PENDING, PAID or FAILED); RETURNED also needs no charge held for review. Any other move returns 409 and saves nothing. DELIVERED records a SALE per item (stock and held stock both drop) and marks a cash on delivery charge PAID. RETURNED runs the cancel steps and makes the order CANCELLED without a refund; the admin refunds it in a separate step. A UUID looks up by id, anything else by orderNumber.',
   })
   @ApiDataResponse(HttpStatus.OK, ResponseOrderDto)
   @ApiStatusChangeErrors(
@@ -294,6 +294,10 @@ export class OrderController {
     ERROR_MESSAGES.ORDER.SHIPPING_STATUS_NOT_ALLOWED('PENDING', 'DELIVERED'),
   )
   @ApiOrderRuleErrors('shippingStatus', [
+    [
+      ERROR_MESSAGES.ORDER.SHIPPING_REFUNDED,
+      ERROR_DESCRIPTIONS.ORDER.SHIPPING_REFUNDED,
+    ],
     [
       ERROR_MESSAGES.ORDER.SHIPPING_NEEDS_CONFIRMED,
       ERROR_DESCRIPTIONS.ORDER.SHIPPING_NEEDS_CONFIRMED,
@@ -322,7 +326,7 @@ export class OrderController {
   @ApiOperation({
     summary: "Refund part or all of an order's paid online charge (admin)",
     description:
-      'Adds a PENDING REFUND row with the method of the PAID CARD or PAYPAL charge and queues the refund at the provider through the outbox; the provider webhook sets it PAID or FAILED. An order is refunded once: a second refund returns 409 while a PENDING or PAID refund exists, and `amount` may not exceed the PAID charge. A UUID looks up by id, anything else by orderNumber.',
+      'Only a CANCELLED order whose CARD or PAYPAL charge is PAID and that has no REFUND line (PENDING, PAID or FAILED) can be refunded; anything else returns 409 and saves nothing. Adds a PENDING REFUND row with the method of that charge and the trimmed `reason`, and queues the refund at the provider through the outbox; the provider webhook sets it PAID or FAILED. `amount` may not exceed the PAID charge (409); below it, `reason` is required (400). An order is refunded once: a FAILED refund is only retried (POST /payments/{id}/retry). A UUID looks up by id, anything else by orderNumber.',
   })
   @ApiDataResponse(HttpStatus.CREATED, ResponsePaymentDto)
   @ApiErrorResponse(
@@ -357,11 +361,29 @@ export class OrderController {
       description: ERROR_DESCRIPTIONS.ORDER.ALREADY_REFUNDED,
     },
   )
+  @ApiErrorResponse(
+    HttpStatus.CONFLICT,
+    ERROR_MESSAGES.ORDER.REFUND_NEEDS_CANCELLED,
+    {
+      errCode: ERROR_CODES.ORDER.REFUND_NEEDS_CANCELLED,
+      field: 'status',
+      description: ERROR_DESCRIPTIONS.ORDER.REFUND_NEEDS_CANCELLED,
+    },
+  )
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    ERROR_MESSAGES.EXCEPTION.VALIDATION_FAILED,
+    {
+      errCode: ERROR_CODES.ORDER.REFUND_REASON_REQUIRED,
+      field: 'reason',
+      description: ERROR_DESCRIPTIONS.ORDER.REFUND_REASON_REQUIRED,
+    },
+  )
   refund(
     @AuthUser() user: User,
     @Param({ schema: orderParamSchema }) { idOrOrderNumber }: OrderParam,
-    @Body({ schema: createRefundSchema }) { amount }: CreateRefundInput,
+    @Body({ schema: createRefundSchema }) { amount, reason }: CreateRefundInput,
   ): Promise<ResponsePaymentDto> {
-    return this.orderService.refund(idOrOrderNumber, amount, user.id);
+    return this.orderService.refund(idOrOrderNumber, amount, reason, user.id);
   }
 }

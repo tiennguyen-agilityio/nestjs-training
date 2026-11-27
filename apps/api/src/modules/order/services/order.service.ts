@@ -39,6 +39,7 @@ import { variantNameFrom } from '../../product-variant/utils/variant-name.util.j
 import { pricingOf } from '../../cart/utils/cart-pricing.util.js';
 import { orderTotalsOf } from '../utils/order-pricing.util.js';
 import { generateOrderNumber } from '../utils/order-number.util.js';
+import { hasRefundLine, refundableCentsOf } from '../utils/refund-rule.util.js';
 import {
   allowedShippingStatusesOf,
   allowedStatusesOf,
@@ -96,6 +97,14 @@ const statusFactsOf = (order: Order): StatusFacts => ({
       status: payment.status,
       transactionId: payment.transactionId,
     })),
+  hasRefund: hasRefundLine({
+    payments: order.payments.getItems().map((payment) => ({
+      type: payment.type,
+      method: payment.method,
+      status: payment.status,
+      amount: payment.amount,
+    })),
+  }),
 });
 
 @Injectable()
@@ -167,6 +176,11 @@ export class OrderService {
     return ResponseOrderDetailDto.fromEntity(order, {
       statuses: allowedStatusesOf(facts),
       shippingStatuses: allowedShippingStatusesOf(facts),
+      refundableAmount:
+        refundableCentsOf({
+          status: order.status,
+          payments: order.payments.getItems(),
+        }) / 100,
     });
   }
 
@@ -190,6 +204,7 @@ export class OrderService {
           userId,
           enqueueCheckoutExpire,
           enqueueRefund,
+          'full',
         );
 
         return ResponseOrderDto.fromEntity(order);
@@ -199,8 +214,8 @@ export class OrderService {
 
   /**
    * An admin moves any order's status along the allowed moves; CANCELLED
-   * runs the shopper cancel's steps, a paid order included (its PAID charge
-   * stays PAID).
+   * runs the cancel steps without a refund (its PAID charge stays PAID and
+   * the admin refunds it in a separate step).
    */
   updateStatus(
     idOrOrderNumber: string,
@@ -220,6 +235,7 @@ export class OrderService {
             actorId,
             enqueueCheckoutExpire,
             enqueueRefund,
+            'none',
           );
         } else {
           order.status = status;
@@ -231,7 +247,11 @@ export class OrderService {
     );
   }
 
-  /** An admin moves any order's shipping status along the allowed moves. */
+  /**
+   * An admin moves any order's shipping status along the allowed moves; an
+   * order with a refund line moves no further. RETURNED cancels the order
+   * without a refund.
+   */
   updateShippingStatus(
     idOrOrderNumber: string,
     shippingStatus: ShippingStatus,
@@ -251,6 +271,7 @@ export class OrderService {
             actorId,
             enqueueCheckoutExpire,
             enqueueRefund,
+            'none',
           );
         } else if (shippingStatus === ShippingStatus.DELIVERED) {
           await this.deliverLocked(order, actorId);
@@ -263,10 +284,14 @@ export class OrderService {
     );
   }
 
-  /** An admin refunds part or all of an order's PAID online charge. */
+  /**
+   * An admin refunds part or all of a CANCELLED order's PAID online charge,
+   * with a reason when it is less than was paid.
+   */
   refund(
     idOrOrderNumber: string,
     amount: number,
+    reason: string | undefined,
     actorId: ActorId,
   ): Promise<ResponsePaymentDto> {
     return this.orderRepository.transactionalWithOutbox(
@@ -277,8 +302,11 @@ export class OrderService {
           amount,
           actorId,
           enqueueRefund,
+          reason,
         );
-        return ResponsePaymentDto.fromEntity(refund as Payment);
+        return ResponsePaymentDto.fromEntity(refund as Payment, {
+          withRefundReason: true,
+        });
       },
     );
   }
@@ -298,7 +326,9 @@ export class OrderService {
           actorId,
           enqueueRefund,
         );
-        return ResponsePaymentDto.fromEntity(refund);
+        return ResponsePaymentDto.fromEntity(refund, {
+          withRefundReason: true,
+        });
       },
     );
   }
@@ -438,13 +468,16 @@ export class OrderService {
   /**
    * A locked order's cancel steps: releases each item's held stock (RELEASE),
    * fails the PENDING charges, cancels the order and queues the expiry of any
-   * open checkout session. A PAID charge is left as it is.
+   * open checkout session. A PAID charge is left as it is; `'full'` (the
+   * shopper's cancel) also refunds it in full, `'none'` (an admin cancel or a
+   * return) leaves the refund to the admin's separate step.
    */
   private async cancelLocked(
     order: Order,
     actorId: ActorId,
     enqueueCheckoutExpire: EnqueueCheckoutExpire,
     enqueueRefund: EnqueueRefund,
+    refund: 'full' | 'none',
   ): Promise<void> {
     const items = [...order.items.getItems()].sort((a, b) =>
       a.productVariant.id.localeCompare(b.productVariant.id),
@@ -486,7 +519,14 @@ export class OrderService {
         });
       }
     }
-    await this.refundService.startLocked(order, 'rest', actorId, enqueueRefund);
+    if (refund === 'full') {
+      await this.refundService.startLocked(
+        order,
+        'rest',
+        actorId,
+        enqueueRefund,
+      );
+    }
   }
 
   private async deliverLocked(order: Order, actorId: ActorId): Promise<void> {
@@ -572,6 +612,10 @@ export class OrderService {
       notAMove: [
         ERROR_MESSAGES.ORDER.SHIPPING_STATUS_NOT_ALLOWED(from, to),
         ERROR_DESCRIPTIONS.ORDER.STATUS_NOT_ALLOWED,
+      ],
+      refunded: [
+        ERROR_MESSAGES.ORDER.SHIPPING_REFUNDED,
+        ERROR_DESCRIPTIONS.ORDER.SHIPPING_REFUNDED,
       ],
       notConfirmed: [
         ERROR_MESSAGES.ORDER.SHIPPING_NEEDS_CONFIRMED,

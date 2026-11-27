@@ -7,7 +7,7 @@ import {
   PaymentType,
   ShippingStatus,
 } from '@repo/constants';
-import { ResponseOrderDto } from './response-order.dto.js';
+import { ResponseOrderDto, ResponsePaymentDto } from './response-order.dto.js';
 import { Order } from '../entities/order.entity.js';
 import { OrderItem } from '../entities/order-item.entity.js';
 import { Payment } from '../entities/payment.entity.js';
@@ -112,5 +112,38 @@ describe('ResponseOrderDto', () => {
         transactionId: null,
       }),
     ]);
+  });
+
+  it('ResponsePaymentDto has refundReason only with withRefundReason', () => {
+    const order = orderWith();
+    const refund = Object.assign(new Payment(), {
+      id: 'refund-1',
+      order,
+      method: PaymentMethod.CARD,
+      amount: '40.00',
+      refundReason: 'Cancellation fee',
+    });
+
+    const plain = JSON.parse(
+      JSON.stringify(ResponsePaymentDto.fromEntity(refund)),
+    ) as Record<string, unknown>;
+    expect(plain).not.toHaveProperty('refundReason');
+    expect(
+      ResponsePaymentDto.fromEntity(refund, { withRefundReason: true })
+        .refundReason,
+    ).toBe('Cancellation fee');
+  });
+
+  it('ResponseOrderDto.fromEntity passes withRefundReason to its payments', () => {
+    const order = orderWith();
+
+    const plain = JSON.parse(
+      JSON.stringify(ResponseOrderDto.fromEntity(order)),
+    ) as { payments: Record<string, unknown>[] };
+    expect(plain.payments[0]).not.toHaveProperty('refundReason');
+    expect(
+      ResponseOrderDto.fromEntity(order, { withRefundReason: true }).payments[0]
+        .refundReason,
+    ).toBeNull();
   });
 });

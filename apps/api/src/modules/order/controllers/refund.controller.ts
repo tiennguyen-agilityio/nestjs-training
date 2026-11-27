@@ -31,7 +31,7 @@ export class RefundController {
   @ApiOperation({
     summary: 'Retry a FAILED refund (admin)',
     description:
-      'Adds a new PENDING REFUND with the same amount and queues it at the provider through the outbox; the FAILED row stays as history. The amount check of POST /orders/{idOrOrderNumber}/refunds applies.',
+      'Only a FAILED refund of a CANCELLED order that was not retried yet, while no other refund of the order is PENDING or PAID; anything else returns 409. Adds a new PENDING REFUND with the same amount and reason and queues it at the provider through the outbox; the FAILED row stays as history (marked retried). The amount may not exceed the PAID charge.',
   })
   @ApiDataResponse(HttpStatus.CREATED, ResponsePaymentDto)
   @ApiErrorResponse(HttpStatus.NOT_FOUND, ERROR_MESSAGES.PAYMENT.NOT_FOUND, {
@@ -62,15 +62,6 @@ export class RefundController {
     field: 'amount',
     description: ERROR_DESCRIPTIONS.ORDER.NOT_REFUNDABLE,
   })
-  @ApiErrorResponse(
-    HttpStatus.CONFLICT,
-    ERROR_MESSAGES.ORDER.ALREADY_REFUNDED,
-    {
-      errCode: ERROR_CODES.ORDER.ALREADY_REFUNDED,
-      field: 'amount',
-      description: ERROR_DESCRIPTIONS.ORDER.ALREADY_REFUNDED,
-    },
-  )
   retry(
     @AuthUser() user: User,
     @Param({ schema: idParamSchema }) { id }: IdParam,

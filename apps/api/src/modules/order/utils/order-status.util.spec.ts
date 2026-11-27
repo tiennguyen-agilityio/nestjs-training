@@ -22,6 +22,7 @@ const factsOf = (overrides: Partial<StatusFacts> = {}): StatusFacts => ({
   status: OrderStatus.PENDING,
   shippingStatus: ShippingStatus.PENDING,
   charges: [charge(PaymentMethod.COD, PaymentStatus.PENDING)],
+  hasRefund: false,
   ...overrides,
 });
 
@@ -158,6 +159,32 @@ describe('shippingMoveBlockOf RETURNED', () => {
         ShippingStatus.RETURNED,
       ),
     ).toBe('paymentHeld');
+  });
+});
+
+describe('shippingMoveBlockOf with a refund', () => {
+  it('a shipping move of an order with a refund is blocked as refunded', () => {
+    const paid = [charge(PaymentMethod.CARD, PaymentStatus.PAID, 'pi_1')];
+    const unshipped = factsOf({
+      status: OrderStatus.CONFIRMED,
+      charges: paid,
+      hasRefund: true,
+    });
+    expect(shippingMoveBlockOf(unshipped, ShippingStatus.SHIPPING)).toBe(
+      'refunded',
+    );
+    const shipping = { ...unshipped, shippingStatus: ShippingStatus.SHIPPING };
+    expect(shippingMoveBlockOf(shipping, ShippingStatus.DELIVERED)).toBe(
+      'refunded',
+    );
+    expect(shippingMoveBlockOf(shipping, ShippingStatus.RETURNED)).toBe(
+      'refunded',
+    );
+    expect(allowedShippingStatusesOf(unshipped)).toEqual([]);
+    expect(allowedShippingStatusesOf(shipping)).toEqual([]);
+    expect(shippingMoveBlockOf(shipping, ShippingStatus.PENDING)).toBe(
+      'notAMove',
+    );
   });
 });
 

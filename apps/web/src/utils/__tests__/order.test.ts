@@ -21,7 +21,7 @@ import {
   formatOrderDateTime,
   getCancelOrderErrorMessage,
   chargeMethodOf,
-  refundableOf,
+  hasUnrefundedOnlinePayment,
   getOrderSuccessHeadingKind,
   getOrderSuccessPaymentView,
   getPayByCountdown,
@@ -697,48 +697,49 @@ describe('canRetryPayment', () => {
   })
 })
 
-describe('refundableOf', () => {
-  const refund = (status: PaymentStatus, amount: number) => ({
+describe('hasUnrefundedOnlinePayment', () => {
+  const refund = (status: PaymentStatus) => ({
     ...charge(PaymentMethod.CARD, status),
-    id: `refund-${status}-${amount}`,
+    id: `refund-${status}`,
     type: PaymentType.REFUND,
-    amount,
   })
 
-  it('refundableOf is the PAID online charge until a refund holds', () => {
-    const paid = charge(PaymentMethod.CARD, PaymentStatus.PAID)
-    expect(
-      refundableOf(
-        orderOf(OrderPaymentStatus.PAID, {
-          payments: [paid, refund(PaymentStatus.FAILED, 10)],
-        }),
-      ),
-    ).toBe(20)
-    for (const held of [PaymentStatus.PENDING, PaymentStatus.PAID]) {
+  it('hasUnrefundedOnlinePayment is true for a PAID card or PayPal charge with no refund line', () => {
+    for (const method of [PaymentMethod.CARD, PaymentMethod.PAYPAL]) {
       expect(
-        refundableOf(
-          orderOf(OrderPaymentStatus.PARTIALLY_REFUNDED, {
-            payments: [paid, refund(held, 5)],
+        hasUnrefundedOnlinePayment(
+          orderOf(OrderPaymentStatus.PAID, {
+            payments: [charge(method, PaymentStatus.PAID)],
           }),
         ),
-      ).toBe(0)
+      ).toBe(true)
     }
   })
 
-  it('refundableOf is 0 for COD', () => {
+  it('hasUnrefundedOnlinePayment is false for COD, an unpaid charge or any refund line', () => {
     expect(
-      refundableOf(
+      hasUnrefundedOnlinePayment(
         orderOf(OrderPaymentStatus.PAID, {
           payments: [charge(PaymentMethod.COD, PaymentStatus.PAID)],
         }),
       ),
-    ).toBe(0)
+    ).toBe(false)
     expect(
-      refundableOf(
+      hasUnrefundedOnlinePayment(
         orderOf(OrderPaymentStatus.PENDING, {
           payments: [charge(PaymentMethod.CARD, PaymentStatus.PENDING)],
         }),
       ),
-    ).toBe(0)
+    ).toBe(false)
+    expect(
+      hasUnrefundedOnlinePayment(
+        orderOf(OrderPaymentStatus.PAID, {
+          payments: [
+            charge(PaymentMethod.CARD, PaymentStatus.PAID),
+            refund(PaymentStatus.FAILED),
+          ],
+        }),
+      ),
+    ).toBe(false)
   })
 })

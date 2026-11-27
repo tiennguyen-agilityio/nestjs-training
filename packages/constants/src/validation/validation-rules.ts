@@ -68,6 +68,7 @@ export const VALIDATION_RULES = {
     POSTAL_CODE_MAX_LENGTH: 20,
     NOTE_MAX_LENGTH: 1000,
     NUMBER_MAX_LENGTH: 20,
+    REFUND_REASON_MAX_LENGTH: 500,
   },
   INVENTORY: {
     // Available quantity (stock − reserved) at or below this is LOW.

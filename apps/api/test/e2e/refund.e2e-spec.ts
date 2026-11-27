@@ -39,6 +39,13 @@ interface PaymentBody {
   method: string;
   status: string;
   amount: number;
+  refundReason?: string | null;
+}
+
+interface DetailBody {
+  paymentStatus: string;
+  refundableAmount?: number;
+  payments: PaymentBody[];
 }
 
 interface ErrorBody {
@@ -188,15 +195,53 @@ describe('Refunds (e2e)', () => {
       [orderId],
     );
 
+  /** Units the order's variants still hold for it (0 once released). */
+  const reservedOf = async (orderId: string): Promise<number> => {
+    const [row] = await execute<{ reserved: number }[]>(
+      `select coalesce(sum(v.reserved_quantity), 0)::int as reserved from product_variants v join order_items i on i.product_variant_id = v.id where i.order_id = ?`,
+      [orderId],
+    );
+    return row.reserved;
+  };
+
   const asAdmin = async (): Promise<void> => {
     signIn((await createUser(UserRole.ADMIN)).clerkId);
   };
 
-  const refund = (orderId: string, amount: unknown) =>
+  const refund = (orderId: string, amount: unknown, reason?: string) =>
     request(app.getHttpServer())
       .post(`${ORDERS}/${encodeURIComponent(orderId)}/refunds`)
       .set('Idempotency-Key', randomUUID())
-      .send({ amount });
+      .send(reason === undefined ? { amount } : { amount, reason });
+
+  /** A paid card order an admin has cancelled; the admin stays signed in. */
+  const cancelledPaidOrder = async (): Promise<OrderBody> => {
+    const order = await paidCardOrder();
+    await asAdmin();
+    await request(app.getHttpServer())
+      .patch(`${ORDERS}/${order.id}/status`)
+      .send({ status: 'CANCELLED' })
+      .expect(200);
+    return order;
+  };
+
+  const detailOf = async (orderId: string): Promise<DetailBody> =>
+    (
+      (
+        await request(app.getHttpServer())
+          .get(`${ORDERS}/${orderId}`)
+          .expect(200)
+      ).body as { data: DetailBody }
+    ).data;
+
+  const insertFailedRefund = async (orderId: string): Promise<string> => {
+    const [{ id }] = await execute<{ id: string }[]>(
+      `insert into payments (id, order_id, type, method, status, amount, currency, failure_reason, refund_reason, created_at, updated_at)
+       values (gen_random_uuid(), ?, 'REFUND', 'CARD', 'FAILED', 12.5, 'USD', 'lost_or_stolen_card', 'Cancellation fee', now(), now()) returning id`,
+      [orderId],
+    );
+    return id;
+  };
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -214,8 +259,9 @@ describe('Refunds (e2e)', () => {
     await app.close();
   });
 
-  it('cancelling a paid card order creates a PENDING refund (AC1)', async () => {
+  it('an admin cancel of a paid order makes no refund (AC2)', async () => {
     const order = await paidCardOrder();
+    expect(await reservedOf(order.id)).toBe(2);
     await asAdmin();
 
     await request(app.getHttpServer())
@@ -223,15 +269,21 @@ describe('Refunds (e2e)', () => {
       .send({ status: 'CANCELLED' })
       .expect(200);
 
-    const refunds = await refundsOf(order.id);
-    expect(refunds).toHaveLength(1);
-    expect(refunds[0]).toMatchObject({ method: 'CARD' });
-    expect(Number(refunds[0].amount)).toBe(order.totalAmount);
-    expect(refunds[0].status).not.toBe('PAID');
+    const [row] = await execute<{ status: string }[]>(
+      `select status from orders where id = ?`,
+      [order.id],
+    );
+    expect(row.status).toBe('CANCELLED');
+    expect(await reservedOf(order.id)).toBe(0);
+    expect(await refundsOf(order.id)).toEqual([]);
   });
 
-  it('RETURNED of a paid order creates a PENDING refund (AC3)', async () => {
+  it('RETURNED of a paid PayPal order makes no refund (AC3)', async () => {
     const order = await paidCardOrder('SHIPPING');
+    await execute(
+      `update payments set method = 'PAYPAL' where order_id = ? and type = 'CHARGE'`,
+      [order.id],
+    );
     await asAdmin();
 
     await request(app.getHttpServer())
@@ -239,54 +291,113 @@ describe('Refunds (e2e)', () => {
       .send({ shippingStatus: 'RETURNED' })
       .expect(200);
 
-    const refunds = await refundsOf(order.id);
-    expect(refunds).toHaveLength(1);
-    expect(Number(refunds[0].amount)).toBe(order.totalAmount);
+    const [row] = await execute<{ status: string; shipping_status: string }[]>(
+      `select status, shipping_status from orders where id = ?`,
+      [order.id],
+    );
+    expect(row).toEqual({ status: 'CANCELLED', shipping_status: 'RETURNED' });
+    expect(await reservedOf(order.id)).toBe(0);
+    expect(await refundsOf(order.id)).toEqual([]);
   });
 
-  it('POST /orders/:id/refunds creates a partial refund (AC4)', async () => {
-    const order = await paidCardOrder();
-    await asAdmin();
+  it('a shipping change of an order with a refund returns 409 (AC7)', async () => {
+    for (const refundStatus of ['PENDING', 'PAID', 'FAILED']) {
+      const order = await paidCardOrder();
+      await execute(
+        `insert into payments (id, order_id, type, method, status, amount, currency, created_at, updated_at) values (?, ?, 'REFUND', 'CARD', ?, 5, 'USD', now(), now())`,
+        [randomUUID(), order.id, refundStatus],
+      );
+      await asAdmin();
 
-    const response = await refund(order.orderNumber, 10).expect(201);
+      await request(app.getHttpServer())
+        .patch(`${ORDERS}/${order.id}/shipping-status`)
+        .send({ shippingStatus: 'SHIPPING' })
+        .expect(409);
+
+      const [row] = await execute<{ shipping_status: string }[]>(
+        `select shipping_status from orders where id = ?`,
+        [order.id],
+      );
+      expect(row.shipping_status).toBe('PENDING');
+    }
+  });
+
+  it('the admin refunds a cancelled order with a reason (AC4)', async () => {
+    const order = await cancelledPaidOrder();
+    expect((await detailOf(order.id)).refundableAmount).toBe(order.totalAmount);
+
+    const response = await refund(
+      order.orderNumber,
+      10,
+      'Cancellation fee',
+    ).expect(201);
 
     const created = (response.body as { data: PaymentBody }).data;
     expect(created).toMatchObject({
       type: 'REFUND',
       method: 'CARD',
       amount: 10,
+      refundReason: 'Cancellation fee',
     });
     expect(await refundsOf(order.id)).toHaveLength(1);
+
+    await execute(
+      `update payments set status = 'PAID', completed_at = now() where id = ?`,
+      [created.id],
+    );
+    const detail = await detailOf(order.id);
+    expect(detail.paymentStatus).toBe('PARTIALLY_REFUNDED');
+    expect(detail.refundableAmount).toBe(0);
   });
 
-  it('POST /orders/:id/refunds over the charge or a second time returns 409 (AC5)', async () => {
-    const order = await paidCardOrder();
-    await asAdmin();
+  it('a lower refund without a reason is 400 and above the paid amount is 409 (AC5)', async () => {
+    const order = await cancelledPaidOrder();
 
-    const over = await refund(order.id, order.totalAmount + 1).expect(409);
+    const missing = await refund(order.id, 10).expect(400);
+    expect((missing.body as ErrorBody).errors[0]).toMatchObject({
+      errCode: 'refundReasonRequired',
+      field: 'reason',
+    });
+    await refund(order.id, 10, '   ').expect(400);
+
+    const over = await refund(order.id, order.totalAmount + 10, 'x').expect(
+      409,
+    );
     expect((over.body as ErrorBody).errors[0]).toMatchObject({
       errCode: 'refundExceedsPaid',
       field: 'amount',
       description: `At most ${order.totalAmount.toFixed(2)} can still be refunded.`,
     });
+    expect(await refundsOf(order.id)).toEqual([]);
 
-    await refund(order.id, 10).expect(201);
-    const second = await refund(order.id, 5).expect(409);
+    await refund(order.id, order.totalAmount).expect(201);
+    const second = await refund(order.id, 5, 'again').expect(409);
     expect((second.body as ErrorBody).errors[0]).toMatchObject({
       errCode: 'alreadyRefunded',
-      field: 'amount',
     });
     expect(await refundsOf(order.id)).toHaveLength(1);
   });
 
-  it('POST /payments/:id/retry retries a FAILED refund (AC6)', async () => {
-    const order = await paidCardOrder();
-    const [{ id: failedId }] = await execute<{ id: string }[]>(
-      `insert into payments (id, order_id, type, method, status, amount, currency, failure_reason, created_at, updated_at)
-       values (gen_random_uuid(), ?, 'REFUND', 'CARD', 'FAILED', 12.5, 'USD', 'lost_or_stolen_card', now(), now()) returning id`,
-      [order.id],
-    );
-    await asAdmin();
+  it('no refund before the order is cancelled (AC6)', async () => {
+    for (const shipping of ['PENDING', 'SHIPPING', 'DELIVERED']) {
+      const order = await paidCardOrder(shipping);
+      await asAdmin();
+
+      const response = await refund(order.id, order.totalAmount).expect(409);
+      expect((response.body as ErrorBody).errors[0]).toMatchObject({
+        errCode: 'refundNeedsCancelled',
+      });
+      expect((await detailOf(order.id)).refundableAmount).toBe(0);
+      expect(await refundsOf(order.id)).toEqual([]);
+    }
+  });
+
+  it('an order with a failed refund only retries it', async () => {
+    const order = await cancelledPaidOrder();
+    const failedId = await insertFailedRefund(order.id);
+
+    await refund(order.id, order.totalAmount).expect(409);
+    expect((await detailOf(order.id)).refundableAmount).toBe(0);
 
     const response = await request(app.getHttpServer())
       .post(`${PAYMENTS}/${failedId}/retry`)
@@ -294,14 +405,40 @@ describe('Refunds (e2e)', () => {
       .expect(201);
 
     const created = (response.body as { data: PaymentBody }).data;
-    expect(created).toMatchObject({ type: 'REFUND', amount: 12.5 });
+    expect(created).toMatchObject({
+      type: 'REFUND',
+      amount: 12.5,
+      refundReason: 'Cancellation fee',
+    });
     expect(created.id).not.toBe(failedId);
     const refunds = await refundsOf(order.id);
     expect(refunds).toHaveLength(2);
     expect(refunds.find((row) => row.id === failedId)?.status).toBe('FAILED');
   });
 
-  it('POST /orders/:id/cancel of a CONFIRMED paid card order cancels it and creates a PENDING refund (AC1)', async () => {
+  it("the admin detail has refundableAmount; the shopper's order detail has no refundReason", async () => {
+    const order = await cancelledPaidOrder();
+    await insertFailedRefund(order.id);
+
+    const admin = await detailOf(order.id);
+    expect(admin.refundableAmount).toBe(0);
+    expect(
+      admin.payments.find((payment) => payment.type === 'REFUND')?.refundReason,
+    ).toBe('Cancellation fee');
+
+    const [{ clerk_id: clerkId }] = await execute<{ clerk_id: string }[]>(
+      `select u.clerk_id from users u join orders o on o.user_id = u.id where o.id = ?`,
+      [order.id],
+    );
+    signIn(clerkId);
+    const shopper = await detailOf(order.id);
+    expect(shopper).not.toHaveProperty('refundableAmount');
+    for (const payment of shopper.payments) {
+      expect(payment).not.toHaveProperty('refundReason');
+    }
+  });
+
+  it('a shopper cancel of a paid card order refunds it in full (AC1)', async () => {
     const order = await paidCardOrder();
 
     const response = await request(app.getHttpServer())
@@ -311,6 +448,7 @@ describe('Refunds (e2e)', () => {
     expect((response.body as { data: { status: string } }).data.status).toBe(
       'CANCELLED',
     );
+    expect(await reservedOf(order.id)).toBe(0);
     const refunds = await refundsOf(order.id);
     expect(refunds).toHaveLength(1);
     expect(refunds[0]).toMatchObject({ method: 'CARD' });

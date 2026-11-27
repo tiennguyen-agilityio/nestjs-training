@@ -65,6 +65,7 @@ export const ordersUrlSchema = {
   ...urlSchema,
   status: parseOptionalQueryParam,
   shippingStatus: parseOptionalQueryParam,
+  paymentStatus: parseOptionalQueryParam,
 } as const
 
 function isRoastPriceFilter(value: string): value is RoastPriceFilter {

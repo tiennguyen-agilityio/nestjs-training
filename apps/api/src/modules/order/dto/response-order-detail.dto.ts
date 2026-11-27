@@ -1,12 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderStatus, ShippingStatus } from '@repo/constants';
 import type { Order } from '../entities/order.entity.js';
-import { ResponseOrderDto } from './response-order.dto.js';
+import {
+  ResponseOrderDto,
+  type PaymentDtoOptions,
+} from './response-order.dto.js';
 import { ResponseOrderCustomerDto } from './response-order-row.dto.js';
 
-export interface AllowedStatuses {
+/** What only an active admin's detail carries. */
+export interface AdminOrderFacts extends PaymentDtoOptions {
   statuses: OrderStatus[];
   shippingStatuses: ShippingStatus[];
+  refundableAmount: number;
 }
 
 /** One order read through `GET /orders/:idOrOrderNumber`; `user`, `items` and `payments` must be loaded. */
@@ -28,22 +33,29 @@ export class ResponseOrderDetailDto extends ResponseOrderDto {
   })
   allowedShippingStatuses?: ShippingStatus[];
 
+  @ApiPropertyOptional({
+    description:
+      'Admin only: what can be refunded now — the paid card or PayPal charge of a CANCELLED order with no refund line, else 0.',
+  })
+  refundableAmount?: number;
+
   static override fromEntity(
     order: Order,
-    allowed?: AllowedStatuses,
+    admin?: AdminOrderFacts,
   ): ResponseOrderDetailDto {
     const dto = Object.assign(
       new ResponseOrderDetailDto(),
-      ResponseOrderDto.fromEntity(order),
+      ResponseOrderDto.fromEntity(order, { withRefundReason: Boolean(admin) }),
     );
     dto.customer = {
       firstName: order.user.firstName,
       lastName: order.user.lastName,
       email: order.user.email,
     };
-    if (allowed) {
-      dto.allowedStatuses = allowed.statuses;
-      dto.allowedShippingStatuses = allowed.shippingStatuses;
+    if (admin) {
+      dto.allowedStatuses = admin.statuses;
+      dto.allowedShippingStatuses = admin.shippingStatuses;
+      dto.refundableAmount = admin.refundableAmount;
     }
     return dto;
   }

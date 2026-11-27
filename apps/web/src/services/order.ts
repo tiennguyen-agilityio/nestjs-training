@@ -14,7 +14,11 @@ import type {
   Response as ApiResponse,
   ResponseMeta,
 } from '@/types/api'
-import type { OrderStatus, ShippingStatus } from '@repo/constants'
+import type {
+  OrderPaymentStatus,
+  OrderStatus,
+  ShippingStatus,
+} from '@repo/constants'
 import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
 
 export interface FetchOrdersOptions {
@@ -24,6 +28,7 @@ export interface FetchOrdersOptions {
   search?: string
   status?: OrderStatus
   shippingStatus?: ShippingStatus
+  paymentStatus?: OrderPaymentStatus
 }
 
 const toApiErrorResponse = (input: {
@@ -118,18 +123,17 @@ type RefundResult =
     }
 
 /**
- * `POST /orders/:id/refunds`: an admin refunds part of an order's paid online
- * charge. The `Idempotency-Key` makes a retry replay the first result.
+ * `POST /orders/:id/refunds`: an admin refunds part or all of a cancelled
+ * order's paid online charge, with a reason when it is less than was paid. The `Idempotency-Key` makes a retry replay the first result.
  */
 export async function createRefund(
   orderId: string,
-  amount: CreateRefundPayload['amount'],
+  body: CreateRefundPayload,
   options: {
     getToken: () => Promise<string | null>
     idempotencyKey: string
   },
 ): Promise<RefundResult> {
-  const body: CreateRefundPayload = { amount }
   const result = await apiClient.post(
     `${API_ROUTES.ORDERS}/${encodeURIComponent(orderId)}/refunds`,
     body,
@@ -173,7 +177,15 @@ export async function fetchOrders(
   | { ok: true; orders: OrderSummary[]; meta?: ResponseMeta }
   | { ok: false; error: ApiErrorResponse }
 > {
-  const { getToken, page, limit, search, status, shippingStatus } = options
+  const {
+    getToken,
+    page,
+    limit,
+    search,
+    status,
+    shippingStatus,
+    paymentStatus,
+  } = options
   const result = await apiClient.get<ApiResponse<OrderSummary[]>>(
     API_ROUTES.ORDERS,
     {
@@ -185,6 +197,7 @@ export async function fetchOrders(
         search: search?.trim(),
         status,
         shippingStatus,
+        paymentStatus,
       },
       fallbackError: API_FALLBACK_ERRORS.ORDERS_LOAD,
     },

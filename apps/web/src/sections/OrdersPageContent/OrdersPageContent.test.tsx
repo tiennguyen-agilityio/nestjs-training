@@ -7,6 +7,7 @@ import {
   ShippingStatus,
 } from '@repo/constants'
 
+import { ALL_PAYMENT_STATUS_VALUE } from '@/constants/order'
 import { ROUTES, dashboardOrderPath } from '@/constants/routes'
 import OrdersPageContent from '@/sections/OrdersPageContent'
 import type { OrderSummary } from '@/types/order'
@@ -154,6 +155,50 @@ describe('OrdersPageContent', () => {
     expect(
       screen.getByRole('combobox', { name: 'Status filter' }),
     ).toBeInTheDocument()
+  })
+
+  it('the Payment status filter sends paymentStatus', async () => {
+    const user = userEvent.setup()
+    mockUrlState = {
+      ...mockUrlState,
+      search: 'lan',
+      status: OrderStatus.CANCELLED,
+      paymentStatus: OrderPaymentStatus.PAID,
+    }
+    render(<OrdersPageContent />)
+
+    expect(mockUseOrders).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        search: 'lan',
+        status: OrderStatus.CANCELLED,
+        paymentStatus: OrderPaymentStatus.PAID,
+      }),
+    )
+
+    const filter = screen.getByRole('combobox', {
+      name: 'Payment status filter',
+    })
+    await user.selectOptions(filter, OrderPaymentStatus.REFUNDED)
+    expect(mockUpdate).toHaveBeenLastCalledWith({
+      paymentStatus: OrderPaymentStatus.REFUNDED,
+      page: 1,
+    })
+
+    await user.selectOptions(filter, ALL_PAYMENT_STATUS_VALUE)
+    expect(mockUpdate).toHaveBeenLastCalledWith({
+      paymentStatus: null,
+      page: 1,
+    })
+  })
+
+  it('OrdersPageContent ignores an unknown payment status in the URL', () => {
+    mockUrlState = { ...mockUrlState, paymentStatus: 'foo' }
+
+    render(<OrdersPageContent />)
+
+    expect(mockUseOrders).toHaveBeenLastCalledWith(
+      expect.objectContaining({ paymentStatus: undefined }),
+    )
   })
 
   it('OrdersPageContent ignores an unknown status in the URL', () => {

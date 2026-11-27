@@ -59,6 +59,8 @@ export const ERROR_CODES = {
     NOT_REFUNDABLE: 'notRefundable',
     REFUND_NOT_RETRYABLE: 'refundNotRetryable',
     ALREADY_REFUNDED: 'alreadyRefunded',
+    REFUND_NEEDS_CANCELLED: 'refundNeedsCancelled',
+    REFUND_REASON_REQUIRED: 'refundReasonRequired',
   },
   PAYMENT: {
     NOT_FOUND: 'paymentNotFound',

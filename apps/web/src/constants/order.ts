@@ -1,7 +1,13 @@
 import type { TableColumn } from '@/components/Table'
-import { OrderStatus, PaymentMethod, ShippingStatus } from '@repo/constants'
+import {
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+  ShippingStatus,
+} from '@repo/constants'
 
 import type { OptionItem } from '@/types/common'
+import { getPaymentStatusPresentation } from '@/utils/order'
 
 export const OUT_OF_STOCK_LABEL = 'Out of stock'
 export const LOW_STOCK_LABEL = 'Low Stock'
@@ -29,6 +35,15 @@ export const SHIPPING_STATUS_OPTIONS: OptionItem[] = [
   { value: ShippingStatus.SHIPPING, label: 'Shipping' },
   { value: ShippingStatus.DELIVERED, label: 'Delivered' },
   { value: ShippingStatus.RETURNED, label: 'Returned' },
+]
+
+export const ALL_PAYMENT_STATUS_VALUE = 'all'
+export const PAYMENT_STATUS_FILTER_OPTIONS: OptionItem[] = [
+  { value: ALL_PAYMENT_STATUS_VALUE, label: 'All payment statuses' },
+  ...Object.values(OrderPaymentStatus).map((value) => ({
+    value,
+    label: getPaymentStatusPresentation(value).label,
+  })),
 ]
 
 export const ORDER_TRANSITIONS: Readonly<
