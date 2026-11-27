@@ -63,6 +63,8 @@ export interface PlacedOrderPayment {
   completedAt: string | null
   failureReason: string | null
   retriedAt?: string | null
+  /** Admin only: why a refund is less than was paid (or any note the admin gave). */
+  refundReason?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -134,6 +136,8 @@ export type OrderDetail = PlacedOrder & {
   customer: OrderCustomer
   allowedStatuses?: OrderStatus[]
   allowedShippingStatuses?: ShippingStatus[]
+  /** Admin only: what can be refunded now (0 unless CANCELLED, paid online and not refunded). */
+  refundableAmount?: number
 }
 export type OrderDetailItem = PlacedOrderItem
 export type OrderPayment = PlacedOrderPayment

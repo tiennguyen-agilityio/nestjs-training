@@ -183,8 +183,13 @@ export function useCreateRefund() {
   const idempotency = useIdempotencyKey()
 
   return useMutation({
-    mutationFn: async (input: { orderId: string; amount: number }) => {
-      const result = await createRefund(input.orderId, input.amount, {
+    mutationFn: async (input: {
+      orderId: string
+      amount: number
+      reason?: string
+    }) => {
+      const { orderId, ...body } = input
+      const result = await createRefund(orderId, body, {
         getToken: () => getToken({ template: CLERK_SESSION_TEMPLATE }),
         idempotencyKey: idempotency.keyFor(input),
       })

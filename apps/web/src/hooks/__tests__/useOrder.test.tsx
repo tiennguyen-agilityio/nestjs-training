@@ -939,12 +939,41 @@ describe('useCreateRefund', () => {
 
     await act(() => result.current.mutateAsync({ orderId: 'o-1', amount: 5 }))
 
-    expect(jest.mocked(createRefund)).toHaveBeenCalledWith('o-1', 5, {
-      getToken: expect.any(Function),
-      idempotencyKey: expect.any(String),
-    })
+    expect(jest.mocked(createRefund)).toHaveBeenCalledWith(
+      'o-1',
+      { amount: 5 },
+      { getToken: expect.any(Function), idempotencyKey: expect.any(String) },
+    )
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: ordersQueryKeys.root,
     })
+  })
+
+  it('useCreateRefund passes the reason', async () => {
+    jest.mocked(useAuth).mockReturnValue({
+      getToken: jest.fn().mockResolvedValue('tok'),
+    } as unknown as ReturnType<typeof useAuth>)
+    jest.mocked(createRefund).mockResolvedValue({ ok: true })
+    const client = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    const { result } = renderHook(() => useCreateRefund(), { wrapper })
+
+    await act(() =>
+      result.current.mutateAsync({
+        orderId: 'o-1',
+        amount: 40,
+        reason: 'Cancellation fee',
+      }),
+    )
+
+    expect(jest.mocked(createRefund)).toHaveBeenCalledWith(
+      'o-1',
+      { amount: 40, reason: 'Cancellation fee' },
+      { getToken: expect.any(Function), idempotencyKey: expect.any(String) },
+    )
   })
 })

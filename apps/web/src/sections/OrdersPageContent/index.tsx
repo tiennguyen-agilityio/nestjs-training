@@ -14,9 +14,11 @@ import { Button } from '@/components/ui/button'
 import { SUCCESS_MESSAGES } from '@/constants/messages'
 import {
   ALL_ORDER_STATUSES_VALUE,
+  ALL_PAYMENT_STATUS_VALUE,
   ALL_SHIPPING_STATUS_VALUE,
   ORDER_STATUS_FILTER_OPTIONS,
   ORDERS_TABLE_COLUMNS,
+  PAYMENT_STATUS_FILTER_OPTIONS,
   SHIPPING_STATUS_OPTIONS,
 } from '@/constants/order'
 import { ROUTES } from '@/constants/routes'
@@ -26,7 +28,11 @@ import {
   useUpdateOrderShippingStatus,
   useUpdateOrderStatus,
 } from '@/hooks/useOrder'
-import { OrderStatus, ShippingStatus } from '@repo/constants'
+import {
+  OrderPaymentStatus,
+  OrderStatus,
+  ShippingStatus,
+} from '@repo/constants'
 import type { OrderSummary } from '@/types/order'
 import { useUrlState } from '@/hooks/useUrlState'
 import { useDebouncedUrlSearch } from '@/hooks/useDebouncedUrlSearch'
@@ -38,7 +44,7 @@ import ListBody from '@/components/ListBody'
 
 export default function OrdersPageContent() {
   const { state, update: updateUrl } = useUrlState(ordersUrlSchema)
-  const { page, search, limit, status, shippingStatus } = state
+  const { page, search, limit, status, shippingStatus, paymentStatus } = state
   const { searchInput, setSearchInput, searchInputRef } = useDebouncedUrlSearch(
     search,
     updateUrl,
@@ -62,6 +68,9 @@ export default function OrdersPageContent() {
   const normalizedShippingStatus = Object.values(ShippingStatus).find(
     (value) => value === shippingStatus,
   )
+  const normalizedPaymentStatus = Object.values(OrderPaymentStatus).find(
+    (value) => value === paymentStatus,
+  )
 
   const {
     orders,
@@ -77,6 +86,7 @@ export default function OrdersPageContent() {
     search: search.trim(),
     status: normalizedStatus,
     shippingStatus: normalizedShippingStatus,
+    paymentStatus: normalizedPaymentStatus,
   })
 
   const totalPages = Math.max(1, meta?.pageCount ?? 1)
@@ -97,6 +107,14 @@ export default function OrdersPageContent() {
     if (typeof value !== 'string') return
     updateUrl({
       shippingStatus: value === ALL_SHIPPING_STATUS_VALUE ? null : value,
+      page: 1,
+    })
+  }
+
+  const handlePaymentStatusChange = (value: unknown) => {
+    if (typeof value !== 'string') return
+    updateUrl({
+      paymentStatus: value === ALL_PAYMENT_STATUS_VALUE ? null : value,
       page: 1,
     })
   }
@@ -222,6 +240,16 @@ export default function OrdersPageContent() {
                 options={SHIPPING_STATUS_OPTIONS}
                 selected={normalizedShippingStatus ?? ALL_SHIPPING_STATUS_VALUE}
                 onValueChange={handleShippingStatusChange}
+              />
+            </div>
+            <div className="flex w-full min-w-0 gap-4 md:w-60 md:max-w-60 md:shrink-0">
+              <Select
+                variant="filter"
+                placeholder="All payment statuses"
+                ariaLabel="Payment status filter"
+                options={PAYMENT_STATUS_FILTER_OPTIONS}
+                selected={normalizedPaymentStatus ?? ALL_PAYMENT_STATUS_VALUE}
+                onValueChange={handlePaymentStatusChange}
               />
             </div>
             <Button

@@ -1792,6 +1792,23 @@
           "enumItems": [],
           "mappedType": "uuid"
         },
+        "refund_reason": {
+          "name": "refund_reason",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
         "retried_at": {
           "name": "retried_at",
           "type": "timestamptz(6)",

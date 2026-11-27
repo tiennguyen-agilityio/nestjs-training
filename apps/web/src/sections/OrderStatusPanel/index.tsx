@@ -13,7 +13,7 @@ import {
 import {
   getOrderStatusPresentation,
   getShippingStatusPresentation,
-  refundableOf,
+  hasUnrefundedOnlinePayment,
 } from '@/utils/order'
 import { getErrorMessage } from '@/utils/form'
 import { cn } from '@/utils/styles'
@@ -66,7 +66,8 @@ export default function OrderStatusPanel({
   const shippingSteps = Object.values(ShippingStatus).filter(
     (status) => status !== order.shippingStatus,
   )
-  const willRefund = refundableOf(order) > 0
+  // Cancelling or returning refunds nothing: the admin refunds in the next step.
+  const refundsNext = hasUnrefundedOnlinePayment(order)
   const isClosed =
     (order.status === OrderStatus.COMPLETED ||
       order.status === OrderStatus.CANCELLED) &&
@@ -214,21 +215,17 @@ export default function OrderStatusPanel({
         isPending={orderStatus.isPending}
         successMessage={SUCCESS_MESSAGES.ORDER_STATUS_UPDATED}
         title={DIALOG_MESSAGES.ORDER.CANCEL.TITLE}
-        renderDescription={(current) => (
-          <>
+        renderDescription={(current) =>
+          refundsNext ? (
+            <span>{DIALOG_MESSAGES.ORDER.CANCEL.ADMIN_REFUND_NEXT}</span>
+          ) : (
             <span>
               {DIALOG_MESSAGES.ORDER.CANCEL.DESCRIPTION(
                 current?.orderNumber ?? order.orderNumber,
               )}
             </span>
-            {willRefund && (
-              <>
-                {' '}
-                <span>{DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED}</span>
-              </>
-            )}
-          </>
-        )}
+          )
+        }
         textAction={DIALOG_MESSAGES.ORDER.CANCEL.ACTION}
         textCancel={DIALOG_MESSAGES.ORDER.CANCEL.KEEP}
         actionVariant="destructive"
@@ -255,10 +252,10 @@ export default function OrderStatusPanel({
                 current?.orderNumber ?? order.orderNumber,
               )}
             </span>
-            {willRefund && (
+            {refundsNext && (
               <>
                 {' '}
-                <span>{DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED}</span>
+                <span>{DIALOG_MESSAGES.ORDER.RETURN.REFUND_NEXT}</span>
               </>
             )}
           </>

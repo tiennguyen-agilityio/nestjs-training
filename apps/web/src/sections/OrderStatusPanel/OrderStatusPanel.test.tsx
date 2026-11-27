@@ -1,10 +1,4 @@
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuth } from '@clerk/nextjs'
@@ -313,26 +307,27 @@ describe('OrderStatusPanel', () => {
     )
   })
 
-  it('OrderStatusPanel says the payment will be refunded for a paid online order', async () => {
-    const paidCard = {
-      paymentStatus: OrderPaymentStatus.PAID,
-      payments: [
-        {
-          id: 'pay-1',
-          orderId: 'o-1',
-          type: PaymentType.CHARGE,
-          method: PaymentMethod.CARD,
-          status: PaymentStatus.PAID,
-          amount: 34,
-          currency: 'USD',
-          transactionId: 'pi_1',
-          completedAt: null,
-          failureReason: null,
-          createdAt: '2026-11-25T09:00:00.000Z',
-          updatedAt: '2026-11-25T09:00:00.000Z',
-        },
-      ],
-    }
+  const paidCard = {
+    paymentStatus: OrderPaymentStatus.PAID,
+    payments: [
+      {
+        id: 'pay-1',
+        orderId: 'o-1',
+        type: PaymentType.CHARGE,
+        method: PaymentMethod.CARD,
+        status: PaymentStatus.PAID,
+        amount: 34,
+        currency: 'USD',
+        transactionId: 'pi_1',
+        completedAt: null,
+        failureReason: null,
+        createdAt: '2026-11-25T09:00:00.000Z',
+        updatedAt: '2026-11-25T09:00:00.000Z',
+      },
+    ],
+  }
+
+  it('the cancel dialog of a paid online order says the refund is the next step (AC9)', async () => {
     const { user } = renderPanel({
       ...paidCard,
       status: OrderStatus.CONFIRMED,
@@ -341,28 +336,25 @@ describe('OrderStatusPanel', () => {
 
     await choose(user, 'Order → Cancelled')
     await user.click(updateButton())
-    const cancelDialog = await screen.findByRole('alertdialog')
-    expect(
-      within(cancelDialog).getByText(
-        DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
-        { exact: false },
-      ),
-    ).toBeInTheDocument()
-    cleanup()
 
-    const returned = renderPanel({ ...paidCard, ...shippingOrder })
-    await choose(returned.user, 'Shipping → Returned')
-    await returned.user.click(updateButton())
-    const returnDialog = await screen.findByRole('alertdialog')
+    const dialog = await screen.findByRole('alertdialog')
     expect(
-      within(returnDialog).getByText(
+      within(dialog).getByText(DIALOG_MESSAGES.ORDER.CANCEL.ADMIN_REFUND_NEXT),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).queryByText(
         DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
         { exact: false },
       ),
-    ).toBeInTheDocument()
+    ).toBeNull()
+    expect(
+      within(dialog).queryByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.DESCRIPTION('CH-1'),
+      ),
+    ).toBeNull()
   })
 
-  it('OrderStatusPanel says nothing about refunds for an unpaid order', async () => {
+  it('the cancel dialog of a COD order keeps the cancel description', async () => {
     const { user } = renderPanel()
 
     await choose(user, 'Order → Cancelled')
@@ -370,11 +362,42 @@ describe('OrderStatusPanel', () => {
 
     const dialog = await screen.findByRole('alertdialog')
     expect(
+      within(dialog).getByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.DESCRIPTION('CH-1'),
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).queryByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.ADMIN_REFUND_NEXT,
+      ),
+    ).toBeNull()
+    expect(
       within(dialog).queryByText(
         DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
-        {
-          exact: false,
-        },
+        { exact: false },
+      ),
+    ).toBeNull()
+  })
+
+  it('the return dialog of a paid order adds the refund-next sentence', async () => {
+    const { user } = renderPanel({ ...paidCard, ...shippingOrder })
+
+    await choose(user, 'Shipping → Returned')
+    await user.click(updateButton())
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).getByText(
+        DIALOG_MESSAGES.ORDER.RETURN.DESCRIPTION('CH-1'),
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(DIALOG_MESSAGES.ORDER.RETURN.REFUND_NEXT),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).queryByText(
+        DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED,
+        { exact: false },
       ),
     ).toBeNull()
   })

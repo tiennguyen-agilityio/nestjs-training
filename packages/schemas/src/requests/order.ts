@@ -48,6 +48,9 @@ export const createRefundSchema = z.object({
     .min(0.01)
     .max(PRICE.MAX)
     .refine((value) => Math.round(value * 100) / 100 === value),
+  // Required when the amount is below what was paid: the API checks it, since
+  // only it knows the paid amount.
+  reason: z.string().trim().max(ORDER.REFUND_REASON_MAX_LENGTH).optional(),
 });
 
 export type CreateRefundPayload = z.input<typeof createRefundSchema>;

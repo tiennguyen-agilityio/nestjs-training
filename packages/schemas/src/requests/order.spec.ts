@@ -101,6 +101,21 @@ describe('updateOrderShippingStatusSchema', () => {
 });
 
 describe('createRefundSchema', () => {
+  it('createRefundSchema accepts a trimmed reason up to 500 characters', () => {
+    expect(
+      createRefundSchema.parse({ amount: 40, reason: '  Cancellation fee ' }),
+    ).toEqual({ amount: 40, reason: 'Cancellation fee' });
+    expect(
+      createRefundSchema.safeParse({ amount: 40, reason: 'a'.repeat(500) })
+        .success,
+    ).toBe(true);
+    expect(
+      createRefundSchema.safeParse({ amount: 40, reason: 'a'.repeat(501) })
+        .success,
+    ).toBe(false);
+    expect(createRefundSchema.parse({ amount: 40 }).reason).toBeUndefined();
+  });
+
   it('createRefundSchema accepts 10.5 and 0.01', () => {
     expect(createRefundSchema.safeParse({ amount: 10.5 }).success).toBe(true);
     expect(createRefundSchema.safeParse({ amount: 0.01 }).success).toBe(true);

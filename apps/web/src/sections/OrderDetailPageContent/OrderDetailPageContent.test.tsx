@@ -362,6 +362,64 @@ describe('OrderDetailPageContent', () => {
     expect(screen.queryByRole('button', { name: 'Cancel order' })).toBeNull()
   })
 
+  it('the shopper sees the payment review message instead of Cancel (AC10)', () => {
+    mockUseOrderDetail.mockReturnValue(
+      state({
+        order: {
+          ...order,
+          payments: [
+            {
+              ...charge,
+              method: PaymentMethod.CARD,
+              status: PaymentStatus.PENDING,
+              transactionId: 'pi_review',
+            },
+          ],
+        },
+      }),
+    )
+    render(<OrderDetailPageContent />)
+
+    const cancel = section('Cancel order')
+    expect(
+      within(cancel).getByText(DIALOG_MESSAGES.ORDER.CANCEL.PAYMENT_REVIEW),
+    ).toBeInTheDocument()
+    expect(
+      within(cancel).queryByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    ).toBeNull()
+  })
+
+  it('a pending charge without a transaction id can still be cancelled', () => {
+    mockUseOrderDetail.mockReturnValue(
+      state({
+        order: {
+          ...order,
+          payments: [
+            {
+              ...charge,
+              method: PaymentMethod.CARD,
+              status: PaymentStatus.PENDING,
+              transactionId: null,
+            },
+          ],
+        },
+      }),
+    )
+    render(<OrderDetailPageContent />)
+
+    const cancel = section('Cancel order')
+    expect(
+      within(cancel).getByRole('button', {
+        name: DIALOG_MESSAGES.ORDER.CANCEL.ACTION,
+      }),
+    ).toBeEnabled()
+    expect(
+      within(cancel).queryByText(DIALOG_MESSAGES.ORDER.CANCEL.PAYMENT_REVIEW),
+    ).toBeNull()
+  })
+
   it('says the order has already shipped and offers no Cancel order', () => {
     mockUseOrderDetail.mockReturnValue(
       state({
@@ -814,6 +872,16 @@ describe('OrderDetailPageContent', () => {
     })
 
     it('PaymentPanel retries a failed refund', async () => {
+      mockUseOrderDetail.mockReturnValue(
+        state({
+          order: {
+            ...refundedOrder,
+            payments: refundedOrder.payments.filter(
+              (payment) => payment.id !== 'refund-pending',
+            ),
+          },
+        }),
+      )
       const user = userEvent.setup()
       render(<OrderDetailPageContent variant="dashboard" />)
 
@@ -827,6 +895,78 @@ describe('OrderDetailPageContent', () => {
         { paymentId: 'refund-failed' },
         expect.any(Object),
       )
+    })
+
+    it('a failed refund shows Retry refund and no Refund panel (AC8)', () => {
+      mockUseOrderDetail.mockReturnValue(
+        state({
+          order: {
+            ...refundedOrder,
+            payments: refundedOrder.payments.filter(
+              (payment) => payment.id !== 'refund-pending',
+            ),
+            refundableAmount: 0,
+          },
+        }),
+      )
+      render(<OrderDetailPageContent variant="dashboard" />)
+
+      expect(
+        within(section('Payment')).getByRole('button', {
+          name: 'Retry refund',
+        }),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Refund' }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: 'Refund' }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('the admin sees the refund reason on its line', () => {
+      const withReason: OrderDetail = {
+        ...refundedOrder,
+        payments: refundedOrder.payments.map((payment) =>
+          payment.id === 'refund-failed'
+            ? { ...payment, refundReason: 'Cancellation fee' }
+            : payment,
+        ),
+      }
+      mockUseOrderDetail.mockReturnValue(state({ order: withReason }))
+      render(<OrderDetailPageContent variant="dashboard" />)
+
+      expect(
+        within(section('Payment')).getByText(/Cancellation fee/),
+      ).toBeInTheDocument()
+    })
+
+    it('PaymentPanel offers no Retry refund while another refund holds or before the order is cancelled', () => {
+      const { unmount } = render(<OrderDetailPageContent variant="dashboard" />)
+      expect(
+        within(section('Payment')).queryByRole('button', {
+          name: 'Retry refund',
+        }),
+      ).not.toBeInTheDocument()
+      unmount()
+
+      mockUseOrderDetail.mockReturnValue(
+        state({
+          order: {
+            ...refundedOrder,
+            status: OrderStatus.COMPLETED,
+            payments: refundedOrder.payments.filter(
+              (payment) => payment.id !== 'refund-pending',
+            ),
+          },
+        }),
+      )
+      render(<OrderDetailPageContent variant="dashboard" />)
+      expect(
+        within(section('Payment')).queryByRole('button', {
+          name: 'Retry refund',
+        }),
+      ).not.toBeInTheDocument()
     })
 
     it('PaymentPanel offers no Retry refund on a refund already retried', () => {

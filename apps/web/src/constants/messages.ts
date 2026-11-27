@@ -25,6 +25,8 @@ export const ERROR_MESSAGES = {
   REFUND_AMOUNT_MIN: 'Enter an amount above 0.',
   REFUND_AMOUNT_MAX: (max: string) => `At most ${max} can be refunded.`,
   REFUND_AMOUNT_DECIMALS: 'Use at most 2 decimals.',
+  REFUND_REASON_REQUIRED: 'Enter a reason when refunding less than was paid.',
+  REFUND_REASON_MAX: `Use at most ${VALIDATION_RULES.ORDER.REFUND_REASON_MAX_LENGTH} characters.`,
   SHIPPING_METHOD_ID_MISSING: 'Missing shipping method id.',
   IMAGE_UPLOAD_NOT_CONFIGURED: 'Image upload is not configured',
   PRODUCT_AVATAR_REQUIRED: 'Main hero image is required',
@@ -244,9 +246,13 @@ export const DIALOG_MESSAGES = {
       DESCRIPTION: (orderNumber: string) =>
         `Order ${orderNumber} will be cancelled and its items go back into stock. This cannot be undone.`,
       WILL_BE_REFUNDED: 'The payment will be refunded.',
+      ADMIN_REFUND_NEXT:
+        'The order will be cancelled and its items go back into stock. Refund it in the next step.',
       CAN_CANCEL:
         'You can cancel until the order ships. Its items go back into stock.',
       SHIPPED: 'Cannot be cancelled: the order has already shipped.',
+      PAYMENT_REVIEW:
+        'Your payment is under review, the order cannot be cancelled yet.',
     },
     REFUND: {
       TITLE: 'Refund this order?',
@@ -254,6 +260,7 @@ export const DIALOG_MESSAGES = {
       KEEP: 'Keep payment',
       DESCRIPTION: (orderNumber: string) =>
         `The amount goes back to the customer of order ${orderNumber} through the payment provider.`,
+      REASON_HINT: 'Required when refunding less than was paid.',
     },
     RETURN: {
       TITLE: 'Mark this order as returned?',
@@ -261,6 +268,7 @@ export const DIALOG_MESSAGES = {
       KEEP: 'Keep shipping',
       DESCRIPTION: (orderNumber: string) =>
         `Order ${orderNumber} will be cancelled and its items go back into stock. This cannot be undone.`,
+      REFUND_NEXT: 'Refund it in the next step.',
     },
     DELETE: {
       ACTION: 'Delete order',

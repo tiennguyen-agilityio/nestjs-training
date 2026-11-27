@@ -80,4 +80,8 @@ export class Payment extends AuditableEntity {
 
   @Property({ type: Date, fieldName: 'retried_at', nullable: true })
   retriedAt: Date | null = null;
+
+  /** Admin only: why a refund is less than was paid (or any note the admin gave). */
+  @Property({ type: 'text', fieldName: 'refund_reason', nullable: true })
+  refundReason: string | null = null;
 }

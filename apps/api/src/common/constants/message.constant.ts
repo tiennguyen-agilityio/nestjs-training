@@ -67,10 +67,14 @@ export const ERROR_MESSAGES = {
       'Order cannot be completed: it is not delivered',
     SHIPPING_NEEDS_CONFIRMED:
       'Shipping cannot start: the order is not confirmed',
+    SHIPPING_REFUNDED: 'Shipping cannot change: the order has a refund',
     REFUND_EXCEEDS_PAID: 'Refunds cannot exceed the amount paid',
     NOT_REFUNDABLE: 'Order has no paid online payment to refund',
     REFUND_NOT_RETRYABLE: 'Only a failed refund can be retried',
     ALREADY_REFUNDED: 'Order already has a refund',
+    REFUND_NEEDS_CANCELLED: 'Only a cancelled order can be refunded',
+    REFUND_REASON_REQUIRED:
+      'A reason is required when refunding less than was paid',
   },
   PAYMENT: {
     NOT_FOUND: 'Payment not found',
@@ -212,6 +216,8 @@ export const ERROR_DESCRIPTIONS = {
     REFUND_NOT_RETRYABLE: 'Check the payment status.',
     ALREADY_REFUNDED:
       'An order is refunded once. Retry its refund if it failed.',
+    REFUND_NEEDS_CANCELLED: 'Cancel the order first, then refund it.',
+    REFUND_REASON_REQUIRED: 'Enter a reason when refunding less than was paid.',
     PAYMENT_HELD_ADMIN:
       'The payment is being reviewed. Wait for it to settle before changing the order.',
     NOT_CANCELLABLE_SHIPPED_SHOPPER:
@@ -220,6 +226,8 @@ export const ERROR_DESCRIPTIONS = {
       'An online order is confirmed by its payment. Wait for the payment.',
     NOT_COMPLETABLE_UNDELIVERED: 'Set the shipping status to Delivered first.',
     SHIPPING_NEEDS_CONFIRMED: 'Confirm the order first.',
+    SHIPPING_REFUNDED:
+      'An order with a refund does not ship. Its shipping status stays as it is.',
   },
   PAYMENT: {
     NOT_FOUND: 'The payment might not exist, or the id is incorrect.',

@@ -176,7 +176,12 @@ export class OrderRepository extends BaseRepository<Order> {
   /** A PENDING REFUND row of the order, saved with the order. */
   async addRefund(
     order: Order,
-    data: { method: PaymentMethod; amount: string; currency: string },
+    data: {
+      method: PaymentMethod;
+      amount: string;
+      currency: string;
+      refundReason?: string | null;
+    },
     actorId: ActorId,
   ): Promise<Payment> {
     const refund = this.createRelated<Payment>(Payment.name, {

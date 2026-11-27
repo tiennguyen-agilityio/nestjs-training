@@ -13,12 +13,15 @@ export interface StatusFacts {
     status: PaymentStatus;
     transactionId: string | null;
   }[];
+  /** A REFUND line in any status: the order no longer ships. */
+  hasRefund: boolean;
 }
 
 export type OrderMoveBlock =
   'notAMove' | 'unpaidOnline' | 'shipped' | 'paymentHeld' | 'notDelivered';
 
-export type ShippingMoveBlock = 'notAMove' | 'notConfirmed' | 'paymentHeld';
+export type ShippingMoveBlock =
+  'notAMove' | 'refunded' | 'notConfirmed' | 'paymentHeld';
 
 const ORDER_STATUS_MOVES: Readonly<
   Record<OrderStatus, readonly OrderStatus[]>
@@ -80,6 +83,7 @@ export const shippingMoveBlockOf = (
   if (!SHIPPING_STATUS_MOVES[facts.shippingStatus].includes(to)) {
     return 'notAMove';
   }
+  if (facts.hasRefund) return 'refunded';
   if (facts.status !== OrderStatus.CONFIRMED) return 'notConfirmed';
   return to === ShippingStatus.RETURNED && hasHeldCharge(facts)
     ? 'paymentHeld'

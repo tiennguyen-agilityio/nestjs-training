@@ -57,11 +57,18 @@ describe('ResponseOrderDetailDto', () => {
     ) as Record<string, unknown>;
     expect(plain).not.toHaveProperty('allowedStatuses');
     expect(plain).not.toHaveProperty('allowedShippingStatuses');
+    expect(plain).not.toHaveProperty('refundableAmount');
+    expect((plain.payments as Record<string, unknown>[])[0]).not.toHaveProperty(
+      'refundReason',
+    );
 
     const withAllowed = ResponseOrderDetailDto.fromEntity(orderOf(user), {
       statuses: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
       shippingStatuses: [ShippingStatus.SHIPPING],
+      refundableAmount: 34,
     });
+    expect(withAllowed.refundableAmount).toBe(34);
+    expect(withAllowed.payments[0].refundReason).toBeNull();
     expect(withAllowed.allowedStatuses).toEqual([
       OrderStatus.CONFIRMED,
       OrderStatus.CANCELLED,

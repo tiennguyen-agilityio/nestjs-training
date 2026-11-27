@@ -984,7 +984,38 @@ describe('OrderService', () => {
       expect(detailOf).toHaveBeenCalledWith(order, {
         statuses: [],
         shippingStatuses: [ShippingStatus.DELIVERED, ShippingStatus.RETURNED],
+        refundableAmount: 0,
       });
+    });
+
+    it('findAnyOne gives a cancelled paid order its refundableAmount', async () => {
+      const order = {
+        id: ORDER_ID,
+        status: OrderStatus.CANCELLED,
+        shippingStatus: ShippingStatus.PENDING,
+        payments: {
+          getItems: () => [
+            {
+              type: PaymentType.CHARGE,
+              method: PaymentMethod.CARD,
+              status: PaymentStatus.PAID,
+              transactionId: 'pi_1',
+              amount: '50.00',
+            },
+          ],
+        },
+      } as unknown as Order;
+      orderRepository.findAnyByIdOrNumber.mockResolvedValue(order);
+      const detailOf = vi
+        .spyOn(ResponseOrderDetailDto, 'fromEntity')
+        .mockReturnValue({} as ResponseOrderDetailDto);
+
+      await service.findAnyOne(ORDER_ID);
+
+      expect(detailOf).toHaveBeenCalledWith(
+        order,
+        expect.objectContaining({ refundableAmount: 50 }),
+      );
     });
 
     it('findAnyOne reads by id for a UUID and by orderNumber otherwise', async () => {
@@ -1326,7 +1357,7 @@ describe('OrderService', () => {
       expect(orderRepository.lockMineForCancel).not.toHaveBeenCalled();
     });
 
-    it('cancel of a paid card order starts a refund of the rest', async () => {
+    it('updateStatus CANCELLED does not refund a paid order', async () => {
       const paid = charge(
         PaymentStatus.PAID,
         'cs_1',
@@ -1340,18 +1371,12 @@ describe('OrderService', () => {
 
       await service.updateStatus(ORDER_ID, OrderStatus.CANCELLED, ADMIN_ID);
 
-      expect(refundService.startLocked).toHaveBeenCalledWith(
-        order,
-        'rest',
-        ADMIN_ID,
-        enqueueRefund,
-      );
-      expect(
-        orderRepository.saveCancelled.mock.invocationCallOrder[0],
-      ).toBeLessThan(refundService.startLocked.mock.invocationCallOrder[0]);
+      expect(order.status).toBe(OrderStatus.CANCELLED);
+      expect(orderRepository.saveCancelled).toHaveBeenCalledTimes(1);
+      expect(refundService.startLocked).not.toHaveBeenCalled();
     });
 
-    it('RETURNED of a paid order starts a refund of the rest', async () => {
+    it('updateShippingStatus RETURNED does not refund a paid order', async () => {
       const paid = charge(
         PaymentStatus.PAID,
         'cs_1',
@@ -1369,29 +1394,38 @@ describe('OrderService', () => {
         ADMIN_ID,
       );
 
-      expect(refundService.startLocked).toHaveBeenCalledWith(
-        order,
-        'rest',
-        ADMIN_ID,
-        enqueueRefund,
-      );
+      expect(order.status).toBe(OrderStatus.CANCELLED);
+      expect(refundService.startLocked).not.toHaveBeenCalled();
     });
 
-    it('cancel of a COD order starts no refund', async () => {
-      const order = orderWith(OrderStatus.CONFIRMED);
-      orderRepository.lockForStatusChange.mockResolvedValue(order);
+    it('updateShippingStatus of an order with a refund throws 409', async () => {
+      for (const refundStatus of [
+        PaymentStatus.PENDING,
+        PaymentStatus.PAID,
+        PaymentStatus.FAILED,
+      ]) {
+        const refund = {
+          ...charge(refundStatus, null, PaymentMethod.CARD),
+          id: `refund-${refundStatus}`,
+          type: PaymentType.REFUND,
+        };
+        const order = orderWith(OrderStatus.CONFIRMED, ShippingStatus.PENDING, [
+          charge(PaymentStatus.PAID, null, PaymentMethod.CARD, 'pi_1'),
+          refund,
+        ]);
+        orderRepository.lockForStatusChange.mockResolvedValue(order);
 
-      await service.updateStatus(ORDER_ID, OrderStatus.CANCELLED, ADMIN_ID);
-
-      expect(refundService.startLocked).toHaveBeenCalledWith(
-        order,
-        'rest',
-        ADMIN_ID,
-        enqueueRefund,
-      );
-      await expect(
-        refundService.startLocked.mock.results[0].value,
-      ).resolves.toBeNull();
+        await refusalOf(
+          service.updateShippingStatus(
+            ORDER_ID,
+            ShippingStatus.SHIPPING,
+            ADMIN_ID,
+          ),
+          'shippingStatus',
+          ERROR_MESSAGES.ORDER.SHIPPING_REFUNDED,
+        );
+        expect(order.shippingStatus).toBe(ShippingStatus.PENDING);
+      }
     });
 
     it('refund locks the order and returns the new refund', async () => {
@@ -1404,7 +1438,9 @@ describe('OrderService', () => {
         .spyOn(ResponsePaymentDto, 'fromEntity')
         .mockReturnValue(dto);
 
-      await expect(service.refund('CH-1', 12.5, ADMIN_ID)).resolves.toBe(dto);
+      await expect(
+        service.refund('CH-1', 12.5, 'Cancellation fee', ADMIN_ID),
+      ).resolves.toBe(dto);
 
       expect(orderRepository.lockForStatusChange).toHaveBeenCalledWith({
         orderNumber: 'CH-1',
@@ -1414,8 +1450,9 @@ describe('OrderService', () => {
         12.5,
         ADMIN_ID,
         enqueueRefund,
+        'Cancellation fee',
       );
-      expect(toDto).toHaveBeenCalledWith(refund);
+      expect(toDto).toHaveBeenCalledWith(refund, { withRefundReason: true });
     });
 
     it("retryRefund locks the payment's order", async () => {
@@ -1424,11 +1461,14 @@ describe('OrderService', () => {
       const dto = { id: 'refund-2' } as ResponsePaymentDto;
       orderRepository.lockForPayment.mockResolvedValue(order);
       refundService.retryLocked.mockResolvedValue(refund);
-      vi.spyOn(ResponsePaymentDto, 'fromEntity').mockReturnValue(dto);
+      const toDto = vi
+        .spyOn(ResponsePaymentDto, 'fromEntity')
+        .mockReturnValue(dto);
 
       await expect(service.retryRefund('refund-1', ADMIN_ID)).resolves.toBe(
         dto,
       );
+      expect(toDto).toHaveBeenCalledWith(refund, { withRefundReason: true });
 
       expect(orderRepository.lockForPayment).toHaveBeenCalledWith('refund-1');
       expect(refundService.retryLocked).toHaveBeenCalledWith(

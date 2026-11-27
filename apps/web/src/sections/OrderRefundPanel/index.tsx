@@ -7,7 +7,6 @@ import type { OrderDetail } from '@/types/order'
 import { useCreateRefund } from '@/hooks/useOrder'
 import { DIALOG_MESSAGES, SUCCESS_MESSAGES } from '@/constants/messages'
 import { refundFormSchema } from '@/schemas/refund'
-import { refundableOf } from '@/utils/order'
 import { formatPrice } from '@/utils/common'
 import { getErrorMessage } from '@/utils/form'
 import { cn } from '@/utils/styles'
@@ -15,6 +14,8 @@ import AlertDialog from '@/components/AlertDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { VALIDATION_RULES } from '@repo/constants'
 
 export interface OrderRefundPanelProps {
   order: OrderDetail
@@ -22,8 +23,9 @@ export interface OrderRefundPanelProps {
 }
 
 /**
- * The admin's "Refund" panel: refunds part or all of what is still refundable
- * of the order's paid card or PayPal charge. Hidden when nothing is left.
+ * The admin's "Refund" panel: refunds part or all of a cancelled order's paid
+ * card or PayPal charge, with a reason when the amount is lowered. Shown only
+ * while the API's `refundableAmount` is above 0.
  */
 export default function OrderRefundPanel({
   order,
@@ -31,9 +33,11 @@ export default function OrderRefundPanel({
 }: OrderRefundPanelProps) {
   const headingId = useId()
   const amountId = useId()
-  const refundable = refundableOf(order)
+  const reasonId = useId()
+  const refundable = order.refundableAmount ?? 0
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
+  const [reason, setReason] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const createRefund = useCreateRefund()
 
@@ -47,6 +51,7 @@ export default function OrderRefundPanel({
   const submit = () => {
     const parsed = refundFormSchema(refundable).safeParse({
       amount: amount.trim() === '' ? undefined : Number(amount),
+      reason,
     })
     if (!parsed.success) {
       setErrorMessage(parsed.error.issues[0]?.message ?? null)
@@ -54,7 +59,11 @@ export default function OrderRefundPanel({
     }
     setErrorMessage(null)
     createRefund.mutate(
-      { orderId: order.id, amount: parsed.data.amount },
+      {
+        orderId: order.id,
+        amount: parsed.data.amount,
+        ...(parsed.data.reason ? { reason: parsed.data.reason } : {}),
+      },
       {
         onSuccess: () => {
           toast.success(SUCCESS_MESSAGES.REFUND_STARTED)
@@ -85,6 +94,7 @@ export default function OrderRefundPanel({
         className="w-full"
         onClick={() => {
           setAmount(refundable.toFixed(2))
+          setReason('')
           setErrorMessage(null)
           setOpen(true)
         }}
@@ -121,6 +131,17 @@ export default function OrderRefundPanel({
           />
           <p className="text-xs text-on-surface-variant">
             At most {formatPrice(refundable)}.
+          </p>
+          <Label htmlFor={reasonId}>Reason</Label>
+          <Textarea
+            id={reasonId}
+            value={reason}
+            maxLength={VALIDATION_RULES.ORDER.REFUND_REASON_MAX_LENGTH}
+            rows={3}
+            onChange={(event) => setReason(event.target.value)}
+          />
+          <p className="text-xs text-on-surface-variant">
+            {DIALOG_MESSAGES.ORDER.REFUND.REASON_HINT}
           </p>
         </div>
       </AlertDialog>

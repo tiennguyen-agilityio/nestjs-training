@@ -44,7 +44,7 @@ import {
   getOrderStatusPresentation,
   getPaymentStatusPresentation,
   getShippingStatusPresentation,
-  refundableOf,
+  hasUnrefundedOnlinePayment,
 } from '@/utils/order'
 
 // Components
@@ -285,6 +285,12 @@ function PaymentPanel({
         payment.status === PaymentStatus.FAILED
       ),
   )
+  const hasHeldRefund = order.payments.some(
+    (payment) =>
+      payment.type === PaymentType.REFUND &&
+      (payment.status === PaymentStatus.PENDING ||
+        payment.status === PaymentStatus.PAID),
+  )
   const charge = newestChargeOf(order.payments)
   const status = getPaymentStatusPresentation(order.paymentStatus)
   const rows: [string, ReactNode][] = [
@@ -334,9 +340,13 @@ function PaymentPanel({
             <tbody>
               {payments.map((payment) => {
                 const isRefund = payment.type === PaymentType.REFUND
+                // The API retries only a cancelled order's failed refund, and
+                // only while no other refund of the order is pending or paid.
                 const canRetryRefund =
                   isAdmin &&
                   isRefund &&
+                  order.status === OrderStatus.CANCELLED &&
+                  !hasHeldRefund &&
                   payment.status === PaymentStatus.FAILED &&
                   !payment.retriedAt
                 return (
@@ -353,6 +363,11 @@ function PaymentPanel({
                           ? ` · ${payment.failureReason}`
                           : ''}
                       </span>
+                      {isAdmin && isRefund && payment.refundReason && (
+                        <span className="block break-words text-xs text-on-surface-variant">
+                          Reason: {payment.refundReason}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       {isRefund && payment.status === PaymentStatus.PENDING
@@ -436,14 +451,27 @@ function CancelPanel({ order }: { order: OrderDetail }) {
   const [confirming, setConfirming] = useState<OrderDetail | null>(null)
   const { mutate, isPending } = useCancelOrder()
   const notShipped = order.shippingStatus === ShippingStatus.PENDING
+  // A pending charge with a transaction id is money the provider is still
+  // reviewing: the API refuses the cancel until the provider answers.
+  const isPaymentHeld = order.payments.some(
+    (payment) =>
+      payment.type === PaymentType.CHARGE &&
+      payment.status === PaymentStatus.PENDING &&
+      Boolean(payment.transactionId),
+  )
   const canCancel =
     notShipped &&
+    !isPaymentHeld &&
     (order.status === OrderStatus.PENDING ||
       order.status === OrderStatus.CONFIRMED)
 
   return (
     <Panel title="Cancel order">
-      {canCancel ? (
+      {isPaymentHeld && notShipped && order.status !== OrderStatus.CANCELLED ? (
+        <p className="text-sm text-on-surface-variant">
+          {DIALOG_MESSAGES.ORDER.CANCEL.PAYMENT_REVIEW}
+        </p>
+      ) : canCancel ? (
         <>
           <p className="text-sm text-on-surface-variant">
             {DIALOG_MESSAGES.ORDER.CANCEL.CAN_CANCEL}
@@ -483,7 +511,7 @@ function CancelPanel({ order }: { order: OrderDetail }) {
           const description = DIALOG_MESSAGES.ORDER.CANCEL.DESCRIPTION(
             current?.orderNumber ?? order.orderNumber,
           )
-          return refundableOf(order) > 0
+          return hasUnrefundedOnlinePayment(order)
             ? `${description} ${DIALOG_MESSAGES.ORDER.CANCEL.WILL_BE_REFUNDED}`
             : description
         }}
