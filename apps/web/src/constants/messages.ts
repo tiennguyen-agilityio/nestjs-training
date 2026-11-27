@@ -229,6 +229,12 @@ export const DIALOG_MESSAGES = {
       DESCRIPTION: 'Everything you changed on this form will be lost.',
       KEEP: 'Keep editing',
     },
+    LEAVE_UNSAVED: {
+      TITLE: 'Leave without saving?',
+      DESCRIPTION: 'Your changes on this form have not been saved.',
+      ACTION: 'Leave page',
+      KEEP: 'Keep editing',
+    },
   },
   ORDER: {
     CANCEL: {
