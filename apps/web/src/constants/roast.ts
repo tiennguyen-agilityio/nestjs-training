@@ -1,13 +1,48 @@
 import { type OptionItem } from '@/types/common'
-import { ProductSortBy, RoastLevel, VALIDATION_RULES } from '@repo/constants'
+import { ProductSortBy, RoastLevel } from '@repo/constants'
 
-export const ROAST_PRICE_MIN = VALIDATION_RULES.PRICE.MIN
-export const ROAST_PRICE_MAX = 500
+export const ROAST_PRICE_FILTER = {
+  ALL: 'all',
+  UNDER_50: 'under-50',
+  FROM_50_TO_100: '50-100',
+  FROM_100_TO_150: '100-150',
+  FROM_150_TO_200: '150-200',
+  OVER_200: 'over-200',
+} as const
 
-export const ROAST_DEFAULT_PRICE_RANGE: [number, number] = [
-  ROAST_PRICE_MIN,
-  ROAST_PRICE_MAX,
-]
+export type RoastPriceFilter =
+  (typeof ROAST_PRICE_FILTER)[keyof typeof ROAST_PRICE_FILTER]
+
+export interface RoastPriceRange {
+  label: string
+  minPrice?: number
+  maxPrice?: number
+}
+
+export const ROAST_PRICE_RANGES: Record<RoastPriceFilter, RoastPriceRange> = {
+  [ROAST_PRICE_FILTER.ALL]: { label: 'All prices' },
+  [ROAST_PRICE_FILTER.UNDER_50]: { label: 'Under $50', maxPrice: 49.99 },
+  [ROAST_PRICE_FILTER.FROM_50_TO_100]: {
+    label: '$50 – $100',
+    minPrice: 50,
+    maxPrice: 99.99,
+  },
+  [ROAST_PRICE_FILTER.FROM_100_TO_150]: {
+    label: '$100 – $150',
+    minPrice: 100,
+    maxPrice: 149.99,
+  },
+  [ROAST_PRICE_FILTER.FROM_150_TO_200]: {
+    label: '$150 – $200',
+    minPrice: 150,
+    maxPrice: 199.99,
+  },
+  [ROAST_PRICE_FILTER.OVER_200]: { label: 'Above $200', minPrice: 200 },
+}
+
+export const ROAST_PRICE_OPTIONS: OptionItem[] = Object.entries(
+  ROAST_PRICE_RANGES,
+).map(([value, { label }]) => ({ value, label }))
 
 // The API's sort values plus the UI-only default (no sort param sent).
 export const ROAST_SORT_VALUE = {

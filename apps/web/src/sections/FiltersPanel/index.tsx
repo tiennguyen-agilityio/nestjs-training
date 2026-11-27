@@ -2,23 +2,20 @@
 
 import type * as React from 'react'
 
-import { type RoastSortValue } from '@/constants/roast'
+import { type RoastPriceFilter, type RoastSortValue } from '@/constants/roast'
 import type { RoastLevel } from '@repo/constants'
-import { PriceRangeSlider } from '@/components/PriceRangeSlider'
 import { SearchInput } from '@/components/SearchInput'
 import { Select } from '@/components/Select'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { type OptionItem } from '@/types/common'
-import { cn } from '@/utils/styles'
 
 export interface FiltersPanelProps {
   searchQuery: string
   onSearchChange: (event: React.ChangeEvent<HTMLInputElement>) => void
-  priceRange: [number, number]
-  onPriceRangeChange: (next: [number, number]) => void
-  minPrice: number
-  maxPrice: number
+  priceOptions: OptionItem[]
+  priceFilter: RoastPriceFilter
+  onPriceFilterChange: (value: RoastPriceFilter) => void
   roastLevelOptions: { value: RoastLevel; label: string }[]
   selectedRoastLevels: RoastLevel[]
   onToggleRoastLevel: (value: RoastLevel) => void
@@ -31,10 +28,9 @@ export interface FiltersPanelProps {
 export default function FiltersPanel({
   searchQuery,
   onSearchChange,
-  priceRange,
-  onPriceRangeChange,
-  minPrice,
-  maxPrice,
+  priceOptions,
+  priceFilter,
+  onPriceFilterChange,
   roastLevelOptions,
   selectedRoastLevels,
   onToggleRoastLevel,
@@ -63,16 +59,25 @@ export default function FiltersPanel({
         containerClassName="h-11 rounded-sm bg-surface-container-high"
       />
 
-      <PriceRangeSlider
-        title="PRICE RANGE"
-        min={minPrice}
-        max={maxPrice}
-        step={0.5}
-        isMaxOpenEnded
-        value={priceRange}
-        onValueCommit={onPriceRangeChange}
-        className={cn(disabled && 'pointer-events-none opacity-60')}
-      />
+      <section className="space-y-2" aria-labelledby="price-range-title">
+        <h2
+          id="price-range-title"
+          className="text-sm font-bold tracking-wide text-on-surface-variant uppercase"
+        >
+          Price Range
+        </h2>
+        <Select
+          options={priceOptions}
+          selected={priceFilter}
+          ariaLabel="Price range"
+          classNameTrigger="h-11 bg-surface-container-high rounded-sm"
+          onValueChange={(value) => {
+            if (typeof value !== 'string') return
+            onPriceFilterChange(value as RoastPriceFilter)
+          }}
+          disabled={disabled}
+        />
+      </section>
 
       <section className="space-y-3" aria-labelledby="roast-level-title">
         <h2

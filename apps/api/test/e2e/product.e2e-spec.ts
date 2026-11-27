@@ -758,6 +758,100 @@ describe('ProductController (e2e)', () => {
       ]);
     });
 
+    describe('price after discount', () => {
+      let saleCategory: Category;
+      let pPercentSale: Product;
+      let pFixedSale: Product;
+      let pFullPrice: Product;
+
+      beforeAll(async () => {
+        saleCategory = await createTestCategory();
+        createdCategoryIds.push(saleCategory.id);
+
+        const createWithVariant = (
+          name: string,
+          variant: {
+            price: string;
+            discountType?: DiscountType;
+            discountValue?: string;
+          },
+        ): Promise<Product> =>
+          RequestContext.create(orm.em, () =>
+            productService.create(
+              {
+                ...requiredProductFields(),
+                categoryId: saleCategory.id,
+                name: uniqueName(name),
+                status: ProductStatus.ACTIVE,
+                images: [],
+                variants: [
+                  {
+                    sku: uniqueName('SKU-SALE'),
+                    size: '250.000',
+                    unit: ProductUnit.G,
+                    ...variant,
+                  },
+                ],
+              },
+              null,
+            ),
+          );
+
+        pPercentSale = await createWithVariant('Sale Percent', {
+          price: '30.00',
+          discountType: DiscountType.PERCENT,
+          discountValue: '50',
+        });
+        pFixedSale = await createWithVariant('Sale Fixed', {
+          price: '40.00',
+          discountType: DiscountType.FIXED,
+          discountValue: '22',
+        });
+        pFullPrice = await createWithVariant('Sale None', {
+          price: '20.00',
+        });
+        createdProductIds.push(pPercentSale.id, pFixedSale.id, pFullPrice.id);
+      });
+
+      const listSale = async (
+        query: Record<string, string | number>,
+      ): Promise<string[]> => {
+        const response = await request(app.getHttpServer())
+          .get(`${API_BASE_PATH}/products`)
+          .query({ categoryId: saleCategory.id, limit: 50, ...query })
+          .expect(200);
+        return idsOf(response.body as { data: Array<{ id: string }> });
+      };
+
+      it('filters by the price after a percent or fixed discount', async () => {
+        const ids = await listSale({ minPrice: 10, maxPrice: 19 });
+
+        expect([...ids].sort()).toEqual(
+          [pPercentSale.id, pFixedSale.id].sort(),
+        );
+      });
+
+      it('leaves out a product whose list price is in range but its price after discount is not', async () => {
+        expect(await listSale({ minPrice: 25 })).toEqual([]);
+      });
+
+      it('sortBy PRICE_ASC orders by the price after discount', async () => {
+        expect(await listSale({ sortBy: ProductSortBy.PRICE_ASC })).toEqual([
+          pPercentSale.id,
+          pFixedSale.id,
+          pFullPrice.id,
+        ]);
+      });
+
+      it('sortBy PRICE_DESC orders by the price after discount', async () => {
+        expect(await listSale({ sortBy: ProductSortBy.PRICE_DESC })).toEqual([
+          pFullPrice.id,
+          pFixedSale.id,
+          pPercentSale.id,
+        ]);
+      });
+    });
+
     it.each([
       ['categoryId', 'not-a-uuid'],
       ['status', 'NOT_A_STATUS'],

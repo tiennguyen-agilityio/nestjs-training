@@ -8,10 +8,12 @@ import { ProductStatus, type RoastLevel } from '@repo/constants'
 // Constants
 import {
   ROAST_LEVEL_OPTIONS,
-  ROAST_PRICE_MAX,
-  ROAST_PRICE_MIN,
+  ROAST_PRICE_FILTER,
+  ROAST_PRICE_OPTIONS,
+  ROAST_PRICE_RANGES,
   ROAST_SORT_OPTIONS,
   ROAST_SORT_VALUE,
+  type RoastPriceFilter,
   type RoastSortValue,
 } from '@/constants/roast'
 import { SEARCH_URL_DEBOUNCE_MS } from '@/constants/common'
@@ -45,8 +47,7 @@ export default function RoastsPageContent() {
     page: listPage,
     limit: listLimit,
     search: listSearch,
-    minPrice: urlMinPrice,
-    maxPrice: urlMaxPrice,
+    price: priceFilter,
     roastLevel: selectedRoastLevels,
     sortBy: sortBy,
   } = urlState
@@ -81,24 +82,16 @@ export default function RoastsPageContent() {
     }, SEARCH_URL_DEBOUNCE_MS)
   }
 
-  const priceRange = useMemo((): [number, number] => {
-    const lo = Math.min(urlMinPrice, urlMaxPrice)
-    const hi = Math.max(urlMinPrice, urlMaxPrice)
-    return [lo, hi]
-  }, [urlMinPrice, urlMaxPrice])
-
   const listParams = useMemo((): ProductOptions => {
-    const [lo, hi] = priceRange
+    const { minPrice, maxPrice } = ROAST_PRICE_RANGES[priceFilter]
     const params: ProductOptions = {
       page: listPage,
       limit: listLimit,
       search: listSearch.trim(),
       status: ProductStatus.ACTIVE,
     }
-    if (lo > ROAST_PRICE_MIN || hi < ROAST_PRICE_MAX) {
-      params.minPrice = lo
-      params.maxPrice = hi
-    }
+    if (minPrice !== undefined) params.minPrice = minPrice
+    if (maxPrice !== undefined) params.maxPrice = maxPrice
     if (selectedRoastLevels.length > 0) {
       params.roastLevel = selectedRoastLevels.join(',')
     }
@@ -106,16 +99,22 @@ export default function RoastsPageContent() {
       params.sortBy = sortBy
     }
     return params
-  }, [listPage, listLimit, listSearch, priceRange, selectedRoastLevels, sortBy])
+  }, [
+    listPage,
+    listLimit,
+    listSearch,
+    priceFilter,
+    selectedRoastLevels,
+    sortBy,
+  ])
 
   const hasActiveFilters = useMemo(
     () =>
       listSearch.trim().length > 0 ||
       selectedRoastLevels.length > 0 ||
-      urlMinPrice > ROAST_PRICE_MIN ||
-      urlMaxPrice < ROAST_PRICE_MAX ||
+      priceFilter !== ROAST_PRICE_FILTER.ALL ||
       sortBy !== ROAST_SORT_VALUE.CURATED,
-    [listSearch, selectedRoastLevels.length, urlMinPrice, urlMaxPrice, sortBy],
+    [listSearch, selectedRoastLevels.length, priceFilter, sortBy],
   )
 
   const { products, meta, isLoading, isError, errorMessage, refetch } =
@@ -152,10 +151,11 @@ export default function RoastsPageContent() {
     })
   }
 
-  const handlePriceRangeChange = (next: [number, number]) => {
-    const lo = Math.min(next[0], next[1])
-    const hi = Math.max(next[0], next[1])
-    updateUrl({ minPrice: lo, maxPrice: hi, page: 1 })
+  const handlePriceFilterChange = (next: RoastPriceFilter) => {
+    updateUrl({
+      page: 1,
+      price: next === ROAST_PRICE_FILTER.ALL ? null : next,
+    })
   }
 
   const handleSortByChange = (next: RoastSortValue) => {
@@ -174,8 +174,7 @@ export default function RoastsPageContent() {
     setIsRoastLevelTouched(false)
     updateUrl({
       page: 1,
-      minPrice: null,
-      maxPrice: null,
+      price: null,
       roastLevel: null,
       sortBy: null,
       search: null,
@@ -192,10 +191,9 @@ export default function RoastsPageContent() {
         <FiltersPanel
           searchQuery={searchDraft}
           onSearchChange={handleSearchChange}
-          priceRange={priceRange}
-          onPriceRangeChange={handlePriceRangeChange}
-          minPrice={ROAST_PRICE_MIN}
-          maxPrice={ROAST_PRICE_MAX}
+          priceOptions={ROAST_PRICE_OPTIONS}
+          priceFilter={priceFilter}
+          onPriceFilterChange={handlePriceFilterChange}
           roastLevelOptions={ROAST_LEVEL_OPTIONS}
           selectedRoastLevels={checkedRoastLevels}
           onToggleRoastLevel={handleToggleRoastLevel}

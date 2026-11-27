@@ -13,13 +13,16 @@ import {
 import { PaginatedResult } from '../../../common/dto/pagination.dto.js';
 import type { ActorId } from '../../../common/utils/audit.util.js';
 import { QueryParams } from '../../../common/dto/query-params.dto.js';
+import { pricingOf } from '../../cart/utils/cart-pricing.util.js';
+import type { ProductVariant } from '../../product-variant/entities/product-variant.entity.js';
 
 const RELATIONS = ['images', 'variants'];
 
+const salePriceOf = (variant: ProductVariant): number =>
+  pricingOf(variant).salePrice;
+
 const minVariantPrice = (product: Product): number => {
-  const prices = product.variants
-    .getItems()
-    .map((variant) => Number(variant.price));
+  const prices = product.variants.getItems().map(salePriceOf);
   return prices.length > 0 ? Math.min(...prices) : Number.POSITIVE_INFINITY;
 };
 
@@ -83,7 +86,7 @@ export class ProductRepository extends BaseRepository<Product> {
     if (minPrice !== undefined || maxPrice !== undefined) {
       candidates = candidates.filter((product) =>
         product.variants.getItems().some((variant) => {
-          const price = Number(variant.price);
+          const price = salePriceOf(variant);
           return (
             (minPrice === undefined || price >= minPrice) &&
             (maxPrice === undefined || price <= maxPrice)

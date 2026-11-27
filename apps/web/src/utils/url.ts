@@ -1,14 +1,15 @@
 import { PAGE_SIZE } from '@/constants/common'
 import {
-  ROAST_PRICE_MAX,
-  ROAST_PRICE_MIN,
+  ROAST_PRICE_FILTER,
   ROAST_SORT_VALUE,
+  type RoastPriceFilter,
   type RoastSortValue,
 } from '@/constants/roast'
 import { RoastLevel } from '@repo/constants'
 
 const ROAST_LEVEL_SET = new Set<string>(Object.values(RoastLevel))
 const ROAST_SORT_VALUES: readonly string[] = Object.values(ROAST_SORT_VALUE)
+const ROAST_PRICE_FILTERS: readonly string[] = Object.values(ROAST_PRICE_FILTER)
 
 export function parseOptionalQueryParam(value: string | null): string | null {
   const v = value?.trim() ?? ''
@@ -66,15 +67,15 @@ export const ordersUrlSchema = {
   shippingStatus: parseOptionalQueryParam,
 } as const
 
-export function parseRoastPriceQueryParam(
+function isRoastPriceFilter(value: string): value is RoastPriceFilter {
+  return ROAST_PRICE_FILTERS.includes(value)
+}
+
+export function parseRoastPriceFilterParam(
   value: string | null,
-  kind: 'min' | 'max',
-): number {
-  const fallback = kind === 'min' ? ROAST_PRICE_MIN : ROAST_PRICE_MAX
-  if (value == null || value === '') return fallback
-  const n = Number.parseFloat(value)
-  if (!Number.isFinite(n)) return fallback
-  return Math.min(Math.max(n, ROAST_PRICE_MIN), ROAST_PRICE_MAX)
+): RoastPriceFilter {
+  const v = value?.trim() ?? ''
+  return isRoastPriceFilter(v) ? v : ROAST_PRICE_FILTER.ALL
 }
 
 export function parseRoastLevelsParam(value: string | null): RoastLevel[] {
@@ -103,8 +104,7 @@ export const shopRoastsUrlSchema = {
   page: parseListPageParam,
   limit: parseListLimitParam,
   search: parseListSearchParam,
-  minPrice: (v: string | null) => parseRoastPriceQueryParam(v, 'min'),
-  maxPrice: (v: string | null) => parseRoastPriceQueryParam(v, 'max'),
+  price: parseRoastPriceFilterParam,
   roastLevel: parseRoastLevelsParam,
   sortBy: parseRoastSortParam,
 } as const
