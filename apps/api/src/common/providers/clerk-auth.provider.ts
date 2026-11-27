@@ -90,6 +90,15 @@ export class ClerkAuthProvider implements AuthProvider {
     }
   }
 
+  syncUserName(
+    providerId: string,
+    name: { firstName: string; lastName: string },
+  ): Promise<void> {
+    return this.runSync(async () => {
+      await this.clerkClient.users.updateUser(providerId, name);
+    });
+  }
+
   syncUserRole(providerId: string, role: UserRole): Promise<void> {
     return this.runSync(async () => {
       await this.clerkClient.users.updateUserMetadata(providerId, {

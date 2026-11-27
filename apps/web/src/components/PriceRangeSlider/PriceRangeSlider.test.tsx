@@ -84,4 +84,32 @@ describe('PriceRangeSlider', () => {
 
     expect(handleValueChange).not.toHaveBeenCalled()
   })
+
+  it('marks the top value as open-ended when it sits at the max', () => {
+    render(
+      <PriceRangeSlider
+        min={1}
+        max={500}
+        value={[1, 500]}
+        isMaxOpenEnded
+        onValueChange={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByText('$500.00+')).toBeInTheDocument()
+  })
+
+  it('shows the top value without a plus below the max', () => {
+    render(
+      <PriceRangeSlider
+        min={1}
+        max={500}
+        value={[1, 200]}
+        isMaxOpenEnded
+        onValueChange={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByText('$200.00')).toBeInTheDocument()
+  })
 })

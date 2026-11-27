@@ -12,6 +12,10 @@ export abstract class AuthProvider {
     rawBody: Buffer | undefined,
     headers: IncomingHttpHeaders,
   ): AuthWebhookEvent;
+  abstract syncUserName(
+    providerId: string,
+    name: { firstName: string; lastName: string },
+  ): Promise<void>;
   abstract syncUserRole(providerId: string, role: UserRole): Promise<void>;
   abstract syncUserStatus(
     providerId: string,

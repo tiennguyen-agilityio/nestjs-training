@@ -347,14 +347,10 @@ const CheckoutPageContent = () => {
     setValues((previousValues) => ({
       ...previousValues,
       addressLine: nextAddressLine,
-      city: parsed.city.trim() ? parsed.city : previousValues.city,
-      district: parsed.district.trim()
-        ? parsed.district
-        : previousValues.district,
-      ward: parsed.ward.trim() ? parsed.ward : previousValues.ward,
-      postalCode: parsed.postalCode.trim()
-        ? parsed.postalCode
-        : previousValues.postalCode,
+      city: parsed.city.trim(),
+      district: parsed.district.trim(),
+      ward: parsed.ward.trim(),
+      postalCode: parsed.postalCode.trim(),
     }))
     setFieldErrors((previousErrors) => ({
       ...previousErrors,

@@ -15,8 +15,11 @@ import { ROUTES } from '@/constants/routes'
 import { useCategories } from '@/hooks/useCategory'
 import { uploadImageToImgBB } from '@/services/image'
 
+const mockPush = jest.fn()
+
 jest.mock('next/navigation', () => ({
   usePathname: () => ROUTES.DASHBOARD_PRODUCTS,
+  useRouter: () => ({ push: mockPush }),
 }))
 
 jest.mock('@/hooks/useCategory', () => ({
@@ -234,6 +237,51 @@ describe('ProductForm', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Product Name')).toHaveValue('House Blend Two')
     expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('asks before following a link away from unsaved changes', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    const inventoryLink = () =>
+      screen.getByRole('link', { name: 'Change stock in Inventory' })
+
+    await user.type(screen.getByLabelText('Product Name'), ' Two')
+    await user.click(inventoryLink())
+
+    const leaveDialog = screen.getByRole('alertdialog', {
+      name: DIALOG_MESSAGES.PRODUCT.LEAVE_UNSAVED.TITLE,
+    })
+    await user.click(
+      within(leaveDialog).getByRole('button', {
+        name: DIALOG_MESSAGES.PRODUCT.LEAVE_UNSAVED.KEEP,
+      }),
+    )
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Product Name')).toHaveValue('House Blend Two')
+    expect(mockPush).not.toHaveBeenCalled()
+
+    await user.click(inventoryLink())
+    await user.click(
+      within(
+        screen.getByRole('alertdialog', {
+          name: DIALOG_MESSAGES.PRODUCT.LEAVE_UNSAVED.TITLE,
+        }),
+      ).getByRole('button', {
+        name: DIALOG_MESSAGES.PRODUCT.LEAVE_UNSAVED.ACTION,
+      }),
+    )
+    expect(mockPush).toHaveBeenCalledWith(ROUTES.DASHBOARD_INVENTORY)
+  })
+
+  it('follows links without asking when nothing changed', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.click(
+      screen.getByRole('link', { name: 'Change stock in Inventory' }),
+    )
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('shows both image-required errors and does not submit without images', async () => {

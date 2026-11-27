@@ -493,6 +493,51 @@ describe('CheckoutPageContent', () => {
       expect(field('Postal Code').value).toBe('56100')
     })
 
+    it('replaces the saved district when the picked suggestion is in another city', async () => {
+      const user = userEvent.setup()
+      profile({ addresses: [savedAddress] })
+      const placeName = 'Nguyễn Huệ, 56100, Phường 5, Tuy Hòa, Việt Nam'
+      jest.mocked(findMapboxAddressSuggestions).mockResolvedValueOnce({
+        ok: true,
+        suggestions: [
+          {
+            id: 'address.2',
+            placeName,
+            primaryText: 'Nguyễn Huệ',
+            secondaryText: '56100, Phường 5, Tuy Hòa, Việt Nam',
+            feature: {
+              id: 'address.2',
+              type: 'Feature',
+              place_type: ['address'],
+              text: 'Nguyễn Huệ',
+              place_name: placeName,
+              properties: { accuracy: 'street' },
+              context: [
+                { id: 'postcode.1', text: '56100' },
+                { id: 'locality.1', text: 'Phường 5' },
+                { id: 'place.1', text: 'Tuy Hòa' },
+              ],
+            },
+          },
+        ],
+      })
+      mockUseShippingMethods.mockReturnValue(
+        shippingResult({ shippingMethods: [standard] }),
+      )
+
+      renderCheckout()
+      await user.clear(field('Delivery Address'))
+      await user.type(field('Delivery Address'), '45 Nguyễn Huệ')
+      await user.click(
+        await screen.findByRole('button', { name: /^Nguyễn Huệ/ }),
+      )
+
+      expect(field('City').value).toBe('Tuy Hòa')
+      expect(field('District').value).toBe('')
+      expect(field('Ward').value).toBe('Phường 5')
+      expect(field('Postal Code').value).toBe('56100')
+    })
+
     it('a prefilled address does not look up suggestions', async () => {
       profile({ addresses: [savedAddress] })
       mockUseShippingMethods.mockReturnValue(

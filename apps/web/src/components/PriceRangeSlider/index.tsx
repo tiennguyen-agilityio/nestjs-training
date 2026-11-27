@@ -17,6 +17,7 @@ export interface PriceRangeSliderProps {
   onValueChange?: (next: [number, number]) => void
   onValueCommit?: (next: [number, number]) => void
   title?: string
+  isMaxOpenEnded?: boolean
   currency?: string
   locale?: string
   className?: string
@@ -30,6 +31,7 @@ export const PriceRangeSlider = ({
   onValueChange,
   onValueCommit,
   title = DEFAULT_TITLE,
+  isMaxOpenEnded = false,
   currency = 'USD',
   locale = 'en-US',
   className,
@@ -83,7 +85,10 @@ export const PriceRangeSlider = ({
       />
       <div className="flex justify-between text-sm font-medium text-on-surface-variant">
         <span>{formatPrice(draftValue[0], locale, currency)}</span>
-        <span>{formatPrice(draftValue[1], locale, currency)}</span>
+        <span>
+          {formatPrice(draftValue[1], locale, currency)}
+          {isMaxOpenEnded && draftValue[1] >= max ? '+' : ''}
+        </span>
       </div>
     </div>
   )

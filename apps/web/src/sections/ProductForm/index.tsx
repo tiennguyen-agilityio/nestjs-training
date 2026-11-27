@@ -28,6 +28,7 @@ import { DISCOUNT_TYPE_OPTIONS, UNIT_OPTIONS } from '@/constants/product'
 
 // Hooks
 import { useCategories } from '@/hooks/useCategory'
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 
 // Schemas
 import {
@@ -245,6 +246,7 @@ const ProductForm = ({
   const isSubmitting = isPending || isUploadingImages
 
   const isActionBlocked = isSubmitting || (requireChange && !isDirty)
+  const leaveWarning = useUnsavedChangesWarning(isDirty && !isSubmitting)
 
   const finish = () => setIsUploadingImages(false)
 
@@ -891,6 +893,17 @@ const ProductForm = ({
         textCancel={DIALOG_MESSAGES.PRODUCT.DISCARD_CHANGES.KEEP}
         textAction={resetLabel}
         onClickAction={discardChanges}
+      />
+      <AlertDialog
+        open={leaveWarning.pendingHref !== null}
+        onOpenChange={(open) => {
+          if (!open) leaveWarning.stay()
+        }}
+        title={DIALOG_MESSAGES.PRODUCT.LEAVE_UNSAVED.TITLE}
+        description={DIALOG_MESSAGES.PRODUCT.LEAVE_UNSAVED.DESCRIPTION}
+        textCancel={DIALOG_MESSAGES.PRODUCT.LEAVE_UNSAVED.KEEP}
+        textAction={DIALOG_MESSAGES.PRODUCT.LEAVE_UNSAVED.ACTION}
+        onClickAction={leaveWarning.leave}
       />
     </div>
   )

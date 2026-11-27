@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type React from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import RoastsPage from '@/app/(shop)/roasts/page'
 import { PAGE_SIZE } from '@/constants/common'
+import { ROAST_LEVEL_OPTIONS } from '@/constants/roast'
 import { useProducts } from '@/hooks/useProduct'
 import {
   DiscountType,
@@ -109,6 +111,35 @@ describe('Roasts route page', () => {
       screen.getByRole('heading', { name: 'The Sensory Brew Shop' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Ethiopian Yirgacheffe')).toBeInTheDocument()
+  })
+
+  it('checks every roast level again when the shopper unchecks the last one', async () => {
+    const user = userEvent.setup()
+    const replace = jest.fn()
+    mockUseRouter.mockReturnValue({
+      replace,
+    } as unknown as ReturnType<typeof useRouter>)
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams(`roastLevel=${RoastLevel.DARK}`) as ReturnType<
+        typeof useSearchParams
+      >,
+    )
+    const { rerender } = render(<RoastsPage />)
+
+    await user.click(screen.getByRole('checkbox', { name: 'Dark Roast' }))
+
+    const [nextUrl] = replace.mock.calls.at(-1) as [string]
+    expect(nextUrl).not.toContain('roastLevel')
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams(nextUrl.split('?')[1] ?? '') as ReturnType<
+        typeof useSearchParams
+      >,
+    )
+    rerender(<RoastsPage />)
+
+    for (const { label } of ROAST_LEVEL_OPTIONS) {
+      expect(screen.getByRole('checkbox', { name: label })).toBeChecked()
+    }
   })
 
   it('lists products without asAdmin', () => {

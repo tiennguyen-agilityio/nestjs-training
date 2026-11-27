@@ -17,7 +17,11 @@ const ACTOR = 'admin-1';
 
 describe('UserService', () => {
   let service: UserService;
-  let authProvider: { syncUserRole: Mock; syncUserStatus: Mock };
+  let authProvider: {
+    syncUserName: Mock;
+    syncUserRole: Mock;
+    syncUserStatus: Mock;
+  };
   let userRepository: {
     findById: Mock;
     findByEmail: Mock;
@@ -53,7 +57,11 @@ describe('UserService', () => {
   });
 
   beforeEach(async () => {
-    authProvider = { syncUserRole: vi.fn(), syncUserStatus: vi.fn() };
+    authProvider = {
+      syncUserName: vi.fn(),
+      syncUserRole: vi.fn(),
+      syncUserStatus: vi.fn(),
+    };
     userRepository = {
       findById: vi.fn(),
       findByEmail: vi.fn(),
@@ -529,6 +537,47 @@ describe('UserService', () => {
 
       expect(authProvider.syncUserRole).not.toHaveBeenCalled();
       expect(authProvider.syncUserStatus).not.toHaveBeenCalled();
+    });
+
+    it('pushes a name change to the auth provider before writing it locally', async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.updateByAdmin('user-id-1', { lastName: 'Nguyen' }, ACTOR);
+
+      expect(authProvider.syncUserName).toHaveBeenCalledWith('clerk-1', {
+        firstName: 'Jane',
+        lastName: 'Nguyen',
+      });
+      expect(user.lastName).toBe('Nguyen');
+      expect(userRepository.save).toHaveBeenCalledWith(user, ACTOR);
+      expect(
+        authProvider.syncUserName.mock.invocationCallOrder[0],
+      ).toBeLessThan(userRepository.save.mock.invocationCallOrder[0]);
+    });
+
+    it('skips the name push when the names are unchanged', async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+
+      await service.updateByAdmin(
+        'user-id-1',
+        { firstName: 'Jane', lastName: 'Doe' },
+        ACTOR,
+      );
+
+      expect(authProvider.syncUserName).not.toHaveBeenCalled();
+    });
+
+    it('keeps the old name locally when the name push fails', async () => {
+      const user = buildUser();
+      userRepository.findById.mockResolvedValue(user);
+      authProvider.syncUserName.mockRejectedValue(new Error('clerk down'));
+
+      await expect(
+        service.updateByAdmin('user-id-1', { firstName: 'Janet' }, ACTOR),
+      ).rejects.toThrow('clerk down');
+      expect(user.firstName).toBe('Jane');
     });
 
     it('updateByAdmin saves nothing when nothing changed', async () => {

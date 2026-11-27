@@ -5,7 +5,7 @@ import { MikroORM, RequestContext } from '@mikro-orm/core';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { getAuth } from '@clerk/express';
-import type { Mock } from 'vitest';
+import type { Mock, MockInstance } from 'vitest';
 import { AppModule } from './../../src/app.module.js';
 import { UserService } from './../../src/modules/user/services/user.service.js';
 import { AuthProvider } from './../../src/common/providers/auth.provider.js';
@@ -23,6 +23,7 @@ vi.mock('@clerk/express', async () => {
 describe('UserController auth (e2e)', () => {
   let app: INestApplication<App>;
   let orm: MikroORM;
+  let syncUserName: MockInstance<AuthProvider['syncUserName']>;
   let userService: UserService;
   const createdUserIds: string[] = [];
 
@@ -36,9 +37,12 @@ describe('UserController auth (e2e)', () => {
     orm = app.get(MikroORM);
     userService = app.get(UserService);
 
-    // Role/status syncing is covered in src/common/providers/clerk-auth.provider.spec.ts;
+    // Name/role/status syncing is covered in src/common/providers/clerk-auth.provider.spec.ts;
     // here it would hit the real Clerk API with .env.test's placeholder credentials and fail.
     const authProvider = app.get(AuthProvider);
+    syncUserName = vi
+      .spyOn(authProvider, 'syncUserName')
+      .mockResolvedValue(undefined);
     vi.spyOn(authProvider, 'syncUserRole').mockResolvedValue(undefined);
     vi.spyOn(authProvider, 'syncUserStatus').mockResolvedValue(undefined);
   });
@@ -662,6 +666,25 @@ describe('UserController auth (e2e)', () => {
         userService.findOne(target.id),
       );
       expect(persisted.phoneNumber).toBeNull();
+    });
+
+    it('PATCH /users/:id pushes a new name to the auth provider and saves it', async () => {
+      const admin = await createTestUser({ role: UserRole.ADMIN });
+      const target = await createTestUser({ role: UserRole.USER });
+      mockSessionFor(admin.clerkId);
+      syncUserName.mockClear();
+
+      const response = await request(app.getHttpServer())
+        .patch(`${API_BASE_PATH}/users/${target.id}`)
+        .send({ lastName: 'Renamed' })
+        .expect(200);
+
+      expect(syncUserName).toHaveBeenCalledExactlyOnceWith(target.clerkId, {
+        firstName: target.firstName,
+        lastName: 'Renamed',
+      });
+      const body = response.body as { data: { lastName: string } };
+      expect(body.data.lastName).toBe('Renamed');
     });
   });
 

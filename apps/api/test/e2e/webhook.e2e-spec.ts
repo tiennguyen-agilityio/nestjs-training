@@ -31,6 +31,7 @@ describe('WebhookController (e2e)', () => {
       .getOrThrow<string>('CLERK_WEBHOOK_SECRET');
 
     const authProvider = app.get(AuthProvider);
+    vi.spyOn(authProvider, 'syncUserName').mockResolvedValue(undefined);
     vi.spyOn(authProvider, 'syncUserRole').mockResolvedValue(undefined);
     vi.spyOn(authProvider, 'syncUserStatus').mockResolvedValue(undefined);
   });

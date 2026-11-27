@@ -68,6 +68,7 @@ export default function FiltersPanel({
         min={minPrice}
         max={maxPrice}
         step={0.5}
+        isMaxOpenEnded
         value={priceRange}
         onValueCommit={onPriceRangeChange}
         className={cn(disabled && 'pointer-events-none opacity-60')}

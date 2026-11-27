@@ -90,25 +90,20 @@ export function OrderTableRow({
 
   return (
     <>
-      <td className="min-w-0 px-6 py-4 align-middle">
+      <td className="min-w-0 px-4 py-4 align-middle">
         <p
           title={displayId}
           className="truncate font-mono text-sm text-muted-foreground"
         >
           {displayId}
         </p>
-      </td>
-      <td className="min-w-0 px-6 py-4 align-middle">
-        <p
-          title={formatOrderListDate(order.createdAt)}
-          className="truncate text-sm font-medium text-foreground"
-        >
+        <p className="truncate text-sm font-medium text-foreground">
           {formatOrderListDate(order.createdAt)}
         </p>
       </td>
-      <td className="min-w-0 px-6 py-4 align-middle">
+      <td className="min-w-0 px-4 py-4 align-middle">
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar className="size-10 shrink-0">
+          <Avatar className="hidden size-10 shrink-0 2xl:flex">
             <AvatarImage src={EMPTY_IMAGE} alt="" />
             <AvatarFallback className="text-xs font-semibold">
               {avatarFallback}
@@ -124,7 +119,7 @@ export function OrderTableRow({
           </div>
         </div>
       </td>
-      <td className="min-w-0 px-6 py-4 align-middle text-center">
+      <td className="min-w-0 px-3 py-4 align-middle text-center">
         {/* Order status update disabled: order feature not implemented on backend yet */}
         {nextOrderStatuses.length > 0 ? (
           <DropdownMenu>
@@ -206,17 +201,17 @@ export function OrderTableRow({
           </Badge>
         )}
       </td> */}
-      <td className="px-6 py-4 align-middle text-center">
+      <td className="px-3 py-4 align-middle text-center">
         <Badge className={cn(TABLE_CELL_BADGE_CLASS, shipping.badgeClassName)}>
           {shipping.label}
         </Badge>
       </td>
-      <td className="px-6 py-4 align-middle text-center">
+      <td className="px-3 py-4 align-middle text-center">
         <p className="text-sm font-bold text-foreground">
           {formatPrice(order.totalAmount)}
         </p>
       </td>
-      <td className="px-6 py-4 align-middle">
+      <td className="px-3 py-4 align-middle">
         <div className="flex justify-center gap-1">
           {/* Delete disabled: order feature not implemented on backend yet */}
           <Link

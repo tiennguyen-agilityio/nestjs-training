@@ -28,14 +28,21 @@ const hang = (): Promise<never> => new Promise(() => {});
 const clerkError = (status: number, message: string): Error =>
   Object.assign(new Error(message), { status });
 
-const { verify, updateUserMetadata, banUser, unbanUser, unlockUser } =
-  vi.hoisted(() => ({
-    verify: vi.fn(),
-    updateUserMetadata: vi.fn(),
-    banUser: vi.fn(),
-    unbanUser: vi.fn(),
-    unlockUser: vi.fn(),
-  }));
+const {
+  verify,
+  updateUser,
+  updateUserMetadata,
+  banUser,
+  unbanUser,
+  unlockUser,
+} = vi.hoisted(() => ({
+  verify: vi.fn(),
+  updateUser: vi.fn(),
+  updateUserMetadata: vi.fn(),
+  banUser: vi.fn(),
+  unbanUser: vi.fn(),
+  unlockUser: vi.fn(),
+}));
 
 vi.mock('svix', () => ({
   Webhook: vi.fn().mockImplementation(function Webhook() {
@@ -46,7 +53,7 @@ vi.mock('svix', () => ({
 vi.mock('@clerk/express', () => ({
   getAuth: vi.fn(),
   createClerkClient: vi.fn().mockImplementation(() => ({
-    users: { updateUserMetadata, banUser, unbanUser, unlockUser },
+    users: { updateUser, updateUserMetadata, banUser, unbanUser, unlockUser },
   })),
 }));
 
@@ -149,6 +156,30 @@ describe('ClerkAuthProvider', () => {
 
       await expect(
         provider.syncUserRole('clerk-1', UserRole.USER),
+      ).rejects.toThrow('clerk api down');
+    });
+  });
+
+  describe('syncUserName', () => {
+    it('pushes the first and last name to the provider user', async () => {
+      updateUser.mockResolvedValue(undefined);
+
+      await provider.syncUserName('clerk-1', {
+        firstName: 'Tiennd',
+        lastName: 'Nguyen',
+      });
+
+      expect(updateUser).toHaveBeenCalledWith('clerk-1', {
+        firstName: 'Tiennd',
+        lastName: 'Nguyen',
+      });
+    });
+
+    it('propagates an error from the underlying client unchanged', async () => {
+      updateUser.mockRejectedValue(new Error('clerk api down'));
+
+      await expect(
+        provider.syncUserName('clerk-1', { firstName: 'A', lastName: 'B' }),
       ).rejects.toThrow('clerk api down');
     });
   });
