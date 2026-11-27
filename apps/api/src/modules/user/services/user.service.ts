@@ -156,7 +156,8 @@ export class UserService {
   }
 
   // `role` and `status` are owned by the auth provider: push them there and let the
-  // `user.updated` webhook write them back to the DB. Everything else is written locally.
+  // `user.updated` webhook write them back to the DB. The name is pushed there too and
+  // also written locally; everything else is written locally only.
   // The returned user therefore still holds the previous role/status until the webhook lands.
   async updateByAdmin(
     id: string,
@@ -169,7 +170,17 @@ export class UserService {
     const roleChanged = role !== undefined && role !== (user.role as UserRole);
     const statusChanged =
       status !== undefined && status !== (user.status as UserStatus);
+    const firstName = profile.firstName ?? user.firstName;
+    const lastName = profile.lastName ?? user.lastName;
+    const nameChanged =
+      firstName !== user.firstName || lastName !== user.lastName;
     try {
+      if (nameChanged) {
+        await this.authProvider.syncUserName(user.clerkId, {
+          firstName,
+          lastName,
+        });
+      }
       if (roleChanged) {
         await this.authProvider.syncUserRole(user.clerkId, role);
       }
