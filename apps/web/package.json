@@ -29,7 +29,6 @@
     "@clerk/nextjs": "^6.30.0",
     "@clerk/themes": "^2.4.57",
     "@hookform/resolvers": "^5.2.2",
-    "@paypal/react-paypal-js": "10.6.1",
     "@repo/constants": "workspace:*",
     "@repo/schemas": "workspace:*",
     "@tanstack/react-query": "5.62.0",

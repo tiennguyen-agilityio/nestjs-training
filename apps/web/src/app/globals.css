@@ -144,7 +144,7 @@
   --surface-dim: #ded9d2;
   --surface-bright: #fef9f1;
   --surface-container: #f2ede5;
-  --surface-container-low: #f8f3eb;
+  --surface-container-low: #f2ede5;
   --surface-container-high: #ece8e0;
   --surface-container-highest: #e7e2da;
   --surface-container-lowest: #ffffff;
@@ -228,7 +228,7 @@
   --surface-dim: #141310;
   --surface-bright: #5e5c57;
   --surface-container: #3a3833;
-  --surface-container-low: #32302b;
+  --surface-container-low: #3a3833;
   --surface-container-high: #45433e;
   --surface-container-highest: #504e49;
   --surface-container-lowest: #141310;

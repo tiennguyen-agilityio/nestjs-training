@@ -71,7 +71,7 @@ export interface PlacedOrderPayment {
 
 export interface PaymentCheckout {
   paymentId: string
-  /** The PayPal order id the popup approves. */
+  /** The provider's checkout id (a Stripe session, a PayPal order). */
   checkoutId: string
   checkoutUrl: string
   expiresAt: string

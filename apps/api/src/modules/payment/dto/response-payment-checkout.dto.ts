@@ -3,7 +3,7 @@ import type { Payment } from '../../order/entities/payment.entity.js';
 
 export class ResponsePaymentCheckoutDto {
   paymentId!: string;
-  /** The gateway's checkout id: the PayPal order id the popup approves. */
+  /** The gateway's checkout id: a Stripe session id, or the PayPal order id the shopper approves on PayPal's page. */
   checkoutId!: string;
   checkoutUrl!: string;
   expiresAt!: Date;

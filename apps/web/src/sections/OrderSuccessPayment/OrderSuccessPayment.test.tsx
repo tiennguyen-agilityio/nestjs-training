@@ -73,7 +73,7 @@ const renderPayment = (props: Partial<OrderSuccessPaymentProps> = {}) =>
 
 const paymentRegion = () => screen.getByRole('region', { name: 'Payment' })
 const retryButton = () =>
-  screen.queryByRole('button', { name: 'Retry payment' })
+  screen.queryByRole('button', { name: 'Complete payment' })
 
 const hookState = (isPending = false) =>
   jest.mocked(useStartPayment).mockReturnValue({
@@ -89,6 +89,31 @@ describe('OrderSuccessPayment', () => {
       replace,
     } as unknown as ReturnType<typeof useRouter>)
     hookState()
+  })
+
+  it('an unfinished payment reads Unpaid with Complete payment, not Pending and Retry', () => {
+    renderPayment({ order: orderOf(OrderPaymentStatus.PENDING) })
+
+    expect(within(paymentRegion()).getByText('Unpaid')).toBeInTheDocument()
+    expect(
+      within(paymentRegion()).queryByText('Pending'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Complete payment' }),
+    ).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Retry payment' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('a failed payment reads Failed with Retry payment', () => {
+    renderPayment({ order: orderOf(OrderPaymentStatus.FAILED) })
+
+    expect(within(paymentRegion()).getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry payment' })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Complete payment' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows Paid and Payment received for a PAID order', () => {
@@ -115,7 +140,7 @@ describe('OrderSuccessPayment', () => {
     expect(retryButton()).not.toBeInTheDocument()
   })
 
-  it('shows the start failure reason next to Retry payment', () => {
+  it('shows the start failure reason next to Complete payment', () => {
     renderPayment({ paymentError: 'paymentOrderExpired' })
 
     expect(
@@ -124,7 +149,7 @@ describe('OrderSuccessPayment', () => {
     expect(retryButton()).toBeInTheDocument()
   })
 
-  it('Retry payment starts the payment and replaces the location', async () => {
+  it('Complete payment starts the payment and replaces the location', async () => {
     const user = userEvent.setup()
     mutateAsync.mockResolvedValue({
       paymentId: 'p-1',
@@ -133,7 +158,7 @@ describe('OrderSuccessPayment', () => {
     })
     renderPayment()
 
-    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
+    await user.click(screen.getByRole('button', { name: 'Complete payment' }))
 
     expect(mutateAsync).toHaveBeenCalledWith('o-1')
     await waitFor(() =>
@@ -141,7 +166,7 @@ describe('OrderSuccessPayment', () => {
     )
   })
 
-  it('the URL error stays hidden while a second Retry payment runs', async () => {
+  it('the URL error stays hidden while a second Complete payment runs', async () => {
     const user = userEvent.setup()
     let rejectFirst: (error: unknown) => void = () => undefined
     mutateAsync
@@ -157,7 +182,7 @@ describe('OrderSuccessPayment', () => {
       screen.getByText(ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE),
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
+    await user.click(screen.getByRole('button', { name: 'Complete payment' }))
     rejectFirst(
       new ServiceError('x', [
         {
@@ -169,26 +194,26 @@ describe('OrderSuccessPayment', () => {
       ]),
     )
     await screen.findByRole('alert')
-    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
+    await user.click(screen.getByRole('button', { name: 'Complete payment' }))
 
     expect(
       screen.queryByText(ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE),
     ).not.toBeInTheDocument()
   })
 
-  it('Retry payment is disabled while the payment starts', async () => {
+  it('Complete payment is disabled while the payment starts', async () => {
     const user = userEvent.setup()
     hookState(true)
     renderPayment()
 
-    const button = screen.getByRole('button', { name: 'Retry payment' })
+    const button = screen.getByRole('button', { name: 'Complete payment' })
     expect(button).toBeDisabled()
     await user.click(button)
 
     expect(mutateAsync).not.toHaveBeenCalled()
   })
 
-  it('a failed Retry payment shows the mapped error and keeps the button', async () => {
+  it('a failed Complete payment shows the mapped error and keeps the button', async () => {
     const user = userEvent.setup()
     mutateAsync.mockRejectedValue(
       new ServiceError('x', [
@@ -205,7 +230,7 @@ describe('OrderSuccessPayment', () => {
       screen.getByText(ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE),
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
+    await user.click(screen.getByRole('button', { name: 'Complete payment' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       ERROR_MESSAGES.PAYMENT_NOT_PAYABLE,
@@ -213,7 +238,9 @@ describe('OrderSuccessPayment', () => {
     expect(
       screen.queryByText(ERROR_MESSAGES.PAYMENT_GATEWAY_UNAVAILABLE),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry payment' })).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Complete payment' }),
+    ).toBeEnabled()
     expect(replace).not.toHaveBeenCalled()
   })
 
@@ -238,7 +265,7 @@ describe('OrderSuccessPayment', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('shows the pay-by banner, Pay with and Retry payment for an unpaid card order', () => {
+  it('shows the pay-by banner, Pay with and Complete payment for an unpaid card order', () => {
     renderPayment({
       order: orderOf(OrderPaymentStatus.UNPAID, PaymentMethod.CARD, {
         expiresAt: minutesFromNow(17.9),
@@ -259,7 +286,11 @@ describe('OrderSuccessPayment', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('disables Retry payment with Coming soon for PayPal', () => {
+  it("retries a PayPal payment on PayPal's page, as a card", async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue({
+      checkoutUrl: 'https://www.sandbox.paypal.com/pay?token=PAYPAL-ORDER-2',
+    })
     renderPayment({
       order: orderOf(OrderPaymentStatus.FAILED, PaymentMethod.PAYPAL),
     })
@@ -267,13 +298,16 @@ describe('OrderSuccessPayment', () => {
     expect(
       screen.getByRole('combobox', { name: 'Pay with' }),
     ).toHaveTextContent(PAYMENT_METHOD_LABELS[PaymentMethod.PAYPAL])
-    expect(retryButton()).toBeDisabled()
     expect(
-      screen.getByText(NOTICE_MESSAGES.ORDER_PAYMENT.RETRY_COMING_SOON),
-    ).toBeInTheDocument()
+      screen.queryByText(NOTICE_MESSAGES.ORDER_PAYMENT.RETRY_COMING_SOON),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Retry payment' }))
+    expect(replace).toHaveBeenCalledWith(
+      'https://www.sandbox.paypal.com/pay?token=PAYPAL-ORDER-2',
+    )
   })
 
-  it('disables Retry payment with Coming soon when another method is selected', async () => {
+  it('disables Complete payment with Coming soon when another method is selected', async () => {
     const user = userEvent.setup()
     renderPayment()
 
@@ -309,7 +343,7 @@ describe('OrderSuccessPayment', () => {
     expect(retryButton()).not.toBeInTheDocument()
   })
 
-  it('shows no banner without expiresAt and keeps Retry payment enabled', () => {
+  it('shows no banner without expiresAt and keeps Complete payment enabled', () => {
     renderPayment()
 
     expect(screen.queryByText(/^Pay by /)).not.toBeInTheDocument()
@@ -356,6 +390,6 @@ describe('OrderSuccessPayment', () => {
     expect(
       screen.getByRole('combobox', { name: 'Pay with' }),
     ).toHaveTextContent(PAYMENT_METHOD_LABELS[PaymentMethod.CARD])
-    expect(retryButton()).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Retry payment' })).toBeEnabled()
   })
 })

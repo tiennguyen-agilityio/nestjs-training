@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { API_FALLBACK_ERRORS, NOTICE_MESSAGES } from '@/constants/messages'
 import type { ShippingMethod } from '@/types/shippingMethod'
 import { formatPrice } from '@/utils/common'
+import { cn } from '@/utils/styles'
 
 export interface CheckoutShippingMethodsProps {
   methods: ShippingMethod[]
@@ -75,7 +76,12 @@ export default function CheckoutShippingMethods({
         {methods.map(({ id, name, description, price }) => (
           <label
             key={id}
-            className="flex cursor-pointer items-center justify-between rounded-3xl border border-outline-variant/70 bg-surface-container-low px-4 py-4"
+            className={cn(
+              'flex cursor-pointer items-center justify-between rounded-3xl border bg-surface-container-low px-4 py-4',
+              selectedId === id
+                ? 'border-primary'
+                : 'border-outline-variant/70',
+            )}
             htmlFor={id}
           >
             <div className="flex items-center gap-3">

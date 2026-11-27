@@ -197,10 +197,12 @@ pnpm run docker:prod:down
   `completed_at`) and the order CONFIRMED; a declined card or an expired session sets it FAILED
   with the reason. PAID never changes again, so repeated events change nothing.
 - **PayPal** — for a PAYPAL order the same start call creates a PayPal order (Orders v2, intent
-  CAPTURE) and returns its id for the website's PayPal popup. After the shopper approves,
-  `POST /orders/:id/payments/capture` captures it: COMPLETED sets PAID with the capture id and
-  confirms the order, a decline sets FAILED with PayPal's reason (`retryable` tells whether the
-  shopper can approve again with another funding source), a capture held for review stays PENDING.
+  CAPTURE) whose return and cancel URLs point at Order success, and returns PayPal's approval
+  link: the website redirects the shopper there. When the shopper comes back approved, Order
+  success calls `POST /orders/:id/payments/capture`, which captures it: COMPLETED sets PAID with
+  the capture id and confirms the order, a decline sets FAILED with PayPal's reason (`retryable`
+  tells whether the shopper can approve again with another funding source), a capture held for
+  review stays PENDING.
   `POST /webhooks/paypal` (verified with PayPal against `PAYPAL_WEBHOOK_ID`) captures an approved
   order nobody captured (`CHECKOUT.ORDER.APPROVED`) and records `PAYMENT.CAPTURE.COMPLETED` /
   `PAYMENT.CAPTURE.DENIED`. An order past its `expires_at` is never captured.
@@ -214,13 +216,12 @@ pnpm run docker:prod:down
 
 > **PayPal credentials:** in [developer.paypal.com](https://developer.paypal.com) › Apps & Credentials
 > (Sandbox), create an app: its client id and secret are `PAYPAL_CLIENT_ID` and
-> `PAYPAL_CLIENT_SECRET` (the web uses the same client id as `NEXT_PUBLIC_PAYPAL_CLIENT_ID`). On that
-> app add a webhook for `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED`,
-> `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED`, `PAYMENT.REFUND.PENDING` and
-> `PAYMENT.REFUND.FAILED`; its id is `PAYPAL_WEBHOOK_ID`. PayPal only calls public HTTPS URLs, so
-> locally expose `/webhooks/paypal` through a tunnel (for example `ngrok http <PORT>`). Sandbox buyer
-> accounts to approve payments with are under Testing Tools › Sandbox Accounts. The Render develop
-> service and the web's Vercel project need these values before this is deployed.
+> `PAYPAL_CLIENT_SECRET`. On that app add a webhook for `CHECKOUT.ORDER.APPROVED`,
+> `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED`,
+> `PAYMENT.REFUND.PENDING` and `PAYMENT.REFUND.FAILED`; its id is `PAYPAL_WEBHOOK_ID`. PayPal only
+> calls public HTTPS URLs, so locally expose `/webhooks/paypal` through a tunnel (for example
+> `ngrok http <PORT>`). Sandbox buyer accounts to approve payments with are under Testing Tools ›
+> Sandbox Accounts. The Render develop service needs these values before this is deployed.
 
 ### Cross-cutting
 

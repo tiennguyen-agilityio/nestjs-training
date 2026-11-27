@@ -35,8 +35,9 @@ const request: CheckoutRequest = {
   currency: 'usd',
   customerEmail: 'lan@example.com',
   expiresAt: new Date('2026-11-25T09:00:00Z'),
-  successUrl: 'http://localhost:3501/order-success',
-  cancelUrl: 'http://localhost:3501/order-success',
+  successUrl:
+    'http://localhost:3501/order-success?orderId=order-1&session_id={CHECKOUT_SESSION_ID}',
+  cancelUrl: 'http://localhost:3501/order-success?orderId=order-1',
   replacesCheckoutId: null,
 };
 
@@ -131,6 +132,18 @@ describe('PayPalPaymentGateway', () => {
               amount: { currency_code: 'USD', value: '12.34' },
             },
           ],
+          payment_source: {
+            paypal: {
+              experience_context: {
+                return_url:
+                  'http://localhost:3501/order-success?orderId=order-1',
+                cancel_url:
+                  'http://localhost:3501/order-success?orderId=order-1&payment=cancelled',
+                user_action: 'PAY_NOW',
+                shipping_preference: 'NO_SHIPPING',
+              },
+            },
+          },
         },
       });
     });

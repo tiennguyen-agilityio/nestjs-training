@@ -2,25 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PaymentMethod } from '@repo/constants'
 
 import { Button } from '@/components/ui/button'
-import PayPalRetryButton from '@/components/PayPalRetryButton'
 import { useStartPayment } from '@/hooks/usePayment'
 import type { OrderDetail } from '@/types/order'
-import {
-  canRetryPayment,
-  chargeMethodOf,
-  paymentErrorMessage,
-} from '@/utils/order'
+import { canRetryPayment, paymentErrorMessage } from '@/utils/order'
 import { ServiceError } from '@/utils/query'
 
 export interface OrderRetryPaymentProps {
   order: OrderDetail
 }
 
-/** A card retry: a new Stripe Checkout on the same order, as Order success's "Pay now". */
-function CardRetry({ order }: OrderRetryPaymentProps) {
+function RedirectRetry({ order }: OrderRetryPaymentProps) {
   const router = useRouter()
   const { mutateAsync: startPayment, isPending } = useStartPayment()
   const [isRedirecting, setIsRedirecting] = useState(false)
@@ -59,13 +52,7 @@ function CardRetry({ order }: OrderRetryPaymentProps) {
 }
 
 /** Order details' "Retry payment" for a FAILED card or PayPal payment; nothing otherwise. */
-const OrderRetryPayment = ({ order }: OrderRetryPaymentProps) => {
-  if (!canRetryPayment(order)) return null
-  return chargeMethodOf(order) === PaymentMethod.PAYPAL ? (
-    <PayPalRetryButton order={order} />
-  ) : (
-    <CardRetry order={order} />
-  )
-}
+const OrderRetryPayment = ({ order }: OrderRetryPaymentProps) =>
+  canRetryPayment(order) ? <RedirectRetry order={order} /> : null
 
 export default OrderRetryPayment

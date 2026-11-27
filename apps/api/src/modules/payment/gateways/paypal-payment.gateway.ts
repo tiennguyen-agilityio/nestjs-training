@@ -111,7 +111,13 @@ const issueOf = (body: unknown): PayPalIssue[] => {
   return Array.isArray(details) ? details : [];
 };
 
-/** PayPal Orders v2 behind the gateway contract; the shopper approves in PayPal's popup. */
+const cancelledUrlOf = (url: string): string => {
+  const cancelled = new URL(url);
+  cancelled.searchParams.set('payment', 'cancelled');
+  return cancelled.toString();
+};
+
+/** PayPal Orders v2 behind the gateway contract; the shopper approves on PayPal's page and returns to Order success. */
 @Injectable()
 export class PayPalPaymentGateway extends PaymentGateway {
   private readonly webhookId: string;
@@ -145,6 +151,17 @@ export class PayPalPaymentGateway extends PaymentGateway {
             },
           },
         ],
+        // successUrl carries Stripe's {CHECKOUT_SESSION_ID} placeholder.
+        payment_source: {
+          paypal: {
+            experience_context: {
+              return_url: request.cancelUrl,
+              cancel_url: cancelledUrlOf(request.cancelUrl),
+              user_action: 'PAY_NOW',
+              shipping_preference: 'NO_SHIPPING',
+            },
+          },
+        },
       },
     });
     if (response.status >= CLIENT_ERROR) throw this.rejected();

@@ -15,17 +15,8 @@ import OrderRetryPayment from '@/sections/OrderRetryPayment'
 import type { OrderDetail } from '@/types/order'
 import { ServiceError } from '@/utils/query'
 
-const mockPayPalRetryButton = jest.fn()
-
 jest.mock('next/navigation', () => ({ useRouter: jest.fn() }))
 jest.mock('@/hooks/usePayment', () => ({ useStartPayment: jest.fn() }))
-jest.mock('@/components/PayPalRetryButton', () => ({
-  __esModule: true,
-  default: (props: { order: { id: string } }) => {
-    mockPayPalRetryButton(props)
-    return <button type="button">PayPal retry</button>
-  },
-}))
 
 const replace = jest.fn()
 const mutateAsync = jest.fn()
@@ -130,17 +121,19 @@ describe('OrderRetryPayment', () => {
     expect(retryButton()).toBeEnabled()
   })
 
-  it('OrderRetryPayment renders the PayPal button for a FAILED PAYPAL order', () => {
-    const order = orderOf(PaymentMethod.PAYPAL)
-    render(<OrderRetryPayment order={order} />)
+  it('OrderRetryPayment redirects a FAILED PAYPAL order to PayPal, as a card', async () => {
+    const user = userEvent.setup()
+    mutateAsync.mockResolvedValue({
+      checkoutUrl: 'https://www.sandbox.paypal.com/pay?token=PAYPAL-ORDER-2',
+    })
+    render(<OrderRetryPayment order={orderOf(PaymentMethod.PAYPAL)} />)
 
-    expect(mockPayPalRetryButton).toHaveBeenCalledWith({ order })
-    expect(
-      screen.getByRole('button', { name: 'PayPal retry' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Retry payment' }),
-    ).not.toBeInTheDocument()
+    await user.click(retryButton())
+
+    expect(mutateAsync).toHaveBeenCalledWith('o-1')
+    expect(replace).toHaveBeenCalledWith(
+      'https://www.sandbox.paypal.com/pay?token=PAYPAL-ORDER-2',
+    )
   })
 
   it('OrderRetryPayment renders nothing when the order cannot be retried', () => {
@@ -153,6 +146,5 @@ describe('OrderRetryPayment', () => {
     expect(
       screen.queryByRole('button', { name: 'Retry payment' }),
     ).not.toBeInTheDocument()
-    expect(mockPayPalRetryButton).not.toHaveBeenCalled()
   })
 })

@@ -3,7 +3,6 @@ import type { PlaceOrderPayload } from '@repo/schemas'
 
 import { API_FALLBACK_ERRORS, ERROR_MESSAGES } from '@/constants/messages'
 import type { ApiErrorResponse, ErrorDetail } from '@/types/api'
-import type { CartItem, CartTotals } from '@/types/cart'
 import {
   PAYMENT_METHOD,
   type CheckoutCardFormValues,
@@ -423,7 +422,7 @@ export type OrderSuccessPaymentKind =
 export interface OrderSuccessPaymentView {
   kind: OrderSuccessPaymentKind
   badgeStatus: OrderPaymentStatus
-  /** Retry works today: a CARD order, through the Stripe redirect. */
+  /** Retry works today: a CARD or PAYPAL order, through the provider redirect. */
   canPayNow: boolean
   errorMessage: string | null
   chargeMethod: PaymentMethod | null
@@ -478,10 +477,13 @@ export function getOrderSuccessPaymentView(input: {
 
   return {
     kind,
+    // An abandoned or cancelled checkout leaves the charge PENDING.
     badgeStatus: isConfirming
       ? OrderPaymentStatus.PENDING
-      : order.paymentStatus,
-    canPayNow: showRetry && chargeMethod === PaymentMethod.CARD,
+      : kind === 'notCompleted'
+        ? OrderPaymentStatus.UNPAID
+        : order.paymentStatus,
+    canPayNow: showRetry,
     errorMessage:
       isUnfinished && paymentError ? paymentErrorMessage(paymentError) : null,
     chargeMethod,
@@ -558,33 +560,6 @@ export const getCancelOrderErrorMessage = (error: unknown): string =>
   error.errors.some(({ errCode }) => errCode === 'statusNotAllowed')
     ? ERROR_MESSAGES.ORDER_NOT_CANCELLABLE
     : getErrorMessage(error)
-
-/** The placed order's lines in the shape Checkout's summary shows (the cart is empty by then). */
-export function placedOrderToCartItems(order: PlacedOrder): CartItem[] {
-  return order.items.map((item) => ({
-    id: item.id,
-    variantId: item.productVariantId,
-    // The order line keeps no product id; the summary only needs it to remove a line.
-    productId: '',
-    name: item.productName,
-    meta: item.variantName,
-    imageUrl: item.productImage,
-    unitPrice: item.unitPrice - item.discountAmount,
-    listPrice: item.unitPrice,
-    quantity: item.quantity,
-    lineTotal: item.lineTotal,
-  }))
-}
-
-/** The placed order's totals in the shape Checkout's summary shows. */
-export function placedOrderTotals(order: PlacedOrder): CartTotals {
-  return {
-    subtotal: order.subTotal,
-    shipping: order.shippingFee,
-    tax: order.tax,
-    total: order.totalAmount,
-  }
-}
 
 const ONLINE_METHODS = new Set<string>([
   PaymentMethod.CARD,
