@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import RoastsPage from '@/app/(shop)/roasts/page'
 import { PAGE_SIZE } from '@/constants/common'
-import { ROAST_LEVEL_OPTIONS } from '@/constants/roast'
+import { ROAST_LEVEL_OPTIONS, ROAST_PRICE_FILTER } from '@/constants/roast'
 import { useProducts } from '@/hooks/useProduct'
 import {
   DiscountType,
@@ -140,6 +140,69 @@ describe('Roasts route page', () => {
     for (const { label } of ROAST_LEVEL_OPTIONS) {
       expect(screen.getByRole('checkbox', { name: label })).toBeChecked()
     }
+  })
+
+  it.each([
+    [ROAST_PRICE_FILTER.UNDER_50, { maxPrice: 49.99 }],
+    [ROAST_PRICE_FILTER.FROM_50_TO_100, { minPrice: 50, maxPrice: 99.99 }],
+    [ROAST_PRICE_FILTER.FROM_100_TO_150, { minPrice: 100, maxPrice: 149.99 }],
+    [ROAST_PRICE_FILTER.FROM_150_TO_200, { minPrice: 150, maxPrice: 199.99 }],
+    [ROAST_PRICE_FILTER.OVER_200, { minPrice: 200 }],
+  ])('sends only the bounds of the %s price range', (price, bounds) => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams(`price=${price}`) as ReturnType<
+        typeof useSearchParams
+      >,
+    )
+    mockUseProducts.mockClear()
+
+    render(<RoastsPage />)
+
+    const params = mockUseProducts.mock.calls.at(-1)?.[0]
+    expect(params?.minPrice).toBe(
+      'minPrice' in bounds ? bounds.minPrice : undefined,
+    )
+    expect(params?.maxPrice).toBe(
+      'maxPrice' in bounds ? bounds.maxPrice : undefined,
+    )
+  })
+
+  it('sends no price bounds for all prices', () => {
+    mockUseProducts.mockClear()
+
+    render(<RoastsPage />)
+
+    const params = mockUseProducts.mock.calls.at(-1)?.[0]
+    expect(params).not.toHaveProperty('minPrice')
+    expect(params).not.toHaveProperty('maxPrice')
+  })
+
+  it('writes the picked price range to the URL and clears it for all prices', async () => {
+    const user = userEvent.setup()
+    const replace = jest.fn()
+    mockUseRouter.mockReturnValue({
+      replace,
+    } as unknown as ReturnType<typeof useRouter>)
+    const { rerender } = render(<RoastsPage />)
+
+    await user.click(screen.getByRole('combobox', { name: 'Price range' }))
+    await user.click(await screen.findByRole('option', { name: 'Under $50' }))
+
+    const [pickedUrl] = replace.mock.calls.at(-1) as [string]
+    const picked = new URLSearchParams(pickedUrl.split('?')[1] ?? '')
+    expect(picked.get('price')).toBe(ROAST_PRICE_FILTER.UNDER_50)
+    expect(picked.has('minPrice')).toBe(false)
+    expect(picked.has('maxPrice')).toBe(false)
+
+    mockUseSearchParams.mockReturnValue(
+      picked as ReturnType<typeof useSearchParams>,
+    )
+    rerender(<RoastsPage />)
+    await user.click(screen.getByRole('combobox', { name: 'Price range' }))
+    await user.click(await screen.findByRole('option', { name: 'All prices' }))
+
+    const [clearedUrl] = replace.mock.calls.at(-1) as [string]
+    expect(clearedUrl).not.toContain('price=')
   })
 
   it('lists products without asAdmin', () => {
