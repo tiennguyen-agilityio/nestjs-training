@@ -407,7 +407,7 @@ export class PaymentService {
     });
   }
 
-  /** Captures the shopper's approved PayPal order after the popup closes. */
+  /** Captures the shopper's approved PayPal order when they return to Order success. */
   async capture(
     userId: string,
     orderId: string,

@@ -16,10 +16,9 @@ import {
 import {
   API_FALLBACK_ERRORS,
   ERROR_MESSAGES,
-  NOTICE_MESSAGES,
   SUCCESS_MESSAGES,
 } from '@/constants/messages'
-import { orderSuccessPath, profileOrderPath, ROUTES } from '@/constants/routes'
+import { orderSuccessPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart, type UseCartResult } from '@/hooks/useCart'
 import { useCreateOrder } from '@/hooks/useOrder'
@@ -75,50 +74,6 @@ jest.mock('@clerk/nextjs', () => ({
   useAuth: () => ({ getToken: jest.fn().mockResolvedValue('session-token') }),
 }))
 jest.mock('@/hooks/useAuth', () => ({ useAuth: jest.fn() }))
-// The real SDK loads PayPal's script: a button that runs the popup's callbacks.
-jest.mock(
-  '@paypal/react-paypal-js/sdk-v6',
-  () => ({
-    PayPalProvider: ({ children }: { children: React.ReactNode }) => (
-      <>{children}</>
-    ),
-    PayPalOneTimePaymentButton: (props: {
-      createOrder: () => Promise<{ orderId: string }>
-      onApprove: () => Promise<void>
-      onCancel: () => void
-    }) => (
-      <>
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              await props.createOrder()
-              await props.onApprove()
-            } catch {
-              // The SDK reports a rejected createOrder through onError.
-            }
-          }}
-        >
-          PayPal
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              await props.createOrder()
-              props.onCancel()
-            } catch {
-              // as above
-            }
-          }}
-        >
-          PayPal then cancel
-        </button>
-      </>
-    ),
-  }),
-  { virtual: true },
-)
 jest.mock('@/hooks/useShippingMethod', () => ({
   useActiveShippingMethods: jest.fn(),
 }))
@@ -1588,130 +1543,51 @@ describe('CheckoutPageContent', () => {
   })
 
   describe('PayPal', () => {
-    const originalEnv = process.env
-    const paypalOrder: PlacedOrder = {
-      ...placedOrder,
-      items: [
-        {
-          id: 'item-1',
-          productVariantId: 'variant-1',
-          productName: 'Ethiopian Yirgacheffe',
-          productImage: '/images/empty-image.webp',
-          variantName: 'Light Roast',
-          unitPrice: 24,
-          discountAmount: 0,
-          quantity: 1,
-          lineTotal: 24,
-        },
-      ],
-    }
-
-    const pickPayPal = async (user: ReturnType<typeof userEvent.setup>) => {
-      await user.click(screen.getByRole('radio', { name: /paypal/i }))
+    const paypalCheckout = {
+      ...checkout,
+      checkoutId: 'PAYPAL-ORDER-1',
+      checkoutUrl:
+        'https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-1',
     }
 
     beforeEach(() => {
-      process.env = { ...originalEnv, NEXT_PUBLIC_PAYPAL_CLIENT_ID: 'client' }
       mockUseShippingMethods.mockReturnValue(
-        shippingResult({ shippingMethods: [express] }),
+        shippingResult({ shippingMethods: [standard] }),
       )
-      startPaymentMutate.mockResolvedValue({
-        paymentId: 'payment-1',
-        checkoutId: 'PP-ORDER-1',
-        checkoutUrl: 'https://www.sandbox.paypal.com/checkoutnow',
-        expiresAt: '2026-11-25T09:00:00.000Z',
-      })
     })
 
-    afterEach(() => {
-      process.env = originalEnv
-    })
-
-    it('PayPal replaces Place order', async () => {
+    it('PayPal uses the same Continue to payment button as a card', async () => {
       const user = userEvent.setup()
       renderCheckout()
 
-      await pickPayPal(user)
+      await user.click(screen.getByRole('radio', { name: /paypal/i }))
 
-      expect(screen.getByRole('button', { name: 'PayPal' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Continue to payment' }),
+      ).toBeInTheDocument()
       expect(
         screen.queryByRole('button', { name: /place order/i }),
       ).not.toBeInTheDocument()
     })
 
-    it('an invalid form opens no PayPal order', async () => {
+    it("a PAYPAL order starts its payment and replaces the location with PayPal's page", async () => {
       const user = userEvent.setup()
-      renderCheckout()
-      await pickPayPal(user)
-
-      await user.click(screen.getByRole('button', { name: 'PayPal' }))
-
-      expect(mutateAsync).not.toHaveBeenCalled()
-      expect(startPaymentMutate).not.toHaveBeenCalled()
-      expect(screen.getAllByText(/required|enter/i).length).toBeGreaterThan(0)
-    })
-
-    it('after a cancel the placed order stays and PayPal is offered again', async () => {
-      // Placing the order empties the server cart, as the API does.
-      mutateAsync.mockImplementation(async () => {
-        mockUseCart.mockReturnValue({ ...cartResult, items: [] })
-        return paypalOrder
+      mutateAsync.mockResolvedValue({
+        ...placedOrder,
+        paymentMethod: PaymentMethod.PAYPAL,
       })
-      const user = userEvent.setup()
+      startPaymentMutate.mockResolvedValue(paypalCheckout)
+
       renderCheckout()
       await fillForm(user)
-      await pickPayPal(user)
-
-      await user.click(
-        screen.getByRole('button', { name: 'PayPal then cancel' }),
-      )
+      await user.click(screen.getByRole('radio', { name: /paypal/i }))
+      await user.click(placeOrderButton())
 
       await waitFor(() =>
-        expect(screen.getByRole('status')).toHaveTextContent(
-          NOTICE_MESSAGES.PAYPAL_CANCELLED,
-        ),
+        expect(replace).toHaveBeenCalledWith(paypalCheckout.checkoutUrl),
       )
-      expect(startPaymentMutate).toHaveBeenCalledWith('order-1')
+      expect(startPaymentMutate).toHaveBeenCalledWith(placedOrder.id)
       expect(push).not.toHaveBeenCalled()
-      expect(screen.getByText('Ethiopian Yirgacheffe')).toBeInTheDocument()
-      expect(totalText()).toBe('$115.00')
-      expect(screen.getByLabelText('First Name')).toBeDisabled()
-      expect(
-        screen.getByRole('radio', { name: /cash on delivery/i }),
-      ).toBeDisabled()
-
-      await user.click(
-        screen.getByRole('button', { name: 'PayPal then cancel' }),
-      )
-      await waitFor(() => expect(startPaymentMutate).toHaveBeenCalledTimes(2))
-      expect(mutateAsync).toHaveBeenCalledTimes(1)
-    })
-
-    it("a final decline removes PayPal and links to the order's details", async () => {
-      mutateAsync.mockResolvedValue(paypalOrder)
-      capturePaymentMutate.mockResolvedValue({
-        paymentId: 'payment-1',
-        paymentStatus: OrderPaymentStatus.FAILED,
-        failureReason: 'PayPal denied the payment',
-        retryable: false,
-      })
-      const user = userEvent.setup()
-      renderCheckout()
-      await fillForm(user)
-      await pickPayPal(user)
-
-      await user.click(screen.getByRole('button', { name: 'PayPal' }))
-
-      await waitFor(() =>
-        expect(screen.getByRole('alert')).toHaveTextContent(
-          ERROR_MESSAGES.PAYPAL_NOT_RETRYABLE,
-        ),
-      )
-      expect(screen.queryByRole('button', { name: 'PayPal' })).toBeNull()
-      expect(screen.getByRole('link', { name: /view order/i })).toHaveAttribute(
-        'href',
-        profileOrderPath(paypalOrder.orderNumber),
-      )
     })
   })
 })

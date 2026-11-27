@@ -2,7 +2,8 @@
 
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
-import type { ReactNode } from 'react'
+import { useAuth } from '@clerk/nextjs'
+import { useEffect, useRef, type ReactNode } from 'react'
 import {
   ArrowRight,
   Check,
@@ -19,9 +20,10 @@ import Loading from '@/components/Loading'
 import { Button } from '@/components/ui/button'
 import { NOTICE_MESSAGES } from '@/constants/messages'
 import { ORDER_SUCCESS_COUNTDOWN_TICK_MS } from '@/constants/order'
-import { ROUTES } from '@/constants/routes'
+import { orderSuccessPath, ROUTES } from '@/constants/routes'
 import { useNow } from '@/hooks/useNow'
 import { useOrderDetail } from '@/hooks/useOrder'
+import { useCapturePayment } from '@/hooks/usePayment'
 import OrderSuccessPayment from '@/sections/OrderSuccessPayment'
 import { useCartStore } from '@/store/useCartStore'
 import type { OrderDetail, PlacedOrder, PlacedOrderItem } from '@/types/order'
@@ -35,6 +37,7 @@ import {
 } from '@/utils/order'
 import { cn } from '@/utils/styles'
 import { OrderPaymentStatus } from '@repo/constants'
+import { ServiceError } from '@/utils/query'
 
 const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
 const dayFormatter = new Intl.DateTimeFormat('en-US', { day: '2-digit' })
@@ -135,9 +138,13 @@ const OrderSuccessSummary = ({
     tax,
   } = order
 
-  const addressLines = [addressLine, ward, district, city, postalCode].filter(
-    Boolean,
-  )
+  const addressLines = Object.entries({
+    addressLine,
+    ward,
+    district,
+    city,
+    postalCode,
+  }).filter(([, value]) => Boolean(value))
   const orderDate = new Date(createdAt)
   const monthLabel = monthFormatter.format(orderDate)
   const dayLabel = dayFormatter.format(orderDate)
@@ -249,9 +256,9 @@ const OrderSuccessSummary = ({
               />
               <div>
                 <p className="font-semibold text-on-surface">{recipientName}</p>
-                {addressLines.map((line) => (
-                  <p key={line} className="text-sm text-on-surface-variant">
-                    {line}
+                {addressLines.map(([field, value]) => (
+                  <p key={field} className="text-sm text-on-surface-variant">
+                    {value}
                   </p>
                 ))}
               </div>
@@ -324,15 +331,49 @@ const OrderSuccessSummary = ({
   )
 }
 
+/** The webhook also captures, but it may not reach a local API. */
+const useCaptureOnPayPalReturn = (
+  orderId: string,
+  paypalToken: string | null,
+) => {
+  const router = useRouter()
+  const { isLoaded, isSignedIn } = useAuth()
+  const { mutateAsync: capture } = useCapturePayment()
+  const sentRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    // A full page load from PayPal: without a session the capture has no token.
+    if (!paypalToken || !isLoaded || !isSignedIn) return
+    if (sentRef.current === paypalToken) return
+    sentRef.current = paypalToken
+    void capture(orderId).then(
+      ({ paymentStatus }) =>
+        router.replace(
+          orderSuccessPath(orderId, undefined, {
+            confirming: paymentStatus === OrderPaymentStatus.PENDING,
+          }),
+        ),
+      (error: unknown) => {
+        const errCode =
+          error instanceof ServiceError ? error.errors[0]?.errCode : undefined
+        router.replace(orderSuccessPath(orderId, errCode ?? 'unknown'))
+      },
+    )
+  }, [capture, isLoaded, isSignedIn, orderId, paypalToken, router])
+}
+
 const OrderSuccessFromApi = ({
   orderId,
   hasSessionId,
   paymentError,
+  paypalToken,
 }: {
   orderId: string
   hasSessionId: boolean
   paymentError: string | null
+  paypalToken: string | null
 }) => {
+  useCaptureOnPayPalReturn(orderId, paypalToken)
   const {
     order,
     isLoading,
@@ -393,6 +434,10 @@ const OrderSuccessPageContent = () => {
   const searchParams = useSearchParams()
   const { itemSnapshots: snapshot } = useCartStore()
   const orderId = searchParams.get('orderId')
+  const paypalToken =
+    searchParams.get('payment') === 'cancelled'
+      ? null
+      : searchParams.get('token')
 
   if (orderId) {
     return (
@@ -400,9 +445,11 @@ const OrderSuccessPageContent = () => {
         orderId={orderId}
         hasSessionId={
           Boolean(searchParams.get('session_id')) ||
+          Boolean(paypalToken) ||
           searchParams.get('payment') === 'pending'
         }
         paymentError={searchParams.get('paymentError')}
+        paypalToken={paypalToken}
       />
     )
   }

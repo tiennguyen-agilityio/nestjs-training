@@ -29,10 +29,9 @@ import {
   PAYMENT_ERR_CODES,
   paymentErrorMessage,
 } from '@/utils/order'
-import type { OrderDetail, OrderSummary, PlacedOrder } from '@/types/order'
+import type { OrderDetail, OrderSummary } from '@/types/order'
 import { ShippingStatus } from '@repo/constants'
 import { ServiceError } from '@/utils/query'
-import { placedOrderToCartItems, placedOrderTotals } from '@/utils/order'
 
 const values = (
   overrides: Partial<CheckoutFormValues> = {},
@@ -393,14 +392,14 @@ describe('getOrderSuccessPaymentView', () => {
     )
   })
 
-  it('PENDING or UNPAID without a session is not completed with Pay now', () => {
+  it('PENDING or UNPAID without a session is not completed, shown Unpaid, with Pay now', () => {
     for (const status of [
       OrderPaymentStatus.PENDING,
       OrderPaymentStatus.UNPAID,
     ]) {
       expect(viewOf(orderOf(status))).toEqual({
         kind: 'notCompleted',
-        badgeStatus: status,
+        badgeStatus: OrderPaymentStatus.UNPAID,
         canPayNow: true,
         errorMessage: null,
         chargeMethod: PaymentMethod.CARD,
@@ -434,13 +433,18 @@ describe('getOrderSuccessPaymentView', () => {
     )
   })
 
-  it('a non-CARD order never offers Pay now', () => {
-    for (const method of [PaymentMethod.COD, PaymentMethod.PAYPAL]) {
-      const order = orderOf(OrderPaymentStatus.UNPAID, {
-        payments: [charge(method, PaymentStatus.PENDING)],
-      })
-      expect(viewOf(order).canPayNow).toBe(false)
-    }
+  it('a COD order never offers Pay now', () => {
+    const order = orderOf(OrderPaymentStatus.UNPAID, {
+      payments: [charge(PaymentMethod.COD, PaymentStatus.PENDING)],
+    })
+    expect(viewOf(order).canPayNow).toBe(false)
+  })
+
+  it('an unfinished PayPal order offers Pay now (PayPal redirects like a card)', () => {
+    const order = orderOf(OrderPaymentStatus.UNPAID, {
+      payments: [charge(PaymentMethod.PAYPAL, PaymentStatus.PENDING)],
+    })
+    expect(viewOf(order).canPayNow).toBe(true)
   })
 
   it('an order no longer PENDING never offers Pay now', () => {
@@ -594,54 +598,6 @@ describe('getCancelOrderErrorMessage', () => {
     expect(getCancelOrderErrorMessage('boom')).toBe(
       ERROR_MESSAGES.NETWORK_ERROR,
     )
-  })
-})
-
-describe('placed order summary', () => {
-  const placed = {
-    subTotal: 418,
-    shippingFee: 12,
-    tax: 41.8,
-    totalAmount: 471.8,
-    items: [
-      {
-        id: 'item-1',
-        productVariantId: 'variant-1',
-        productName: 'Las Hermanas',
-        productImage: 'https://img.example/las.png',
-        variantName: '200g',
-        unitPrice: 240,
-        discountAmount: 12,
-        quantity: 1,
-        lineTotal: 228,
-      },
-    ],
-  } as unknown as PlacedOrder
-
-  it('placedOrderToCartItems maps lines (name, meta = variant, image, unitPrice, quantity)', () => {
-    expect(placedOrderToCartItems(placed)).toEqual([
-      {
-        id: 'item-1',
-        variantId: 'variant-1',
-        productId: '',
-        name: 'Las Hermanas',
-        meta: '200g',
-        imageUrl: 'https://img.example/las.png',
-        unitPrice: 228,
-        listPrice: 240,
-        quantity: 1,
-        lineTotal: 228,
-      },
-    ])
-  })
-
-  it('placedOrderTotals maps subTotal, shippingFee, tax, totalAmount', () => {
-    expect(placedOrderTotals(placed)).toEqual({
-      subtotal: 418,
-      shipping: 12,
-      tax: 41.8,
-      total: 471.8,
-    })
   })
 })
 

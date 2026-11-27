@@ -186,7 +186,7 @@ const OrderSuccessPayment = ({
             disabled={isRetryDisabled}
             onClick={() => void handleRetry()}
           >
-            Retry payment
+            {view.kind === 'failed' ? 'Retry payment' : 'Complete payment'}
           </Button>
           {!isMethodSupported && (
             <p className="text-xs text-on-surface-variant">

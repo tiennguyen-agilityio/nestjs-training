@@ -3,7 +3,6 @@
 // import { Lock } from 'lucide-react'
 import { useAuth as useClerkAuth } from '@clerk/nextjs'
 import { useQueryClient } from '@tanstack/react-query'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   useEffect,
@@ -17,7 +16,6 @@ import { toast } from 'sonner'
 
 import { CheckoutOrderSummary } from '@/components/CheckoutOrderSummary'
 import { CheckoutPaymentMethod } from '@/components/CheckoutPaymentMethod'
-import PayPalCheckoutButton from '@/components/PayPalCheckoutButton'
 import CheckoutShippingMethods from '@/components/CheckoutShippingMethods'
 import { Input } from '@/components/Input'
 import { Button } from '@/components/ui/button'
@@ -28,11 +26,10 @@ import {
   SUCCESS_MESSAGES,
 } from '@/constants/messages'
 import { CHECKOUT_PLACE_ORDER_BLOCKED_MESSAGE } from '@/constants/order'
-import { orderSuccessPath, profileOrderPath, ROUTES } from '@/constants/routes'
+import { orderSuccessPath, ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { cartQueryKeys, useCart } from '@/hooks/useCart'
 import { useCreateOrder } from '@/hooks/useOrder'
-import { usePayPalCheckout } from '@/hooks/usePayPalCheckout'
 import { useStartPayment } from '@/hooks/usePayment'
 import { useActiveShippingMethods } from '@/hooks/useShippingMethod'
 import { parseCheckoutValues, validateCheckoutField } from '@/schemas/checkout'
@@ -60,8 +57,6 @@ import {
   omitSubmitErrorsForRemovedLine,
   paymentErrorMessage,
   PLACE_ORDER_ERR_CODES,
-  placedOrderToCartItems,
-  placedOrderTotals,
   tagItemErrorsWithLineRefs,
 } from '@/utils/order'
 import { ServiceError } from '@/utils/query'
@@ -521,7 +516,7 @@ const CheckoutPageContent = () => {
     setItemSnapshots(order)
     // Keeps the empty-cart state from flashing while the route changes.
     setHasPlacedOrder(true)
-    if (values.paymentMethod === PAYMENT_METHOD.STRIPE) {
+    if (values.paymentMethod !== PAYMENT_METHOD.COD) {
       await payPlacedOrder(order.id)
       return
     }
@@ -533,16 +528,7 @@ const CheckoutPageContent = () => {
     router.push(ROUTES.ORDER_SUCCESS)
   }
 
-  // PayPal places the order once, then keeps it on Checkout across cancels.
-  const paypal = usePayPalCheckout({
-    placeOrder: async () => {
-      const order = await placeOrder()
-      if (order) setIsSubmitting(false)
-      return order
-    },
-  })
-  const placedPayPalOrder = paypal.placedOrder
-  const isFormLocked = isSubmitting || Boolean(placedPayPalOrder)
+  const isFormLocked = isSubmitting
 
   const submitLineRefs = useMemo(
     () => items.map((item) => ({ id: item.id, productId: item.productId })),
@@ -590,26 +576,6 @@ const CheckoutPageContent = () => {
   }
 
   // One banner for the whole reply; the cart-changed notice shows once.
-  const isPayPal = values.paymentMethod === PAYMENT_METHOD.PAYPAL
-  const paypalAction = !isPayPal ? undefined : placedPayPalOrder &&
-    !paypal.canRetry ? (
-    <Link
-      href={profileOrderPath(placedPayPalOrder.orderNumber)}
-      className="flex h-14 items-center justify-center rounded-full border border-outline-variant text-base font-medium text-on-surface"
-    >
-      View order details
-    </Link>
-  ) : (
-    <PayPalCheckoutButton
-      disabled={
-        !placedPayPalOrder && (isPlaceOrderDisabled || hasBlockingItemErrors)
-      }
-      createOrder={paypal.createPayPalOrder}
-      onApprove={paypal.onApprove}
-      onCancel={paypal.onCancel}
-      onError={paypal.onError}
-    />
-  )
 
   const submissionMessage =
     [
@@ -621,7 +587,7 @@ const CheckoutPageContent = () => {
     ].join(' ') || null
 
   // After a placed order the emptied cart shows the loader until the route changes.
-  if (!placedPayPalOrder && (isLoading || (hasPlacedOrder && !hasItems))) {
+  if (isLoading || (hasPlacedOrder && !hasItems)) {
     return (
       <div
         className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-12"
@@ -632,7 +598,7 @@ const CheckoutPageContent = () => {
     )
   }
 
-  if (isError && !placedPayPalOrder) {
+  if (isError) {
     return (
       <div
         className="mx-auto max-w-4xl px-4 py-16 text-center md:px-6"
@@ -660,7 +626,7 @@ const CheckoutPageContent = () => {
     )
   }
 
-  if (!hasItems && !placedPayPalOrder) {
+  if (!hasItems) {
     return (
       <div
         className="mx-auto max-w-4xl px-4 py-16 text-center md:px-6"
@@ -918,21 +884,9 @@ const CheckoutPageContent = () => {
         </form>
 
         <CheckoutOrderSummary
-          items={
-            placedPayPalOrder
-              ? placedOrderToCartItems(placedPayPalOrder)
-              : items
-          }
-          totals={
-            placedPayPalOrder
-              ? placedOrderTotals(placedPayPalOrder)
-              : checkoutTotals
-          }
-          onRemoveItem={
-            placedPayPalOrder ? undefined : handleRemoveCheckoutLine
-          }
-          notice={paypal.notice}
-          placeOrderAction={paypalAction}
+          items={items}
+          totals={checkoutTotals}
+          onRemoveItem={handleRemoveCheckoutLine}
           submissionErrorMessage={submissionMessage}
           itemQuantityErrors={itemQuantityErrors}
           hasBlockingItemErrors={hasBlockingItemErrors}
@@ -945,9 +899,9 @@ const CheckoutPageContent = () => {
           isPlacingOrder={isSubmitting}
           isPlaceOrderDisabled={isPlaceOrderDisabled}
           placeOrderLabel={
-            values.paymentMethod === PAYMENT_METHOD.STRIPE
-              ? 'Continue to payment'
-              : 'Place Order'
+            values.paymentMethod === PAYMENT_METHOD.COD
+              ? 'Place Order'
+              : 'Continue to payment'
           }
         />
       </div>

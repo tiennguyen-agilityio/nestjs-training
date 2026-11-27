@@ -104,42 +104,4 @@ describe('CheckoutOrderSummary', () => {
     expect(screen.getByText('$38.00')).toBeInTheDocument()
     expect(screen.queryByRole('deletion')).not.toBeInTheDocument()
   })
-
-  it('renders placeOrderAction instead of Place order', () => {
-    render(
-      <CheckoutOrderSummary
-        items={[line()]}
-        totals={totals}
-        onPlaceOrder={jest.fn()}
-        placeOrderAction={<button type="button">PayPal</button>}
-      />,
-    )
-
-    expect(screen.getByRole('button', { name: 'PayPal' })).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /place order/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('renders an info notice as status and an error notice as alert', () => {
-    const { rerender } = render(
-      <CheckoutOrderSummary
-        items={[line()]}
-        totals={totals}
-        onPlaceOrder={jest.fn()}
-        notice={{ tone: 'info', message: 'Nothing was charged.' }}
-      />,
-    )
-    expect(screen.getByRole('status')).toHaveTextContent('Nothing was charged.')
-
-    rerender(
-      <CheckoutOrderSummary
-        items={[line()]}
-        totals={totals}
-        onPlaceOrder={jest.fn()}
-        notice={{ tone: 'error', message: 'Declined.' }}
-      />,
-    )
-    expect(screen.getByRole('alert')).toHaveTextContent('Declined.')
-  })
 })

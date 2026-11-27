@@ -119,4 +119,17 @@ describe('CheckoutShippingMethods', () => {
 
     expect(onSelect).toHaveBeenCalledWith('express-id')
   })
+
+  it('borders only the selected method in the primary colour', () => {
+    renderSection({ methods: [standard, express], selectedId: standard.id })
+
+    expect(
+      screen
+        .getByRole('radio', { name: 'Artisanal Standard' })
+        .closest('label'),
+    ).toHaveClass('border-primary')
+    expect(
+      screen.getByRole('radio', { name: 'Roast Express' }).closest('label'),
+    ).not.toHaveClass('border-primary')
+  })
 })

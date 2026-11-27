@@ -85,7 +85,7 @@ export class PaymentController {
   @ApiOperation({
     summary: 'Capture the PayPal payment of one of my orders',
     description:
-      'Captures the PayPal order the shopper approved in the popup and records the result: PAID confirms the order, FAILED keeps it pending (retryable tells whether PayPal lets the shopper approve again), PENDING waits for the webhook.',
+      'Captures the PayPal order the shopper approved on the PayPal page and records the result: PAID confirms the order, FAILED keeps it pending (retryable tells whether PayPal lets the shopper approve again), PENDING waits for the webhook.',
   })
   @ApiDataResponse(HttpStatus.OK, ResponsePaymentCaptureDto)
   @ApiErrorResponse(
