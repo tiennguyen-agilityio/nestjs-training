@@ -134,7 +134,7 @@ export default function RoastsPageContent() {
   const totalCount = meta?.totalCount ?? 0
 
   // Default: all roast levels checked until the user touches the filter.
-  // Unchecking all is allowed and behaves like "all" (no roastLevel filter).
+  // Unchecking the last one goes back to that default: all checked, no filter.
   const [isRoastLevelTouched, setIsRoastLevelTouched] = useState(false)
   const checkedRoastLevels =
     !isRoastLevelTouched && selectedRoastLevels.length === 0
@@ -142,10 +142,10 @@ export default function RoastsPageContent() {
       : selectedRoastLevels
 
   const handleToggleRoastLevel = (value: RoastLevel) => {
-    setIsRoastLevelTouched(true)
     const next = checkedRoastLevels.includes(value)
       ? checkedRoastLevels.filter((item) => item !== value)
       : [...checkedRoastLevels, value]
+    setIsRoastLevelTouched(next.length > 0)
     updateUrl({
       page: 1,
       roastLevel: next.length === 0 ? null : next.join(','),
